@@ -20,52 +20,6 @@ function identitiesRef(uid) { return doc(_db, "users", uid, "atomicHabits", "ide
 function checkInsRef(uid)   { return doc(_db, "users", uid, "atomicHabits", "checkIns"); }
 
 // ─── DEFAULT SEED DATA ────────────────────────────────────────────────────────
-const DEFAULT_IDENTITIES = [
-  {
-    id: "fit", label: "I am a Fit Person", icon: "🏃", color: "#4CAF7D", colorDim: "#1a3028",
-    habits: [
-      { id: "exercise", label: "Exercise 30 min",      trigger: "After morning alarm",           time: "06:30", location: "Home / Gym" },
-      { id: "steps",    label: "10,000 steps",          trigger: "After lunch break",             time: "13:00", location: "Office / Park" },
-      { id: "water",    label: "Drink 2L water",        trigger: "Every time I sit at desk",      time: "All day", location: "Everywhere" },
-      { id: "sleep",    label: "Sleep by 22:30",        trigger: "Phone on charger outside room", time: "22:00", location: "Bedroom" },
-    ],
-  },
-  {
-    id: "learner", label: "I am a Learner", icon: "📚", color: "#5B8DEF", colorDim: "#1a2038",
-    habits: [
-      { id: "read",    label: "Read 20 pages",        trigger: "After dinner is cleared",  time: "21:00", location: "Living room chair" },
-      { id: "skill",   label: "1 hr skill building",  trigger: "After kids are settled",   time: "21:30", location: "Study desk" },
-      { id: "reflect", label: "Daily reflection",     trigger: "Before closing laptop",    time: "18:00", location: "Work desk" },
-      { id: "podcast", label: "Listen to podcast",    trigger: "During morning commute",   time: "08:00", location: "Car / Walk" },
-    ],
-  },
-  {
-    id: "parent", label: "I am a Good Parent", icon: "👨‍👧", color: "#E07B54", colorDim: "#2e1a10",
-    habits: [
-      { id: "playtime", label: "Playtime with Ovi",      trigger: "When I get home from work",  time: "18:30", location: "Living room" },
-      { id: "tilak",    label: "Bond time with Tilak",    trigger: "After Tilak's evening feed", time: "19:00", location: "Nursery" },
-      { id: "present",  label: "Phone-free family hour",  trigger: "Phone goes in drawer",       time: "19:00", location: "Home" },
-      { id: "story",    label: "Bedtime story",           trigger: "After Ovi brushes teeth",    time: "20:30", location: "Ovi's room" },
-    ],
-  },
-  {
-    id: "husband", label: "I am a Good Husband", icon: "❤️", color: "#C17F24", colorDim: "#2e1e08",
-    habits: [
-      { id: "gratitude", label: "Express gratitude", trigger: "Morning tea together",         time: "07:00", location: "Kitchen" },
-      { id: "checkin",   label: "Evening check-in",  trigger: "After kids sleep",             time: "21:00", location: "Home" },
-      { id: "help",      label: "Help at home",       trigger: "When I see something to do",  time: "Evening", location: "Home" },
-    ],
-  },
-  {
-    id: "debt", label: "I am Debt-Free", icon: "💰", color: "#9B59B6", colorDim: "#1e0f2e",
-    habits: [
-      { id: "budget",    label: "Track expenses",   trigger: "After every purchase",           time: "Immediate", location: "BudgetBuddy app" },
-      { id: "emi",       label: "EMI on time",      trigger: "Calendar reminder 3 days prior", time: "Due date",  location: "Bank app" },
-      { id: "nosplurge", label: "No impulse spend", trigger: "24hr rule before buying",        time: "Always",    location: "Everywhere" },
-      { id: "invest",    label: "SIP invested",     trigger: "Auto-debit on 5th of month",    time: "Monthly",   location: "Zerodha / MF" },
-    ],
-  },
-];
 
 const IDENTITY_COLORS = ["#00C48C","#4E7AFF","#FF6B35","#FFB300","#8B5CF6","#FF3D8B","#00BBDD","#FF7043"];
 const IDENTITY_DIMS   = ["#00291E","#0A1A4A","#3D1800","#3D2900","#1A0047","#3D0024","#003040","#3D1800"];
@@ -224,7 +178,7 @@ function Confirm({ message, onConfirm, onCancel }) {
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [user,        setUser]        = useState(undefined); // undefined = loading
-  const [identities,  setIdentities]  = useState(DEFAULT_IDENTITIES);
+  const [identities,  setIdentities]  = useState([]);
   const [data,        setData]        = useState({});
   const [view,        setView]        = useState("today");
   const [justChecked, setJustChecked] = useState(null);
