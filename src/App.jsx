@@ -139,7 +139,7 @@ function getWeekDates() {
 const DAY_LABELS=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 
 // ─── MODAL ────────────────────────────────────────────────────────────────────
-function Modal({ title, onClose, children }) {
+function Modal({ title, onClose, children, descriptionId }) {
   const titleId  = useId();
   const panelRef = useRef(null);
 
@@ -182,6 +182,7 @@ function Modal({ title, onClose, children }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        aria-describedby={descriptionId}
         style={S.modal}
         className="sheet-in"
         onClick={e => e.stopPropagation()}
@@ -207,7 +208,7 @@ function FrequencyPicker({ value, onChange }) {
   const selDates = freq.dates || [];
 
   const DAY_FULL = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
-  const DAY_PILLS = ["M","T","W","T","F","S","S"];
+  const DAY_PILLS = ["Mo","Tu","We","Th","Fr","Sa","Su"];
 
   const isAll      = selDays.length===7;
   const isWeekdays = selDays.length===5 && [0,1,2,3,4].every(d=>selDays.includes(d));
@@ -446,10 +447,11 @@ function IdentityForm({ initial={}, onSave, onCancel, mode="add" }) {
 
 // ─── CONFIRM DIALOG ───────────────────────────────────────────────────────────
 function Confirm({ message, onConfirm, onCancel }) {
+  const msgId = useId();
   return (
-    <Modal title="Confirm Delete" onClose={onCancel}>
+    <Modal title="Confirm Delete" onClose={onCancel} descriptionId={msgId}>
       <div style={{ padding:"0 20px 20px" }}>
-        <p style={{ color:T.text2, fontSize:15, lineHeight:1.7, marginTop:8 }}>{message}</p>
+        <p id={msgId} style={{ color:T.text2, fontSize:15, lineHeight:1.7, marginTop:8 }}>{message}</p>
         <div style={{ display:"flex", gap:10, marginTop:20 }}>
           <button style={S.btnSecondary} onClick={onCancel}>Cancel</button>
           <button style={{ ...S.btnPrimary, background: T.red }} onClick={onConfirm}>Delete</button>
@@ -462,6 +464,7 @@ function Confirm({ message, onConfirm, onCancel }) {
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [user,         setUser]        = useState(undefined); // undefined = loading
+  const [dataLoading,  setDataLoading] = useState(false);   // true while Firestore fetch is in-flight
   const [identities,   setIdentities]  = useState([]);
   const [data,         setData]        = useState({});
   const [view,         setView]        = useState("today");
@@ -477,10 +480,20 @@ export default function App() {
   const [modalCtx, setModalCtx] = useState(null);
 
   const todayKey     = useMemo(() => getTodayKey(), []);
-  const weekDates    = useMemo(() => getWeekDates(), []);
   const todayData    = data[todayKey]    || {};
   const selectedData = data[selectedDate] || {};
   const allHabits    = useMemo(() => identities.flatMap(i => i.habits), [identities]);
+
+  // ── Scores — must be before early returns (Rules of Hooks) ──
+  const scheduledToday = useMemo(
+    () => allHabits.filter(h => isScheduledOn(h.frequency, selectedDate)),
+    [allHabits, selectedDate]
+  );
+  const { totalDone, totalTotal, pct } = useMemo(() => {
+    const done  = scheduledToday.filter(h => selectedData[h.id]).length;
+    const total = scheduledToday.length;
+    return { totalDone: done, totalTotal: total, pct: total > 0 ? Math.round((done/total)*100) : 0 };
+  }, [scheduledToday, selectedData]);
 
   // ── Debounced Firestore saves ──
   const idTimer   = useRef(null);
@@ -490,8 +503,9 @@ export default function App() {
 
   // ── Streak cache — avoids 400-iteration loop per habit on every render ──
   const streakCacheRef      = useRef({});
-  // ── Celebration toast timer — stored in ref so it can be cleared on re-fire or unmount ──
+  // ── Timers stored in refs so they can be cleared on re-fire or unmount ──
   const celebrationTimerRef = useRef(null);
+  const justCheckedTimerRef = useRef(null);
 
   // ── Auth listener ──
   useEffect(() => {
@@ -501,12 +515,14 @@ export default function App() {
       streakCacheRef.current = {};
       setUser(u);
       if (u) {
+        setDataLoading(true);
         const [idSnap, ciSnap] = await Promise.all([
           getDoc(identitiesRef(u.uid)),
           getDoc(checkInsRef(u.uid)),
         ]);
         if (idSnap.exists()) setIdentities(idSnap.data().data);
         if (ciSnap.exists()) setData(ciSnap.data().data);
+        setDataLoading(false);
       }
     });
   }, []);
@@ -576,23 +592,29 @@ export default function App() {
 
   // ── Toggle — must be before early returns ──
   const toggle = useCallback((habitId, frequency) => {
+    let wasChecked;
     setData(prev=>{
       const day=prev[selectedDate]||{};
+      wasChecked = !!day[habitId];
       return {...prev,[selectedDate]:{...day,[habitId]:!day[habitId]}};
     });
+    clearTimeout(justCheckedTimerRef.current);
     setJustChecked(habitId);
-    setTimeout(()=>setJustChecked(null),600);
+    justCheckedTimerRef.current = setTimeout(()=>setJustChecked(null),600);
     const streak = getStreakForHabit(habitId, frequency) + 1;
     const milestone = MILESTONES.find(m=>m.days===streak);
-    if(milestone && !selectedData[habitId]) {
+    if(milestone && !wasChecked) {
       clearTimeout(celebrationTimerRef.current);
       setCelebrationHabit({habitId,milestone});
       celebrationTimerRef.current = setTimeout(()=>setCelebrationHabit(null),3500);
     }
-  }, [selectedDate, selectedData, getStreakForHabit]);
+  }, [selectedDate, getStreakForHabit]);
 
-  // Cleanup celebration timer on unmount
-  useEffect(() => () => clearTimeout(celebrationTimerRef.current), []);
+  // Cleanup all timers on unmount
+  useEffect(() => () => {
+    clearTimeout(celebrationTimerRef.current);
+    clearTimeout(justCheckedTimerRef.current);
+  }, []);
 
   // ── Loading / Auth gates ──
   if (user === undefined) {
@@ -605,22 +627,40 @@ export default function App() {
   }
   if (!user) {
     return (
-      <div style={{ ...S.root, alignItems:"center", justifyContent:"center", gap:24, padding:32 }}>
-        <div style={{ fontSize:52 }} aria-hidden="true">🧠</div>
-        <div style={{ fontFamily:"'Space Grotesk','Inter',sans-serif", fontWeight:800, fontSize:24, color:T.text, textAlign:"center", letterSpacing:"-0.03em" }}>
-          Atomic Habits
-        </div>
-        <div style={{ fontSize:14, color:T.muted, textAlign:"center", lineHeight:1.6 }}>
-          Sign in with your Google account to sync your habits across devices.
-        </div>
-        {signInError && (
-          <div role="alert" style={{ fontSize:13, color:T.red, background:T.red+"12", border:`1px solid ${T.red}44`, borderRadius:10, padding:"10px 14px", textAlign:"center", width:"100%", maxWidth:320 }}>
-            {signInError}
+      <div style={{ ...S.root }}>
+        <main style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:24, padding:32, flex:1 }}>
+          <div style={{ fontSize:52 }} aria-hidden="true">🧠</div>
+          <div style={{ fontFamily:"'Space Grotesk','Inter',sans-serif", fontWeight:800, fontSize:24, color:T.text, textAlign:"center", letterSpacing:"-0.03em" }}>
+            Atomic Habits
           </div>
-        )}
-        <button onClick={signIn} style={{ ...S.btnPrimary, width:"100%", maxWidth:320, display:"flex", alignItems:"center", justifyContent:"center", gap:10, fontSize:15 }}>
-          <span aria-hidden="true">🔑</span> Sign in with Google
-        </button>
+          <div style={{ fontSize:14, color:T.muted, textAlign:"center", lineHeight:1.6 }}>
+            Sign in with your Google account to sync your habits across devices.
+          </div>
+          {signInError && (
+            <div role="alert" style={{ fontSize:13, color:T.red, background:T.red+"12", border:`1px solid ${T.red}44`, borderRadius:10, padding:"10px 14px", textAlign:"center", width:"100%", maxWidth:320 }}>
+              {signInError}
+            </div>
+          )}
+          <button onClick={signIn} style={{ width:"100%", maxWidth:320, display:"flex", alignItems:"center", justifyContent:"center", gap:12, fontSize:15, fontWeight:700, padding:"15px 20px", background:"#fff", border:`1.5px solid ${T.border}`, borderRadius:14, color:T.text, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", boxShadow:"0 1px 4px #00000010" }}>
+            <svg width="20" height="20" viewBox="0 0 18 18" aria-hidden="true">
+              <path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 002.38-5.88c0-.57-.05-.66-.15-1.18z"/>
+              <path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2.01c-.72.48-1.63.76-2.7.76-2.1 0-3.8-1.36-4.42-3.21H1.87v2.09A8 8 0 008.98 17z"/>
+              <path fill="#FBBC05" d="M4.56 10.6A4.6 4.6 0 014.3 9c0-.56.1-1.1.26-1.6V5.31H1.87A8 8 0 001 9c0 1.3.31 2.52.87 3.6l2.69-2z"/>
+              <path fill="#EA4335" d="M8.98 3.8c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 008.98 1a8 8 0 00-7.11 4.31l2.69 2.09C5.18 5.16 6.89 3.8 8.98 3.8z"/>
+            </svg>
+            Sign in with Google
+          </button>
+        </main>
+      </div>
+    );
+  }
+
+  // ── Data loading gate — prevents flash of empty state while Firestore fetch is in-flight ──
+  if (dataLoading) {
+    return (
+      <div style={{ ...S.root, alignItems:"center", justifyContent:"center" }}>
+        <div style={S.spinner} aria-label="Loading your habits" role="status"/>
+        <div style={{ color:T.muted, fontSize:14, marginTop:16 }}>Loading your habits…</div>
       </div>
     );
   }
@@ -687,12 +727,6 @@ export default function App() {
     setIdentities(prev => prev.filter(i => i.id !== identityId));
     setModal(null);
   };
-
-  // ── Scores — frequency-aware (allHabits is memoized above) ──
-  const scheduledToday = allHabits.filter(h => isScheduledOn(h.frequency, selectedDate));
-  const totalDone      = scheduledToday.filter(h => selectedData[h.id]).length;
-  const totalTotal     = scheduledToday.length;
-  const pct = totalTotal > 0 ? Math.round((totalDone / totalTotal) * 100) : 0;
 
   const openEditHabit = (identityId, habit) => {
     setModalCtx({ identityId, habitId: habit.id, habit });
@@ -790,19 +824,32 @@ export default function App() {
         <div>
           <div style={S.eyebrow}>
             Atomic Habits
-            {syncing && <span style={{opacity:0.6}} aria-live="polite" aria-label="Saving">
-              {" "}· saving…
-            </span>}
+            {syncing && <span style={{opacity:0.6}} aria-hidden="true">{" "}· saving…</span>}
           </div>
-          <h1 style={S.title}>{view==="today"?"Today":view==="week"?"This Week":view==="streaks"?"Streaks":"Manage"}</h1>
-          <div style={S.dateLabel}>{new Date().toLocaleDateString(navigator.language||undefined,{weekday:"long",day:"numeric",month:"short"})}</div>
+          {syncing && (
+            <div role="status" aria-live="polite" style={{ position:"absolute", width:1, height:1, overflow:"hidden", clip:"rect(0,0,0,0)", whiteSpace:"nowrap" }}>
+              Saving your habits
+            </div>
+          )}
+          <h1 style={S.title}>
+            {view==="today"
+              ? (selectedDate === todayKey ? "Today" : formatNavDate(selectedDate))
+              : view==="week" ? "This Week"
+              : view==="streaks" ? "Streaks"
+              : "Manage"}
+          </h1>
+          <div style={S.dateLabel}>
+            {view === "today"
+              ? new Date(selectedDate + "T12:00:00").toLocaleDateString(navigator.language||undefined,{weekday:"long",day:"numeric",month:"short"})
+              : new Date().toLocaleDateString(navigator.language||undefined,{weekday:"long",day:"numeric",month:"short"})}
+          </div>
         </div>
         <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
           <button onClick={()=>fbSignOut(_auth)} style={{ background:"transparent", border:`1px solid ${T.border}`, borderRadius:20, fontSize:11, color:T.muted, padding:"3px 10px", cursor:"pointer", fontFamily:"inherit" }}>
             Sign out
           </button>
           <div style={S.ringWrap}>
-            <svg width="68" height="68" viewBox="0 0 68 68" aria-label={`${pct}% complete today`} role="img">
+            <svg width="68" height="68" viewBox="0 0 68 68" aria-label={`${pct}% complete ${selectedDate === todayKey ? "today" : "on " + formatNavDate(selectedDate)}`} role="img">
               <circle cx="34" cy="34" r="28" fill="none" stroke={T.border} strokeWidth="5"/>
               <circle cx="34" cy="34" r="28" fill="none"
                 stroke={pct===100?T.gold:T.primary} strokeWidth="5"
@@ -816,7 +863,7 @@ export default function App() {
       </header>
 
       {/* ── Scrollable Content ── */}
-      <div style={S.scrollArea}>
+      <main style={S.scrollArea}>
         {view==="today" && (
           <TodayView
             identities={identities}
@@ -834,7 +881,7 @@ export default function App() {
           />
         )}
 
-        {view==="week"    && <WeekView data={data} weekDates={weekDates} todayKey={todayKey} identities={identities}/>}
+        {view==="week"    && <WeekView data={data} todayKey={todayKey} identities={identities}/>}
         {view==="streaks" && <StreaksView data={data} getStreak={getStreakForHabit} identities={identities}/>}
         {view==="manage"  && (
           <ManageView
@@ -847,7 +894,7 @@ export default function App() {
             onDeleteIdentity={openDeleteIdentity}
           />
         )}
-      </div>
+      </main>
 
       {/* ── Bottom Nav ── */}
       <nav style={S.bottomNav} aria-label="Main navigation">
@@ -857,7 +904,7 @@ export default function App() {
           {id:"streaks", icon:"🔥",  label:"Streaks"},
           {id:"manage",  icon:"⚙️",  label:"Manage"},
         ].map(t=>(
-          <button key={t.id} onClick={()=>{ setView(t.id); if(t.id==="today") setSelectedDate(getTodayKey()); }}
+          <button key={t.id} onClick={()=>{ setView(t.id); if(t.id==="today") setSelectedDate(todayKey); }}
             style={S.navBtn} aria-current={view===t.id?"page":undefined}>
             <span style={S.navIcon} aria-hidden="true">{t.icon}</span>
             <span style={{...S.navLabel, color:view===t.id?T.text:T.muted, fontWeight:view===t.id?700:500}}>{t.label}</span>
@@ -1133,24 +1180,24 @@ function formatNavDate(dateKey) {
   return date.toLocaleDateString(navigator.language||undefined,{weekday:"short",day:"numeric",month:"short"});
 }
 
-// Min date: 90 days back — beyond this streak data is meaningless
-const MIN_NAV_DATE = (() => {
-  const d = new Date();
-  d.setDate(d.getDate() - 90);
-  return d.toISOString().slice(0,10);
-})();
-
 function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
+  // Recomputed daily (keyed on todayKey) so it stays accurate if the app is kept open overnight
+  const minNavDate = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 90);
+    return d.toISOString().slice(0,10);
+  }, [todayKey]);
+
   const isToday = selectedDate === todayKey;
   const canNext = selectedDate < todayKey;
-  const canPrev = selectedDate > MIN_NAV_DATE;
+  const canPrev = selectedDate > minNavDate;
 
   const go = (delta) => {
     const [y,mo,d] = selectedDate.split("-").map(Number);
     const date = new Date(y, mo-1, d);
     date.setDate(date.getDate() + delta);
     const next = date.toISOString().slice(0,10);
-    if (next <= todayKey && next >= MIN_NAV_DATE) setSelectedDate(next);
+    if (next <= todayKey && next >= minNavDate) setSelectedDate(next);
   };
 
   return (
@@ -1159,7 +1206,7 @@ function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
         width:36, height:36, borderRadius:"50%", border:`1.5px solid ${canPrev?T.border:T.surf2}`,
         background:T.surface, color:canPrev?T.text2:T.border, fontSize:18, lineHeight:1,
         cursor:canPrev?"pointer":"default", display:"flex", alignItems:"center", justifyContent:"center",
-        flexShrink:0, WebkitTapHighlightColor:"transparent", opacity: canPrev ? 1 : 0.35,
+        flexShrink:0, WebkitTapHighlightColor:"transparent", opacity: canPrev ? 1 : 0.35, transition:"opacity 0.2s",
       }}><span aria-hidden="true">‹</span></button>
 
       <div style={{ flex:1, textAlign:"center" }}>
@@ -1199,8 +1246,11 @@ function TodayView({ identities, allHabits, todayData, toggle, justChecked, getS
       identity.habits.map(habit => ({ habit, identity, slotId: getSlotId(habit.time) }))
     ), [identities]);
 
-  const scheduledHabits = enrichedHabits.filter(({habit}) => isScheduledOn(habit.frequency, selectedDate));
-  const notTodayHabits  = enrichedHabits.filter(({habit}) => !isScheduledOn(habit.frequency, selectedDate));
+  const [scheduledHabits, notTodayHabits] = useMemo(() => {
+    const scheduled = enrichedHabits.filter(({habit}) => isScheduledOn(habit.frequency, selectedDate));
+    const notToday  = enrichedHabits.filter(({habit}) => !isScheduledOn(habit.frequency, selectedDate));
+    return [scheduled, notToday];
+  }, [enrichedHabits, selectedDate]);
 
   const quote = useMemo(() => getDailyQuote(), []);
 
@@ -1249,10 +1299,13 @@ function TodayView({ identities, allHabits, todayData, toggle, justChecked, getS
             const total    = scheduledHabitsForIdent.length;
             const allDone  = total > 0 && done === total;
             return (
-              <span key={i.id} style={{ fontSize:11, fontWeight:700, color: allDone?"#fff":i.color, background: allDone?i.color:i.color+"22", borderRadius:20, padding:"4px 10px", display:"flex", alignItems:"center", gap:4, border:`1px solid ${allDone?i.color:i.color+"44"}` }}>
-                <span aria-hidden="true">{i.icon}</span> {shortLabel(i.label)}
-                {" "}{allDone ? "✓" : total > 0 ? `${done}/${total}` : "–"}
-              </span>
+              <div key={i.id}
+                aria-label={`${shortLabel(i.label)}: ${allDone ? "complete" : total > 0 ? `${done} of ${total}` : "none scheduled"}`}
+                style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, fontWeight:600 }}>
+                <span style={{ width:8, height:8, borderRadius:"50%", background:i.color, flexShrink:0, display:"inline-block" }} aria-hidden="true"/>
+                <span style={{ color:i.color }}>{shortLabel(i.label)}</span>
+                <span style={{ color:T.muted }}>{allDone ? "✓" : total > 0 ? `${done}/${total}` : "–"}</span>
+              </div>
             );
           })}
         </div>
@@ -1369,7 +1422,9 @@ function TodayView({ identities, allHabits, todayData, toggle, justChecked, getS
             }}
           >
             <span style={{ fontSize:14, opacity:0.5 }} aria-hidden="true">⏭</span>
-            <span style={{ fontSize:12, fontWeight:700, color:T.muted }}>Not scheduled today</span>
+            <span style={{ fontSize:12, fontWeight:700, color:T.muted }}>
+              {selectedDate === todayKey ? "Not scheduled today" : `Not scheduled · ${formatNavDate(selectedDate)}`}
+            </span>
             <span style={{ fontSize:11, color:T.muted, background:T.surf2, borderRadius:20, padding:"1px 8px", marginLeft:"auto" }}>{notTodayHabits.length}</span>
             <span style={{ fontSize:12, color:T.muted }} aria-hidden="true">{notTodayExpanded ? "▲" : "▼"}</span>
           </button>
@@ -1416,9 +1471,39 @@ function TodayView({ identities, allHabits, todayData, toggle, justChecked, getS
 }
 
 // ─── WEEK VIEW ────────────────────────────────────────────────────────────────
-function WeekView({ data, weekDates, todayKey, identities }) {
+function WeekView({ data, todayKey, identities }) {
+  const [weekOffset, setWeekOffset] = useState(0);
+
+  // Compute the 7 dates for the currently displayed week (Mon–Sun)
+  const weekDates = useMemo(() => {
+    const today = new Date();
+    today.setDate(today.getDate() - weekOffset * 7);
+    const mon = new Date(today);
+    mon.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(mon);
+      d.setDate(mon.getDate() + i);
+      return d.toISOString().slice(0, 10);
+    });
+  }, [weekOffset]);
+
+  const weekLabel = weekOffset === 0 ? "This Week" : weekOffset === 1 ? "Last Week" : `${weekOffset} weeks ago`;
+
   return (
     <div style={S.content}>
+      {/* Week navigation */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:T.surface, borderRadius:14, border:`1px solid ${T.border}`, padding:"8px 12px" }}>
+        <button onClick={() => setWeekOffset(o => o + 1)} aria-label="Previous week"
+          style={{ ...S.crudBtn, width:36, height:36, fontSize:20 }}>
+          <span aria-hidden="true">‹</span>
+        </button>
+        <span style={{ fontSize:13, fontWeight:700, color:T.text, fontFamily:"'Space Grotesk',sans-serif" }}>{weekLabel}</span>
+        <button onClick={() => setWeekOffset(o => Math.max(0, o - 1))} aria-label="Next week"
+          disabled={weekOffset === 0}
+          style={{ ...S.crudBtn, width:36, height:36, fontSize:20, opacity: weekOffset === 0 ? 0.3 : 1 }}>
+          <span aria-hidden="true">›</span>
+        </button>
+      </div>
       {identities.map(identity=>(
         <div key={identity.id} style={S.card}>
           <div style={{...S.cardLabel,color:identity.color,marginBottom:12}}>
