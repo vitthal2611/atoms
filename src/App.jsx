@@ -53,6 +53,52 @@ function to24h(timeStr) {
 
 function getTodayKey() { return new Date().toISOString().slice(0,10); }
 function uid() { return Math.random().toString(36).slice(2,10); }
+
+// ─── FREQUENCY HELPERS ────────────────────────────────────────────────────────
+// frequency shape: { cadence:"weekly"|"monthly", days:[0-6], dates:[1-31,32] }
+// days: 0=Mon … 6=Sun  |  dates: 1-31 = day of month, 32 = last day of month
+const DEFAULT_FREQUENCY = { cadence:"weekly", days:[0,1,2,3,4,5,6] };
+
+function isScheduledOn(frequency, dateKey) {
+  const freq = frequency || DEFAULT_FREQUENCY;
+  const [y, mo, d] = dateKey.split("-").map(Number);
+  const date = new Date(y, mo - 1, d);
+  if (freq.cadence === "monthly") {
+    const dates = freq.dates || [1];
+    const lastDay = new Date(y, mo, 0).getDate(); // last day of this month
+    return dates.some(dt => dt === 32 ? d === lastDay : dt === d);
+  }
+  // weekly: JS getDay() is 0=Sun…6=Sat; our days[] is 0=Mon…6=Sun
+  const jsDay = date.getDay();
+  const ourDay = jsDay === 0 ? 6 : jsDay - 1;
+  return (freq.days || [0,1,2,3,4,5,6]).includes(ourDay);
+}
+
+function getFreqLabel(frequency) {
+  const freq = frequency || DEFAULT_FREQUENCY;
+  if (freq.cadence === "monthly") {
+    const dates = (freq.dates || []).sort((a,b)=>a-b);
+    if (!dates.length) return "Monthly";
+    const ordinal = n => { const s=["th","st","nd","rd"],v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); };
+    return dates.map(d => d===32 ? "Last day" : ordinal(d)).join(", ") + " of month";
+  }
+  const days = freq.days || [0,1,2,3,4,5,6];
+  if (days.length === 7) return "Every day";
+  if (days.length === 5 && [0,1,2,3,4].every(d=>days.includes(d))) return "Mon – Fri";
+  if (days.length === 2 && [5,6].every(d=>days.includes(d))) return "Sat & Sun";
+  const labels = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  return [...days].sort((a,b)=>a-b).map(d=>labels[d]).join(" · ");
+}
+
+function getFreqColor(frequency) {
+  const freq = frequency || DEFAULT_FREQUENCY;
+  if (freq.cadence === "monthly") return { bg:"#EDE9FE", color:"#5B21B6" };
+  const days = freq.days || [0,1,2,3,4,5,6];
+  if (days.length === 7) return { bg: T.green+"18", color: T.green };
+  if (days.length === 5 && [0,1,2,3,4].every(d=>days.includes(d))) return { bg:"#E0F2FE", color:"#0369A1" };
+  if (days.length === 2 && [5,6].every(d=>days.includes(d))) return { bg:"#FEF3C7", color:"#92400E" };
+  return { bg:"#FEF3C7", color:"#92400E" };
+}
 function getWeekDates() {
   const today=new Date(), mon=new Date(today);
   mon.setDate(today.getDate()-((today.getDay()+6)%7));
@@ -76,14 +122,147 @@ function Modal({ title, onClose, children }) {
   );
 }
 
+// ─── FREQUENCY PICKER ─────────────────────────────────────────────────────────
+function FrequencyPicker({ value, onChange }) {
+  const freq = value || DEFAULT_FREQUENCY;
+  const cadence = freq.cadence || "weekly";
+  const selDays = freq.days || [0,1,2,3,4,5,6];
+  const selDates = freq.dates || [];
+
+  const DAY_PILLS = ["M","T","W","T","F","S","S"];
+
+  const isAll      = selDays.length===7;
+  const isWeekdays = selDays.length===5 && [0,1,2,3,4].every(d=>selDays.includes(d));
+  const isWeekends = selDays.length===2 && [5,6].every(d=>selDays.includes(d));
+  const isCustom   = !isAll && !isWeekdays && !isWeekends;
+
+  const setCadence = (c) => {
+    if (c === "weekly")  onChange({ cadence:"weekly",  days:[0,1,2,3,4,5,6] });
+    if (c === "monthly") onChange({ cadence:"monthly", dates:[] });
+  };
+
+  const applyShortcut = (type) => {
+    if (type==="all")      onChange({ cadence:"weekly", days:[0,1,2,3,4,5,6] });
+    if (type==="weekdays") onChange({ cadence:"weekly", days:[0,1,2,3,4] });
+    if (type==="weekends") onChange({ cadence:"weekly", days:[5,6] });
+  };
+
+  const toggleDay = (i) => {
+    const next = selDays.includes(i) ? selDays.filter(d=>d!==i) : [...selDays,i];
+    if (next.length === 0) return; // keep at least 1
+    onChange({ cadence:"weekly", days: next });
+  };
+
+  const toggleDate = (d) => {
+    const next = selDates.includes(d) ? selDates.filter(x=>x!==d) : [...selDates,d];
+    onChange({ cadence:"monthly", dates: next });
+  };
+
+  const segBtn = (label, active, onClick) => (
+    <button onClick={onClick} style={{
+      flex:1, padding:"7px 4px", fontSize:13, fontWeight:600, border:"none",
+      borderRadius:8, cursor:"pointer", transition:"all 0.15s",
+      background: active ? T.accent : "transparent",
+      color: active ? "#fff" : T.muted,
+    }}>{label}</button>
+  );
+
+  const shortcut = (label, active, onClick) => (
+    <button onClick={onClick} style={{
+      padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:600,
+      cursor:"pointer", border:`1.5px solid ${active ? T.accent : T.border}`,
+      background: active ? T.accent : T.surface,
+      color: active ? "#fff" : T.text2, transition:"all 0.15s",
+      WebkitTapHighlightColor:"transparent",
+    }}>{label}</button>
+  );
+
+  return (
+    <div>
+      {/* Cadence toggle */}
+      <div style={{ display:"flex", background:T.surf2, borderRadius:10, padding:3, gap:2, marginBottom:14 }}>
+        {segBtn("Weekly",  cadence==="weekly",  ()=>setCadence("weekly"))}
+        {segBtn("Monthly", cadence==="monthly", ()=>setCadence("monthly"))}
+      </div>
+
+      {cadence === "weekly" && (
+        <>
+          {/* Shortcut pills */}
+          <div style={{ display:"flex", gap:6, marginBottom:10, flexWrap:"wrap" }}>
+            {shortcut("Every day", isAll,      ()=>applyShortcut("all"))}
+            {shortcut("Weekdays",  isWeekdays, ()=>applyShortcut("weekdays"))}
+            {shortcut("Weekends",  isWeekends, ()=>applyShortcut("weekends"))}
+            {isCustom && shortcut("Custom", true, ()=>{})}
+          </div>
+          {/* Day pills */}
+          <div style={{ display:"flex", gap:6 }}>
+            {DAY_PILLS.map((label, i) => {
+              const on = selDays.includes(i);
+              return (
+                <button key={i} onClick={()=>toggleDay(i)} style={{
+                  flex:1, aspectRatio:"1", borderRadius:"50%", border:`1.5px solid ${on ? T.accent : T.border}`,
+                  background: on ? T.accent : T.surface, color: on ? "#fff" : T.muted,
+                  fontSize:12, fontWeight:700, cursor:"pointer",
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  WebkitTapHighlightColor:"transparent", transition:"all 0.15s",
+                }}>{label}</button>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {cadence === "monthly" && (
+        <>
+          <div style={{ fontSize:11, color:T.muted, marginBottom:8 }}>Select one or more dates</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:5 }}>
+            {Array.from({length:31},(_,i)=>i+1).map(d => {
+              const on = selDates.includes(d);
+              return (
+                <button key={d} onClick={()=>toggleDate(d)} style={{
+                  aspectRatio:"1", borderRadius:8,
+                  border:`1.5px solid ${on ? T.accent : T.border}`,
+                  background: on ? T.accent : T.surface,
+                  color: on ? "#fff" : T.text2,
+                  fontSize:11, fontWeight:600, cursor:"pointer",
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  WebkitTapHighlightColor:"transparent", transition:"all 0.15s",
+                }}>{d}</button>
+              );
+            })}
+            {/* Last day of month */}
+            {(() => {
+              const on = selDates.includes(32);
+              return (
+                <button onClick={()=>toggleDate(32)} style={{
+                  gridColumn:"span 2", padding:"6px 4px", borderRadius:8,
+                  border:`1.5px solid ${on ? T.accent : T.border}`,
+                  background: on ? T.accent : T.surface,
+                  color: on ? "#fff" : T.text2,
+                  fontSize:10, fontWeight:600, cursor:"pointer",
+                  WebkitTapHighlightColor:"transparent", transition:"all 0.15s",
+                }}>Last day</button>
+              );
+            })()}
+          </div>
+          <div style={{ fontSize:11, color:T.muted, marginTop:8, lineHeight:1.5 }}>
+            Months with fewer days will run on the last available day.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── HABIT FORM ───────────────────────────────────────────────────────────────
 function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
   const [form, setForm] = useState({
-    label: initial.label || "",
-    trigger: initial.trigger || "",
-    time: initial.time || "",
-    location: initial.location || "",
+    label:      initial.label      || "",
+    trigger:    initial.trigger    || "",
+    time:       initial.time       || "",
+    location:   initial.location   || "",
     identityId: initial.identityId || identities[0]?.id || "",
+    frequency:  initial.frequency  || DEFAULT_FREQUENCY,
   });
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const valid = form.label.trim().length > 0 && form.identityId;
@@ -106,6 +285,9 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
 
       <label style={S.fieldLabel}>📍 Location</label>
       <input style={S.input} value={form.location} onChange={e=>set("location",e.target.value)} placeholder="e.g. Kitchen" />
+
+      <label style={S.fieldLabel}>🔁 Frequency</label>
+      <FrequencyPicker value={form.frequency} onChange={v=>set("frequency",v)} />
 
       <div style={{ display:"flex", gap:8, marginTop:20 }}>
         <button style={S.btnSecondary} onClick={onCancel}>Cancel</button>
@@ -247,24 +429,38 @@ export default function App() {
   };
 
   // ── Streak — must be declared BEFORE any early returns (Rules of Hooks) ──
-  const getStreakForHabit = useCallback((habitId) => {
-    let streak=0; const d=new Date();
-    while(true) {
-      const key=d.toISOString().slice(0,10);
-      if(data[key]&&data[key][habitId]){ streak++; d.setDate(d.getDate()-1); } else break;
+  // Walks backwards skipping days the habit wasn't scheduled; breaks on first
+  // scheduled-but-unchecked day. Unscheduled days are transparent to the streak.
+  const getStreakForHabit = useCallback((habitId, frequency) => {
+    let streak = 0;
+    const d = new Date();
+    // start from today or yesterday (don't penalise if today not yet checked)
+    for (let i = 0; i < 400; i++) {
+      const key = d.toISOString().slice(0, 10);
+      const scheduled = isScheduledOn(frequency, key);
+      if (scheduled) {
+        if (data[key] && data[key][habitId]) {
+          streak++;
+        } else {
+          // missed a scheduled day — streak ends (unless it's today and not yet done)
+          if (i > 0) break;
+          // if today is scheduled but not yet checked, don't break — just don't count it
+        }
+      }
+      d.setDate(d.getDate() - 1);
     }
     return streak;
   }, [data]);
 
   // ── Toggle — same: must be before early returns ──
-  const toggle = useCallback((habitId) => {
+  const toggle = useCallback((habitId, frequency) => {
     setData(prev=>{
       const day=prev[selectedDate]||{};
       return {...prev,[selectedDate]:{...day,[habitId]:!day[habitId]}};
     });
     setJustChecked(habitId);
     setTimeout(()=>setJustChecked(null),600);
-    const streak = getStreakForHabit(habitId)+1;
+    const streak = getStreakForHabit(habitId, frequency) + 1;
     const milestone = MILESTONES.find(m=>m.days===streak);
     if(milestone && !selectedData[habitId]) {
       setCelebrationHabit({habitId,milestone});
@@ -299,29 +495,28 @@ export default function App() {
   }
 
   // ── CRUD: Habits ──
-  const addHabit = ({ label, trigger, time, location, identityId }) => {
+  const addHabit = ({ label, trigger, time, location, identityId, frequency }) => {
     setIdentities(prev => prev.map(ident =>
       ident.id !== identityId ? ident :
-      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, time, location }] }
+      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, time, location, frequency: frequency || DEFAULT_FREQUENCY }] }
     ));
     setModal(null);
   };
 
-  const updateHabit = ({ label, trigger, time, location, identityId: newIdentityId }) => {
+  const updateHabit = ({ label, trigger, time, location, identityId: newIdentityId, frequency }) => {
     const { identityId: oldIdentityId, habitId } = modalCtx;
+    const freq = frequency || DEFAULT_FREQUENCY;
     if (newIdentityId === oldIdentityId) {
-      // Same identity — just update fields in place
       setIdentities(prev => prev.map(ident =>
         ident.id !== oldIdentityId ? ident :
-        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, time, location }) }
+        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, time, location, frequency: freq }) }
       ));
     } else {
-      // Identity changed — remove from old, append to new
       setIdentities(prev => {
         const habitData = prev.find(i => i.id === oldIdentityId)?.habits.find(h => h.id === habitId);
         return prev.map(ident => {
           if (ident.id === oldIdentityId) return { ...ident, habits: ident.habits.filter(h => h.id !== habitId) };
-          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, time, location }] };
+          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, time, location, frequency: freq }] };
           return ident;
         });
       });
@@ -635,7 +830,7 @@ function HabitCard({ habit, identity, checked, streak, popping, toggle, openEdit
 
       {/* ── Tap target ── */}
       <button
-        onClick={() => toggle(habit.id)}
+        onClick={() => toggle(habit.id, habit.frequency)}
         className={popping ? "pop" : ""}
         style={{
           display: "flex", flexDirection: "column",
@@ -702,6 +897,24 @@ function HabitCard({ habit, identity, checked, streak, popping, toggle, openEdit
                 {habit.location && <span>📍 {habit.location}</span>}
               </div>
             )}
+
+            {/* Frequency chip — only show if not "every day" */}
+            {(() => {
+              const freq = habit.frequency;
+              if (!freq) return null;
+              const isEveryDay = freq.cadence === "weekly" && (freq.days||[]).length === 7;
+              if (isEveryDay) return null;
+              const { bg, color } = getFreqColor(freq);
+              return (
+                <span style={{
+                  display:"inline-flex", alignItems:"center", gap:3,
+                  fontSize:10, fontWeight:700, color, background:bg,
+                  padding:"2px 7px", borderRadius:20, marginTop:5,
+                }}>
+                  🔁 {getFreqLabel(freq)}
+                </span>
+              );
+            })()}
 
             {next && streak > 0 && (
               <div style={{ marginTop: 8, marginRight: 4 }}>
@@ -792,11 +1005,18 @@ function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
 
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
 function TodayView({ identities, todayData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, setModalCtx, selectedDate, setSelectedDate, todayKey }) {
+  const [notTodayExpanded, setNotTodayExpanded] = useState(false);
+
   const allHabits = identities.flatMap(identity =>
     identity.habits.map(habit => ({ habit, identity, slotId: getSlotId(habit.time) }))
   );
-  const totalDone  = allHabits.filter(({habit}) => todayData[habit.id]).length;
-  const totalTotal = allHabits.length;
+
+  // Split into scheduled for this day vs not
+  const scheduledHabits = allHabits.filter(({habit}) => isScheduledOn(habit.frequency, selectedDate));
+  const notTodayHabits  = allHabits.filter(({habit}) => !isScheduledOn(habit.frequency, selectedDate));
+
+  const totalDone  = scheduledHabits.filter(({habit}) => todayData[habit.id]).length;
+  const totalTotal = scheduledHabits.length;
   const quote = getDailyQuote();
 
   return (
@@ -828,9 +1048,9 @@ function TodayView({ identities, todayData, toggle, justChecked, getStreakForHab
         </div>
       </div>
 
-      {/* Time slot sections — pending only (justChecked stays briefly with leave animation) */}
+      {/* Time slot sections — scheduled habits only, pending + leaving animation */}
       {TIME_SLOTS.map(slot => {
-        const slotAll     = allHabits.filter(h => h.slotId === slot.id);
+        const slotAll     = scheduledHabits.filter(h => h.slotId === slot.id);
         // show unchecked + the one just checked (it plays leave animation then vanishes)
         const slotVisible = slotAll.filter(({habit}) => !todayData[habit.id] || habit.id === justChecked);
         if (slotVisible.length === 0) return null;
@@ -851,7 +1071,7 @@ function TodayView({ identities, todayData, toggle, justChecked, getStreakForHab
                   habit={habit}
                   identity={identity}
                   checked={!!todayData[habit.id]}
-                  streak={getStreakForHabit(habit.id)}
+                  streak={getStreakForHabit(habit.id, habit.frequency)}
                   popping={false}
                   toggle={toggle}
                   openEditHabit={openEditHabit}
@@ -864,7 +1084,7 @@ function TodayView({ identities, todayData, toggle, justChecked, getStreakForHab
 
       {/* Completed section */}
       {(() => {
-        const done = allHabits.filter(({habit}) => todayData[habit.id] && habit.id !== justChecked);
+        const done = scheduledHabits.filter(({habit}) => todayData[habit.id] && habit.id !== justChecked);
         if (done.length === 0) return null;
         return (
           <div style={{ marginTop:8 }}>
@@ -875,12 +1095,12 @@ function TodayView({ identities, todayData, toggle, justChecked, getStreakForHab
             </div>
             <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
               {done.map(({ habit, identity }) => {
-                const streak = getStreakForHabit(habit.id);
+                const streak = getStreakForHabit(habit.id, habit.frequency);
                 const milestone = getMilestone(streak);
                 return (
                   <button
                     key={habit.id}
-                    onClick={() => toggle(habit.id)}
+                    onClick={() => toggle(habit.id, habit.frequency)}
                     style={{
                       display:"flex", alignItems:"center", gap:10,
                       background: T.green+"0e", border:`1.5px solid ${T.green}33`,
@@ -890,30 +1110,18 @@ function TodayView({ identities, todayData, toggle, justChecked, getStreakForHab
                       transition:"opacity 0.2s",
                     }}
                   >
-                    {/* Done circle */}
-                    <div style={{
-                      width:32, height:32, borderRadius:"50%", flexShrink:0,
-                      background:T.green, display:"flex", alignItems:"center", justifyContent:"center",
-                      boxShadow:`0 0 0 3px ${T.green}22`,
-                    }}>
+                    <div style={{ width:32, height:32, borderRadius:"50%", flexShrink:0, background:T.green, display:"flex", alignItems:"center", justifyContent:"center", boxShadow:`0 0 0 3px ${T.green}22` }}>
                       <span style={{ fontSize:15, color:"#fff", fontWeight:900, lineHeight:1 }}>✓</span>
                     </div>
-                    {/* Name */}
                     <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:14, fontWeight:600, color:T.green, textDecoration:"line-through", textDecorationColor:T.green+"77", lineHeight:1.2 }}>
-                        {habit.label}
-                      </div>
-                      <div style={{ fontSize:11, color:T.muted, marginTop:2 }}>
-                        {identity.icon} {identity.label.replace("I am a ","").replace("I am ","")}
-                      </div>
+                      <div style={{ fontSize:14, fontWeight:600, color:T.green, textDecoration:"line-through", textDecorationColor:T.green+"77", lineHeight:1.2 }}>{habit.label}</div>
+                      <div style={{ fontSize:11, color:T.muted, marginTop:2 }}>{identity.icon} {identity.label.replace("I am a ","").replace("I am ","")}</div>
                     </div>
-                    {/* Streak */}
                     {streak >= 2 && (
                       <span style={{ fontSize:11, fontWeight:800, color:T.gold, background:T.gold+"20", padding:"2px 8px", borderRadius:20, flexShrink:0 }}>
                         {milestone ? milestone.emoji : "🔥"} {streak}d
                       </span>
                     )}
-                    {/* Undo hint */}
                     <span style={{ fontSize:11, color:T.muted, flexShrink:0, opacity:0.6 }}>undo</span>
                   </button>
                 );
@@ -922,6 +1130,51 @@ function TodayView({ identities, todayData, toggle, justChecked, getStreakForHab
           </div>
         );
       })()}
+
+      {/* Not scheduled today section */}
+      {notTodayHabits.length > 0 && (
+        <div style={{ marginTop:12 }}>
+          <button
+            onClick={() => setNotTodayExpanded(e => !e)}
+            style={{
+              display:"flex", alignItems:"center", gap:8, width:"100%",
+              background:"transparent", border:"none", cursor:"pointer", padding:"4px 2px",
+              WebkitTapHighlightColor:"transparent",
+            }}
+          >
+            <span style={{ fontSize:14, opacity:0.5 }}>⏭</span>
+            <span style={{ fontSize:12, fontWeight:700, color:T.muted }}>Not scheduled today</span>
+            <span style={{ fontSize:11, color:T.muted, background:T.surf2, borderRadius:20, padding:"1px 8px", marginLeft:"auto" }}>{notTodayHabits.length}</span>
+            <span style={{ fontSize:12, color:T.muted }}>{notTodayExpanded ? "▲" : "▼"}</span>
+          </button>
+
+          {notTodayExpanded && (
+            <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:5 }}>
+              {notTodayHabits.map(({ habit, identity }) => {
+                const { bg, color } = getFreqColor(habit.frequency);
+                return (
+                  <div key={habit.id} style={{
+                    display:"flex", alignItems:"center", gap:10,
+                    background:T.surf2, border:`1px dashed ${T.border}`,
+                    borderRadius:12, padding:"10px 14px", opacity:0.65,
+                  }}>
+                    <div style={{ width:30, height:30, borderRadius:"50%", border:`1.5px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                      <span style={{ fontSize:12, color:T.muted }}>○</span>
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:13, fontWeight:600, color:T.muted }}>{habit.label}</div>
+                      <div style={{ fontSize:11, color:T.muted, marginTop:2 }}>{identity.icon} {identity.label.replace("I am a ","").replace("I am ","")}</div>
+                    </div>
+                    <span style={{ fontSize:10, fontWeight:700, color, background:bg, padding:"3px 8px", borderRadius:20, flexShrink:0, whiteSpace:"nowrap" }}>
+                      {getFreqLabel(habit.frequency)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Add habit / identity */}
       <button onClick={()=>setModal("addHabit")} style={S.addHabitBtn}>
@@ -957,8 +1210,17 @@ function WeekView({ data, weekDates, todayKey, identities }) {
                   <>
                     <div key={habit.id+"_l"} style={S.weekHabitLabel}>{habit.label}</div>
                     {weekDates.map(d=>{
-                      const done=!!(data[d]&&data[d][habit.id]);
-                      return <div key={d} style={{...S.weekDot,background:done?identity.color:T.surf2,border:`1px solid ${done?identity.color:T.border}`,opacity:d>todayKey?0.35:1}}/>;
+                      const done      = !!(data[d]&&data[d][habit.id]);
+                      const scheduled = isScheduledOn(habit.frequency, d);
+                      const future    = d > todayKey;
+                      return (
+                        <div key={d} style={{
+                          ...S.weekDot,
+                          background: done ? identity.color : scheduled ? T.surf2 : "transparent",
+                          border: done ? `1px solid ${identity.color}` : scheduled ? `1px solid ${T.border}` : `1px dashed ${T.border}`,
+                          opacity: future ? 0.35 : scheduled ? 1 : 0.4,
+                        }}/>
+                      );
                     })}
                   </>
                 ))}
@@ -990,7 +1252,7 @@ function WeekView({ data, weekDates, todayKey, identities }) {
 
 // ─── STREAKS VIEW ─────────────────────────────────────────────────────────────
 function StreaksView({ data, getStreak, identities }) {
-  const allHabits=identities.flatMap(i=>i.habits.map(h=>({...h,identity:i,streak:getStreak(h.id)})));
+  const allHabits=identities.flatMap(i=>i.habits.map(h=>({...h,identity:i,streak:getStreak(h.id, h.frequency)})));
   const sorted=[...allHabits].sort((a,b)=>b.streak-a.streak);
   const topStreak=sorted[0]?.streak||0;
   return (
@@ -1009,7 +1271,7 @@ function StreaksView({ data, getStreak, identities }) {
           {identity.habits.length===0
             ? <div style={{fontSize:12,color:T.muted,textAlign:"center",padding:"8px 0"}}>No habits yet</div>
             : identity.habits.map(habit=>{
-              const streak=getStreak(habit.id);
+              const streak=getStreak(habit.id, habit.frequency);
               const milestone=getMilestone(streak);
               const next=getNextMilestone(streak);
               const pct=next?Math.round((streak/next.days)*100):100;
