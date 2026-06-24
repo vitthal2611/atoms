@@ -181,6 +181,7 @@ export default function App() {
   const [identities,  setIdentities]  = useState([]);
   const [data,        setData]        = useState({});
   const [view,        setView]        = useState("today");
+  const [selectedDate, setSelectedDate] = useState(getTodayKey());
   const [justChecked, setJustChecked] = useState(null);
   const [celebrationHabit, setCelebrationHabit] = useState(null);
   const [syncing, setSyncing] = useState(false);
@@ -190,9 +191,10 @@ export default function App() {
   // modal types: "addHabit" | "editHabit" | "addIdentity" | "editIdentity" | "confirmDeleteHabit" | "confirmDeleteIdentity"
   const [modalCtx, setModalCtx] = useState(null);
 
-  const todayKey  = getTodayKey();
-  const weekDates = getWeekDates();
-  const todayData = data[todayKey] || {};
+  const todayKey    = getTodayKey();
+  const weekDates   = getWeekDates();
+  const todayData   = data[todayKey] || {};
+  const selectedData = data[selectedDate] || {};
 
   // ── Debounced Firestore saves ──
   const idTimer   = useRef(null);
@@ -257,18 +259,18 @@ export default function App() {
   // ── Toggle — same: must be before early returns ──
   const toggle = useCallback((habitId) => {
     setData(prev=>{
-      const day=prev[todayKey]||{};
-      return {...prev,[todayKey]:{...day,[habitId]:!day[habitId]}};
+      const day=prev[selectedDate]||{};
+      return {...prev,[selectedDate]:{...day,[habitId]:!day[habitId]}};
     });
     setJustChecked(habitId);
     setTimeout(()=>setJustChecked(null),600);
     const streak = getStreakForHabit(habitId)+1;
     const milestone = MILESTONES.find(m=>m.days===streak);
-    if(milestone && !todayData[habitId]) {
+    if(milestone && !selectedData[habitId]) {
       setCelebrationHabit({habitId,milestone});
       setTimeout(()=>setCelebrationHabit(null),3500);
     }
-  }, [todayKey, todayData, getStreakForHabit]);
+  }, [selectedDate, selectedData, getStreakForHabit]);
 
   // ── Loading / Auth gates ──
   if (user === undefined) {
@@ -364,11 +366,11 @@ export default function App() {
   const getIdentityScore = id => {
     const ident = identities.find(i=>i.id===id);
     if(!ident) return {done:0,total:0};
-    const done = ident.habits.filter(h=>todayData[h.id]).length;
+    const done = ident.habits.filter(h=>selectedData[h.id]).length;
     return {done, total:ident.habits.length};
   };
   const allHabits = identities.flatMap(i=>i.habits);
-  const totalDone = allHabits.filter(h=>todayData[h.id]).length;
+  const totalDone = allHabits.filter(h=>selectedData[h.id]).length;
   const totalTotal = allHabits.length;
   const pct = totalTotal>0 ? Math.round((totalDone/totalTotal)*100) : 0;
 
@@ -468,13 +470,16 @@ export default function App() {
         {view==="today" && (
           <TodayView
             identities={identities}
-            todayData={todayData}
+            todayData={selectedData}
             toggle={toggle}
             justChecked={justChecked}
             getStreakForHabit={getStreakForHabit}
             openEditHabit={openEditHabit}
             setModal={setModal}
             setModalCtx={setModalCtx}
+            selectedDate={selectedDate}
+            setSelectedDate={setSelectedDate}
+            todayKey={todayKey}
           />
         )}
 
@@ -501,7 +506,7 @@ export default function App() {
           {id:"streaks", icon:"🔥",  label:"Streaks"},
           {id:"manage",  icon:"⚙️",  label:"Manage"},
         ].map(t=>(
-          <button key={t.id} onClick={()=>setView(t.id)} style={S.navBtn}>
+          <button key={t.id} onClick={()=>{ setView(t.id); if(t.id==="today") setSelectedDate(getTodayKey()); }} style={S.navBtn}>
             <span style={S.navIcon}>{t.icon}</span>
             <span style={{...S.navLabel, color:view===t.id?T.text:T.muted, fontWeight:view===t.id?700:500}}>{t.label}</span>
             {view===t.id && <div style={{width:4,height:4,borderRadius:"50%",background:T.gold,marginTop:1}}/>}
@@ -727,8 +732,66 @@ function HabitCard({ habit, identity, checked, streak, popping, toggle, openEdit
   );
 }
 
+// ─── DAY NAVIGATOR ────────────────────────────────────────────────────────────
+function formatNavDate(dateKey) {
+  const [y,mo,d] = dateKey.split("-").map(Number);
+  const date = new Date(y, mo-1, d);
+  const today = getTodayKey();
+  if (dateKey === today) return "Today";
+  const yest = new Date(); yest.setDate(yest.getDate()-1);
+  if (dateKey === yest.toISOString().slice(0,10)) return "Yesterday";
+  return date.toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short"});
+}
+
+function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
+  const isToday = selectedDate === todayKey;
+  const canNext = selectedDate < todayKey;
+
+  const go = (delta) => {
+    const [y,mo,d] = selectedDate.split("-").map(Number);
+    const date = new Date(y, mo-1, d);
+    date.setDate(date.getDate() + delta);
+    const next = date.toISOString().slice(0,10);
+    if (next <= todayKey) setSelectedDate(next);
+  };
+
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:14 }}>
+      <button onClick={()=>go(-1)} style={{
+        width:36, height:36, borderRadius:"50%", border:`1.5px solid ${T.border}`,
+        background:T.surface, color:T.text2, fontSize:18, lineHeight:1,
+        cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+        flexShrink:0, WebkitTapHighlightColor:"transparent",
+      }}>‹</button>
+
+      <div style={{ flex:1, textAlign:"center" }}>
+        <div style={{ fontSize:15, fontWeight:700, color:T.text, fontFamily:"'Space Grotesk',sans-serif" }}>
+          {formatNavDate(selectedDate)}
+        </div>
+        {!isToday && (
+          <button onClick={()=>setSelectedDate(todayKey)} style={{
+            marginTop:3, fontSize:10, fontWeight:700, color:T.accent,
+            background:T.accent+"18", border:`1px solid ${T.accent}44`,
+            borderRadius:20, padding:"2px 10px", cursor:"pointer",
+            letterSpacing:"0.04em", textTransform:"uppercase",
+            WebkitTapHighlightColor:"transparent",
+          }}>← Back to Today</button>
+        )}
+      </div>
+
+      <button onClick={()=>go(1)} disabled={!canNext} style={{
+        width:36, height:36, borderRadius:"50%", border:`1.5px solid ${canNext?T.border:T.surf2}`,
+        background:T.surface, color:canNext?T.text2:T.border, fontSize:18, lineHeight:1,
+        cursor:canNext?"pointer":"default", display:"flex", alignItems:"center", justifyContent:"center",
+        flexShrink:0, WebkitTapHighlightColor:"transparent",
+        opacity: canNext ? 1 : 0.35,
+      }}>›</button>
+    </div>
+  );
+}
+
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
-function TodayView({ identities, todayData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, setModalCtx }) {
+function TodayView({ identities, todayData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, setModalCtx, selectedDate, setSelectedDate, todayKey }) {
   const allHabits = identities.flatMap(identity =>
     identity.habits.map(habit => ({ habit, identity, slotId: getSlotId(habit.time) }))
   );
@@ -738,6 +801,9 @@ function TodayView({ identities, todayData, toggle, justChecked, getStreakForHab
 
   return (
     <div style={S.content}>
+      {/* Day Navigator */}
+      <DayNavigator selectedDate={selectedDate} setSelectedDate={setSelectedDate} todayKey={todayKey} />
+
       {/* Daily quote banner */}
       <div style={{ background:`linear-gradient(135deg,${T.green}18,${T.gold}12)`, border:`1px solid ${T.green}33`, borderRadius:16, padding:"14px 16px" }}>
         <div style={{ fontSize:10,fontWeight:800,letterSpacing:"0.12em",color:T.green,marginBottom:6,textTransform:"uppercase" }}>✨ Today's Motivation</div>
