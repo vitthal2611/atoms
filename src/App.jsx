@@ -674,19 +674,25 @@ function HabitCard({ habit, identity, checked, streak, popping, toggle, openEdit
           WebkitTapHighlightColor: "transparent",
         }}
       >
-        {/* ── 1. Trigger chip — top left, identity-tinted ── */}
+        {/* ── 1. Trigger cue banner — full-width, left-border callout ── */}
         {habit.trigger && (
           <div style={{
-            alignSelf: "flex-start",
-            fontSize: 11, fontWeight: 600,
-            color: checked ? identity.color : T.muted,
-            background: checked ? identity.color + "18" : T.surf2,
-            border: `1px solid ${checked ? identity.color + "44" : T.border}`,
-            borderRadius: 20, padding: "3px 10px",
-            marginBottom: 10, lineHeight: 1.5,
-            transition: "all 0.2s",
+            margin: "-12px -14px 14px -14px",
+            borderLeft: `4px solid ${identity.color}`,
+            background: checked
+              ? identity.color + "22"
+              : identity.color + "0f",
+            padding: "9px 14px 9px 13px",
+            transition: "background 0.25s",
           }}>
-            ⚡ {habit.trigger}
+            <div style={{
+              fontSize: 13, fontWeight: 600,
+              color: checked ? identity.color : T.text,
+              lineHeight: 1.35,
+              transition: "color 0.2s",
+            }}>
+              {habit.trigger}
+            </div>
           </div>
         )}
 
