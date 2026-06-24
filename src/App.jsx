@@ -487,9 +487,9 @@ export default function App() {
               stroke={pct===100?T.gold:T.green} strokeWidth="5"
               strokeDasharray={`${(pct/100)*176} 176`} strokeLinecap="round"
               transform="rotate(-90 34 34)" style={{transition:"stroke-dasharray 0.6s ease"}}/>
-            <text x="34" y="39" textAnchor="middle" fill={T.text} fontSize="14" fontWeight="800" fontFamily="Space Grotesk,sans-serif">{pct}%</text>
+            <text x="34" y="39" textAnchor="middle" fill={T.text} fontSize="14" fontWeight="800" fontFamily="Space Grotesk,sans-serif" style={{fontVariantNumeric:"tabular-nums"}}>{pct}%</text>
           </svg>
-          <div style={S.ringLabel}>{totalDone}/{totalTotal} done</div>
+          <div style={{...S.ringLabel, fontVariantNumeric:"tabular-nums"}}>{totalDone}/{totalTotal} done</div>
         </div>
         </div>
       </header>
@@ -1022,13 +1022,15 @@ const T = {
 };
 
 // ─── STYLES — LIGHT MOBILE FIRST ─────────────────────────────────────────────
+const FONT_DISPLAY = "'Space Grotesk','Plus Jakarta Sans',sans-serif";
+const FONT_BODY    = "'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,sans-serif";
+
 const S = {
   root:{
     minHeight:"100dvh", background:T.bg,
-    fontFamily:"'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+    fontFamily: FONT_BODY,
     color:T.text, width:"100%", maxWidth:430,
     margin:"0 auto", display:"flex", flexDirection:"column",
-    WebkitFontSmoothing:"antialiased",
   },
   header:{
     position:"sticky", top:0, zIndex:50,
@@ -1039,11 +1041,11 @@ const S = {
     padding:"16px 20px 14px",
     paddingTop:"calc(env(safe-area-inset-top,0px) + 16px)",
   },
-  eyebrow:{fontSize:10,letterSpacing:"0.18em",color:T.accent,fontWeight:800,marginBottom:3,textTransform:"uppercase"},
-  title:{margin:0,fontSize:22,fontWeight:800,fontFamily:"'Space Grotesk','Inter',sans-serif",letterSpacing:"-0.03em",color:T.text,lineHeight:1.1},
-  dateLabel:{fontSize:12,color:T.muted,marginTop:3,fontWeight:500},
+  eyebrow:{fontSize:11,letterSpacing:"0.14em",color:T.accent,fontWeight:700,marginBottom:4,textTransform:"uppercase",fontFamily:FONT_BODY},
+  title:{margin:0,fontSize:24,fontWeight:800,fontFamily:FONT_DISPLAY,letterSpacing:"-0.04em",color:T.text,lineHeight:1.05},
+  dateLabel:{fontSize:13,color:T.muted,marginTop:4,fontWeight:500,letterSpacing:"0.01em"},
   ringWrap:{flexShrink:0,textAlign:"center"},
-  ringLabel:{fontSize:10,color:T.muted,marginTop:2,fontWeight:600},
+  ringLabel:{fontSize:11,color:T.muted,marginTop:2,fontWeight:600},
 
   scrollArea:{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",paddingBottom:"calc(env(safe-area-inset-bottom,0px) + 80px)"},
   content:{padding:"12px 14px 0",display:"flex",flexDirection:"column",gap:10},
@@ -1064,7 +1066,7 @@ const S = {
     minHeight:56, WebkitTapHighlightColor:"transparent",
   },
   navIcon:{fontSize:20,lineHeight:1},
-  navLabel:{fontSize:10,fontWeight:700,letterSpacing:"0.03em"},
+  navLabel:{fontSize:11,fontWeight:600,letterSpacing:"0.02em",fontFamily:FONT_BODY},
 
   toast:{
     position:"fixed", top:"calc(env(safe-area-inset-top,0px) + 12px)",
@@ -1086,7 +1088,7 @@ const S = {
   },
   modalDrag:{width:40,height:4,background:T.border2,borderRadius:99,margin:"12px auto 0"},
   modalHeader:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 20px 14px",borderBottom:`1px solid ${T.border}`},
-  modalTitle:{fontSize:17,fontWeight:700,color:T.text,fontFamily:"'Space Grotesk','Inter',sans-serif"},
+  modalTitle:{fontSize:18,fontWeight:700,color:T.text,fontFamily:FONT_DISPLAY,letterSpacing:"-0.02em"},
   modalClose:{
     background:T.surf2, border:"none", color:T.muted,
     fontSize:15, cursor:"pointer",
@@ -1095,7 +1097,7 @@ const S = {
     WebkitTapHighlightColor:"transparent",
   },
 
-  fieldLabel:{display:"block",fontSize:11,letterSpacing:"0.1em",color:T.muted,fontWeight:700,marginBottom:8,marginTop:18,textTransform:"uppercase"},
+  fieldLabel:{display:"block",fontSize:11,letterSpacing:"0.08em",color:T.muted,fontWeight:700,marginBottom:8,marginTop:18,textTransform:"uppercase",fontFamily:FONT_BODY},
   input:{
     width:"100%", background:T.surf2,
     border:`1.5px solid ${T.border}`, borderRadius:12,
@@ -1122,7 +1124,7 @@ const S = {
   card:{borderRadius:18,border:`1px solid ${T.border}`,padding:"14px",background:T.surface,transition:"background 0.3s,border-color 0.3s",boxShadow:"0 1px 4px #00000008"},
   cardHeader:{display:"flex",alignItems:"center",gap:10,marginBottom:10},
   cardIcon:{fontSize:22,flexShrink:0,lineHeight:1},
-  cardLabel:{fontSize:15,fontWeight:700,fontFamily:"'Space Grotesk','Inter',sans-serif",letterSpacing:"-0.01em",lineHeight:1.2,color:T.text},
+  cardLabel:{fontSize:15,fontWeight:700,fontFamily:FONT_DISPLAY,letterSpacing:"-0.02em",lineHeight:1.2,color:T.text},
   cardSub:{fontSize:11,color:T.muted,marginTop:2,fontWeight:500},
   badge:{marginLeft:"auto",fontSize:10,fontWeight:800,color:"#fff",padding:"4px 10px",borderRadius:20,letterSpacing:"0.04em",flexShrink:0,minHeight:22,display:"flex",alignItems:"center"},
   progressBar:{height:4,background:T.surf2,borderRadius:99,marginBottom:12,overflow:"hidden",border:`1px solid ${T.border}`},
@@ -1174,8 +1176,8 @@ const S = {
   milestoneFill:{height:"100%",borderRadius:99,transition:"width 0.5s"},
 
   footer:{padding:"20px 4px 16px",display:"flex",flexDirection:"column",gap:6,borderTop:`1px solid ${T.border}`,marginTop:8},
-  footerQuote:{fontSize:13,color:T.text2,fontStyle:"italic",lineHeight:1.7,fontWeight:500},
-  footerAuthor:{fontSize:11,color:T.gold,fontWeight:700,letterSpacing:"0.04em"},
+  footerQuote:{fontSize:14,color:T.text2,fontStyle:"italic",lineHeight:1.75,fontWeight:500,fontFamily:FONT_BODY,letterSpacing:"0.01em"},
+  footerAuthor:{fontSize:12,color:T.gold,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:FONT_BODY},
 
   weekGrid:{display:"grid",gridTemplateColumns:"1fr repeat(7, 26px)",gap:"6px 4px",alignItems:"center"},
   weekDayH:{fontSize:10,textAlign:"center",letterSpacing:"0.04em",fontWeight:600,color:T.muted},
@@ -1192,7 +1194,7 @@ const S = {
 };
 
 const css=`
-  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700;800&family=Inter:wght@400;500;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
   *, *::before, *::after { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
@@ -1202,10 +1204,18 @@ const css=`
     background: #F5F7FF;
     overscroll-behavior-y: none;
     -webkit-tap-highlight-color: transparent;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
+
+  /* Tabular nums on all numeric contexts */
+  .num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
 
   input, select, textarea {
     font-size: 16px !important;
+    font-family: 'Plus Jakarta Sans', sans-serif;
     -webkit-appearance: none;
   }
   input:focus, select:focus {
