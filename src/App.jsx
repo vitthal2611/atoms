@@ -639,17 +639,15 @@ function HabitCard({ habit, identity, checked, streak, popping, toggle, openEdit
   return (
     <div style={{
       borderRadius: 16, marginBottom: 8,
-      background: checked
-        ? `linear-gradient(135deg, ${identity.color}18, ${identity.color}06)`
-        : T.surface,
-      border: `1.5px solid ${checked ? identity.color : T.border}`,
+      background: checked ? T.surf2 : T.surface,
+      border: `1.5px solid ${checked ? T.green : T.border}`,
       transition: "all 0.25s ease",
-      boxShadow: checked ? `0 4px 20px ${identity.color}22` : "0 1px 3px #0000000a",
+      boxShadow: checked ? `0 4px 16px ${T.green}22` : "0 1px 3px #0000000a",
       overflow: "hidden",
       position: "relative",
     }}>
 
-      {/* ── Edit button — top-right, never overlaps body ── */}
+      {/* ── Edit button ── */}
       <button
         onClick={e => { e.stopPropagation(); openEditHabit(identity.id, habit); }}
         style={{
@@ -674,20 +672,18 @@ function HabitCard({ habit, identity, checked, streak, popping, toggle, openEdit
           WebkitTapHighlightColor: "transparent",
         }}
       >
-        {/* ── 1. Trigger cue banner — full-width, left-border callout ── */}
+        {/* ── 1. Trigger cue banner ── */}
         {habit.trigger && (
           <div style={{
             margin: "-12px -14px 14px -14px",
-            borderLeft: `4px solid ${identity.color}`,
-            background: checked
-              ? identity.color + "22"
-              : identity.color + "0f",
+            borderLeft: `4px solid ${T.accent}`,
+            background: checked ? T.accent + "18" : T.accent + "0c",
             padding: "9px 14px 9px 13px",
             transition: "background 0.25s",
           }}>
             <div style={{
               fontSize: 13, fontWeight: 600,
-              color: checked ? identity.color : T.text,
+              color: checked ? T.green : T.text2,
               lineHeight: 1.35,
               transition: "color 0.2s",
             }}>
@@ -696,17 +692,17 @@ function HabitCard({ habit, identity, checked, streak, popping, toggle, openEdit
           </div>
         )}
 
-        {/* ── 2. Circle + [label / time / milestone] row ── */}
+        {/* ── 2. Circle + label + time + milestone ── */}
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12, width: "100%", paddingRight: 28 }}>
 
-          {/* Check circle — top-aligned, small top nudge to optically sit with the label */}
+          {/* Check circle */}
           <div style={{
             width: 44, height: 44, borderRadius: "50%", flexShrink: 0, marginTop: 1,
-            border: `2.5px solid ${checked ? identity.color : T.border2}`,
-            background: checked ? identity.color : T.surf2,
+            border: `2.5px solid ${checked ? T.green : T.border2}`,
+            background: checked ? T.green : T.surface,
             display: "flex", alignItems: "center", justifyContent: "center",
             transition: "all 0.2s",
-            boxShadow: checked ? `0 0 0 4px ${identity.color}20` : "none",
+            boxShadow: checked ? `0 0 0 4px ${T.green}22` : "none",
           }}>
             {checked
               ? <span style={{ fontSize: 20, color: "#fff", fontWeight: 900, lineHeight: 1 }} className="check-pop">✓</span>
@@ -714,21 +710,19 @@ function HabitCard({ habit, identity, checked, streak, popping, toggle, openEdit
             }
           </div>
 
-          {/* Label column — name sits flush, time flows directly beneath */}
+          {/* Label column */}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
               fontSize: 16, fontWeight: 700, lineHeight: 1.1,
-              color: checked ? identity.color : T.text,
+              color: checked ? T.green : T.text,
               transition: "color 0.2s",
             }}>
               {habit.label}
             </div>
 
-            {/* Time + location — tight under the name, no visual gap */}
             {(habit.time || habit.location) && (
               <div style={{
-                marginTop: 4,
-                fontSize: 12, color: T.muted,
+                marginTop: 4, fontSize: 12, color: T.muted,
                 display: "flex", gap: 12, flexWrap: "wrap", lineHeight: 1.4,
               }}>
                 {habit.time     && <span>🕐 {habit.time}</span>}
@@ -736,34 +730,24 @@ function HabitCard({ habit, identity, checked, streak, popping, toggle, openEdit
               </div>
             )}
 
-            {/* Milestone progress — flows naturally under time */}
             {next && streak > 0 && (
               <div style={{ marginTop: 8, marginRight: 4 }}>
                 <div style={{ display:"flex", justifyContent:"space-between", marginBottom: 4 }}>
-                  <span style={{ fontSize: 10, color: T.muted, fontWeight: 500 }}>
-                    → {next.emoji} {next.label}
-                  </span>
-                  <span style={{ fontSize: 10, color: identity.color, fontWeight: 700 }}>
-                    {next.days - streak}d left
-                  </span>
+                  <span style={{ fontSize: 10, color: T.muted, fontWeight: 500 }}>→ {next.emoji} {next.label}</span>
+                  <span style={{ fontSize: 10, color: T.green, fontWeight: 700 }}>{next.days - streak}d left</span>
                 </div>
                 <div style={{ height: 3, background: T.border, borderRadius: 99, overflow: "hidden" }}>
-                  <div style={{
-                    height: "100%", borderRadius: 99, transition: "width 0.5s",
-                    width: `${(streak / next.days) * 100}%`,
-                    background: `linear-gradient(90deg, ${identity.color}88, ${identity.color})`,
-                  }}/>
+                  <div style={{ height:"100%", borderRadius: 99, transition:"width 0.5s", width:`${(streak/next.days)*100}%`, background: T.green }}/>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Streak badge — top-aligned with label */}
+          {/* Streak badge */}
           {streak >= 2 && (
             <span style={{
               fontSize: 12, fontWeight: 800, flexShrink: 0, marginTop: 2,
-              color: checked ? identity.color : T.accent,
-              background: checked ? identity.color + "18" : T.accent + "15",
+              color: T.gold, background: T.gold + "20",
               padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap",
             }}>
               {milestone ? milestone.emoji : "🔥"} {streak}d
