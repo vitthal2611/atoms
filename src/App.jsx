@@ -994,31 +994,32 @@ function getDailyQuote() {
   return QUOTES[day % QUOTES.length];
 }
 
-// ─── THEME PALETTE — Cool modern, high contrast ──────────────────────────────
-// BG:      #F5F7FF  — cool blue-white (crisp, premium feel)
-// Surface: #FFFFFF  — pure white cards
-// Surface2:#ECEFFE  — light indigo tint for secondary surfaces
-// Border:  #E0E3F8  — cool, clean border
-// Text:    #0D0F24  — deep indigo-black (sharper than warm black)
-// Text2:   #3A3F6E  — medium indigo-slate
-// Muted:   #7B82AD  — muted blue-slate
-// Accent:  #FF4757  — vivid coral-red (energetic, motivating)
-// Green:   #00C48C  — vivid emerald (vibrant, life-affirming)
-// Gold:    #FFB300  — vivid amber (warm contrast)
+// ─── THEME PALETTE — Ocean Depth ─────────────────────────────────────────────
+// BG:      #F0F9FF  — softest sky blue page wash
+// Surface: #FFFFFF  — pure white cards float above the wash
+// Surface2:#E0F2FE  — light ocean tint for secondary surfaces
+// Border:  #BAE6FD  — airy sky-blue border
+// Border2: #7DD3FC  — stronger ocean border for circles / inputs
+// Text:    #0C4A6E  — deep navy — sharp, premium, readable
+// Text2:   #0369A1  — medium ocean blue
+// Muted:   #5B9EC9  — muted ocean for timestamps / labels
+// Accent:  #0EA5E9  — sky blue — primary CTA, eyebrow, active states
+// Green:   #0284C7  — deeper ocean for completion ring + progress bars
+// Gold:    #F59E0B  — warm amber — streak badges, milestone labels
 
 const T = {
-  bg:      "#F5F7FF",
+  bg:      "#F0F9FF",
   surface: "#FFFFFF",
-  surf2:   "#ECEFFE",
-  border:  "#E0E3F8",
-  border2: "#BEC3E4",
-  text:    "#0D0F24",
-  text2:   "#3A3F6E",
-  muted:   "#7B82AD",
-  accent:  "#FF4757",
-  green:   "#00C48C",
-  gold:    "#FFB300",
-  red:     "#FF3B5C",
+  surf2:   "#E0F2FE",
+  border:  "#BAE6FD",
+  border2: "#7DD3FC",
+  text:    "#0C4A6E",
+  text2:   "#0369A1",
+  muted:   "#5B9EC9",
+  accent:  "#0EA5E9",
+  green:   "#0284C7",
+  gold:    "#F59E0B",
+  red:     "#EF4444",
 };
 
 // ─── STYLES — LIGHT MOBILE FIRST ─────────────────────────────────────────────
@@ -1201,7 +1202,7 @@ const css=`
 
   body {
     margin: 0;
-    background: #F5F7FF;
+    background: #F0F9FF;
     overscroll-behavior-y: none;
     -webkit-tap-highlight-color: transparent;
     font-synthesis: none;
@@ -1219,8 +1220,8 @@ const css=`
     -webkit-appearance: none;
   }
   input:focus, select:focus {
-    border-color: #4E7AFF !important;
-    box-shadow: 0 0 0 3px #4E7AFF22;
+    border-color: #0EA5E9 !important;
+    box-shadow: 0 0 0 3px #0EA5E922;
   }
 
   button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
