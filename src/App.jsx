@@ -24,35 +24,35 @@ const DEFAULT_IDENTITIES = [
   {
     id: "fit", label: "I am a Fit Person", icon: "🏃", color: "#4CAF7D", colorDim: "#1a3028",
     habits: [
-      { id: "exercise", label: "Exercise 30 min",      trigger: "After morning alarm",           time: "6:30 AM",   location: "Home / Gym" },
-      { id: "steps",    label: "10,000 steps",          trigger: "After lunch break",             time: "1:00 PM",   location: "Office / Park" },
-      { id: "water",    label: "Drink 2L water",        trigger: "Every time I sit at desk",      time: "All day",   location: "Everywhere" },
-      { id: "sleep",    label: "Sleep by 10:30 PM",     trigger: "Phone on charger outside room", time: "10:00 PM",  location: "Bedroom" },
+      { id: "exercise", label: "Exercise 30 min",      trigger: "After morning alarm",           time: "06:30", location: "Home / Gym" },
+      { id: "steps",    label: "10,000 steps",          trigger: "After lunch break",             time: "13:00", location: "Office / Park" },
+      { id: "water",    label: "Drink 2L water",        trigger: "Every time I sit at desk",      time: "All day", location: "Everywhere" },
+      { id: "sleep",    label: "Sleep by 22:30",        trigger: "Phone on charger outside room", time: "22:00", location: "Bedroom" },
     ],
   },
   {
     id: "learner", label: "I am a Learner", icon: "📚", color: "#5B8DEF", colorDim: "#1a2038",
     habits: [
-      { id: "read",    label: "Read 20 pages",        trigger: "After dinner is cleared",  time: "9:00 PM",  location: "Living room chair" },
-      { id: "skill",   label: "1 hr skill building",  trigger: "After kids are settled",   time: "9:30 PM",  location: "Study desk" },
-      { id: "reflect", label: "Daily reflection",     trigger: "Before closing laptop",    time: "6:00 PM",  location: "Work desk" },
-      { id: "podcast", label: "Listen to podcast",    trigger: "During morning commute",   time: "8:00 AM",  location: "Car / Walk" },
+      { id: "read",    label: "Read 20 pages",        trigger: "After dinner is cleared",  time: "21:00", location: "Living room chair" },
+      { id: "skill",   label: "1 hr skill building",  trigger: "After kids are settled",   time: "21:30", location: "Study desk" },
+      { id: "reflect", label: "Daily reflection",     trigger: "Before closing laptop",    time: "18:00", location: "Work desk" },
+      { id: "podcast", label: "Listen to podcast",    trigger: "During morning commute",   time: "08:00", location: "Car / Walk" },
     ],
   },
   {
     id: "parent", label: "I am a Good Parent", icon: "👨‍👧", color: "#E07B54", colorDim: "#2e1a10",
     habits: [
-      { id: "playtime", label: "Playtime with Ovi",      trigger: "When I get home from work",  time: "6:30 PM", location: "Living room" },
-      { id: "tilak",    label: "Bond time with Tilak",    trigger: "After Tilak's evening feed", time: "7:00 PM", location: "Nursery" },
-      { id: "present",  label: "Phone-free family hour",  trigger: "Phone goes in drawer",       time: "7:00 PM", location: "Home" },
-      { id: "story",    label: "Bedtime story",           trigger: "After Ovi brushes teeth",    time: "8:30 PM", location: "Ovi's room" },
+      { id: "playtime", label: "Playtime with Ovi",      trigger: "When I get home from work",  time: "18:30", location: "Living room" },
+      { id: "tilak",    label: "Bond time with Tilak",    trigger: "After Tilak's evening feed", time: "19:00", location: "Nursery" },
+      { id: "present",  label: "Phone-free family hour",  trigger: "Phone goes in drawer",       time: "19:00", location: "Home" },
+      { id: "story",    label: "Bedtime story",           trigger: "After Ovi brushes teeth",    time: "20:30", location: "Ovi's room" },
     ],
   },
   {
     id: "husband", label: "I am a Good Husband", icon: "❤️", color: "#C17F24", colorDim: "#2e1e08",
     habits: [
-      { id: "gratitude", label: "Express gratitude", trigger: "Morning tea together",         time: "7:00 AM", location: "Kitchen" },
-      { id: "checkin",   label: "Evening check-in",  trigger: "After kids sleep",             time: "9:00 PM", location: "Home" },
+      { id: "gratitude", label: "Express gratitude", trigger: "Morning tea together",         time: "07:00", location: "Kitchen" },
+      { id: "checkin",   label: "Evening check-in",  trigger: "After kids sleep",             time: "21:00", location: "Home" },
       { id: "help",      label: "Help at home",       trigger: "When I see something to do",  time: "Evening", location: "Home" },
     ],
   },
@@ -62,7 +62,7 @@ const DEFAULT_IDENTITIES = [
       { id: "budget",    label: "Track expenses",   trigger: "After every purchase",           time: "Immediate", location: "BudgetBuddy app" },
       { id: "emi",       label: "EMI on time",      trigger: "Calendar reminder 3 days prior", time: "Due date",  location: "Bank app" },
       { id: "nosplurge", label: "No impulse spend", trigger: "24hr rule before buying",        time: "Always",    location: "Everywhere" },
-      { id: "invest",    label: "SIP invested",     trigger: "Auto-debit on 5th of month",    time: "5th",       location: "Zerodha / MF" },
+      { id: "invest",    label: "SIP invested",     trigger: "Auto-debit on 5th of month",    time: "Monthly",   location: "Zerodha / MF" },
     ],
   },
 ];
@@ -83,6 +83,20 @@ const MILESTONES = [
 
 function getMilestone(s) { let b=null; for(const m of MILESTONES) if(s>=m.days) b=m; return b; }
 function getNextMilestone(s) { return MILESTONES.find(m=>m.days>s)||null; }
+function to24h(timeStr) {
+  if (!timeStr) return timeStr;
+  const t = timeStr.toLowerCase().trim();
+  if (!t.includes("am") && !t.includes("pm")) return timeStr; // already 24h or freetext
+  const match = t.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/);
+  if (!match) return timeStr;
+  let h = parseInt(match[1]);
+  const m = match[2] || "00";
+  const period = match[3];
+  if (period === "pm" && h !== 12) h += 12;
+  if (period === "am" && h === 12) h = 0;
+  return `${String(h).padStart(2,"0")}:${m}`;
+}
+
 function getTodayKey() { return new Date().toISOString().slice(0,10); }
 function uid() { return Math.random().toString(36).slice(2,10); }
 function getWeekDates() {
@@ -134,7 +148,7 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
       <input style={S.input} value={form.trigger} onChange={e=>set("trigger",e.target.value)} placeholder="e.g. After morning coffee" />
 
       <label style={S.fieldLabel}>🕐 Time</label>
-      <input style={S.input} value={form.time} onChange={e=>set("time",e.target.value)} placeholder="e.g. 7:00 AM" />
+      <input style={S.input} type="time" value={form.time} onChange={e=>set("time",e.target.value)} />
 
       <label style={S.fieldLabel}>📍 Location</label>
       <input style={S.input} value={form.location} onChange={e=>set("location",e.target.value)} placeholder="e.g. Kitchen" />
@@ -725,7 +739,7 @@ function HabitCard({ habit, identity, checked, streak, popping, toggle, openEdit
                 marginTop: 4, fontSize: 12, color: T.muted,
                 display: "flex", gap: 12, flexWrap: "wrap", lineHeight: 1.4,
               }}>
-                {habit.time     && <span>🕐 {habit.time}</span>}
+                {habit.time     && <span>🕐 {to24h(habit.time)}</span>}
                 {habit.location && <span>📍 {habit.location}</span>}
               </div>
             )}
