@@ -828,39 +828,100 @@ function TodayView({ identities, todayData, toggle, justChecked, getStreakForHab
         </div>
       </div>
 
-      {/* Time slot sections */}
+      {/* Time slot sections — pending only (justChecked stays briefly with leave animation) */}
       {TIME_SLOTS.map(slot => {
-        const slotHabits = allHabits.filter(h => h.slotId === slot.id);
-        if (slotHabits.length === 0) return null;
-        const doneCnt = slotHabits.filter(({habit}) => todayData[habit.id]).length;
+        const slotAll     = allHabits.filter(h => h.slotId === slot.id);
+        // show unchecked + the one just checked (it plays leave animation then vanishes)
+        const slotVisible = slotAll.filter(({habit}) => !todayData[habit.id] || habit.id === justChecked);
+        if (slotVisible.length === 0) return null;
+        const pendingCnt  = slotAll.filter(({habit}) => !todayData[habit.id]).length;
         return (
           <div key={slot.id}>
-            {/* Slot header */}
             <div style={{ display:"flex", alignItems:"center", gap:8, margin:"4px 0 8px", paddingLeft:2 }}>
               <span style={{ fontSize:16 }}>{slot.emoji}</span>
               <span style={{ fontSize:13, fontWeight:700, color:T.text, fontFamily:"'Space Grotesk','Inter',sans-serif", letterSpacing:"-0.01em" }}>{slot.label}</span>
-              <span style={{ fontSize:11, color:T.muted, marginLeft:"auto", fontWeight:600 }}>{doneCnt}/{slotHabits.length}</span>
-              <div style={{ width:48, height:4, background:T.border, borderRadius:99, overflow:"hidden" }}>
-                <div style={{ height:"100%", width:`${slotHabits.length>0?(doneCnt/slotHabits.length)*100:0}%`, background:T.green, borderRadius:99, transition:"width 0.4s" }}/>
-              </div>
+              <span style={{ fontSize:11, color:T.muted, marginLeft:"auto", fontWeight:600 }}>
+                {pendingCnt} left
+              </span>
             </div>
 
-            {/* Habits in this slot */}
-            {slotHabits.map(({ habit, identity }) => (
-              <HabitCard
-                key={habit.id}
-                habit={habit}
-                identity={identity}
-                checked={!!todayData[habit.id]}
-                streak={getStreakForHabit(habit.id)}
-                popping={justChecked === habit.id}
-                toggle={toggle}
-                openEditHabit={openEditHabit}
-              />
+            {slotVisible.map(({ habit, identity }) => (
+              <div key={habit.id} className={justChecked === habit.id ? "card-leaving" : ""}>
+                <HabitCard
+                  habit={habit}
+                  identity={identity}
+                  checked={!!todayData[habit.id]}
+                  streak={getStreakForHabit(habit.id)}
+                  popping={false}
+                  toggle={toggle}
+                  openEditHabit={openEditHabit}
+                />
+              </div>
             ))}
           </div>
         );
       })}
+
+      {/* Completed section */}
+      {(() => {
+        const done = allHabits.filter(({habit}) => todayData[habit.id] && habit.id !== justChecked);
+        if (done.length === 0) return null;
+        return (
+          <div style={{ marginTop:8 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, margin:"4px 0 10px", paddingLeft:2 }}>
+              <span style={{ fontSize:16 }}>✅</span>
+              <span style={{ fontSize:13, fontWeight:700, color:T.green, fontFamily:"'Space Grotesk','Inter',sans-serif" }}>Completed</span>
+              <span style={{ fontSize:11, color:T.green, marginLeft:"auto", fontWeight:700, background:T.green+"18", borderRadius:20, padding:"2px 9px" }}>{done.length}</span>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+              {done.map(({ habit, identity }) => {
+                const streak = getStreakForHabit(habit.id);
+                const milestone = getMilestone(streak);
+                return (
+                  <button
+                    key={habit.id}
+                    onClick={() => toggle(habit.id)}
+                    style={{
+                      display:"flex", alignItems:"center", gap:10,
+                      background: T.green+"0e", border:`1.5px solid ${T.green}33`,
+                      borderRadius:14, padding:"10px 14px",
+                      cursor:"pointer", textAlign:"left", width:"100%",
+                      WebkitTapHighlightColor:"transparent",
+                      transition:"opacity 0.2s",
+                    }}
+                  >
+                    {/* Done circle */}
+                    <div style={{
+                      width:32, height:32, borderRadius:"50%", flexShrink:0,
+                      background:T.green, display:"flex", alignItems:"center", justifyContent:"center",
+                      boxShadow:`0 0 0 3px ${T.green}22`,
+                    }}>
+                      <span style={{ fontSize:15, color:"#fff", fontWeight:900, lineHeight:1 }}>✓</span>
+                    </div>
+                    {/* Name */}
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:14, fontWeight:600, color:T.green, textDecoration:"line-through", textDecorationColor:T.green+"77", lineHeight:1.2 }}>
+                        {habit.label}
+                      </div>
+                      <div style={{ fontSize:11, color:T.muted, marginTop:2 }}>
+                        {identity.icon} {identity.label.replace("I am a ","").replace("I am ","")}
+                      </div>
+                    </div>
+                    {/* Streak */}
+                    {streak >= 2 && (
+                      <span style={{ fontSize:11, fontWeight:800, color:T.gold, background:T.gold+"20", padding:"2px 8px", borderRadius:20, flexShrink:0 }}>
+                        {milestone ? milestone.emoji : "🔥"} {streak}d
+                      </span>
+                    )}
+                    {/* Undo hint */}
+                    <span style={{ fontSize:11, color:T.muted, flexShrink:0, opacity:0.6 }}>undo</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Add habit / identity */}
       <button onClick={()=>setModal("addHabit")} style={S.addHabitBtn}>
@@ -1268,11 +1329,17 @@ const css=`
     60%  { transform: scale(1.15); }
     100% { transform: scale(1); opacity:1; }
   }
+  @keyframes cardLeave {
+    0%   { opacity:1; transform:translateX(0);    max-height:240px; margin-bottom:8px; }
+    55%  { opacity:0; transform:translateX(32px); max-height:240px; margin-bottom:8px; }
+    100% { opacity:0; transform:translateX(32px); max-height:0;     margin-bottom:0; }
+  }
 
   .pop { animation: pop 0.3s ease; }
   .toast-in { animation: slideUp 0.3s ease forwards; }
   .sheet-in { animation: sheetIn 0.3s cubic-bezier(0.32,0.72,0,1); }
   .check-pop { animation: checkPop 0.3s ease forwards; }
+  .card-leaving { animation: cardLeave 0.55s ease forwards; pointer-events:none; overflow:hidden; }
 
   select option { background: #FFFFFF; color: #1A1208; }
 
