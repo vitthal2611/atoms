@@ -21,6 +21,9 @@ const _auth  = getAuth(_fbApp);
 function identitiesRef(uid) { return doc(_db, "users", uid, "atomicHabits", "identities"); }
 function checkInsRef(uid)   { return doc(_db, "users", uid, "atomicHabits", "checkIns"); }
 
+// Detect missing env vars early — surfaces a helpful screen instead of cryptic Firebase errors
+const _envMissing = Object.entries(_fbConfig).filter(([, v]) => !v).map(([k]) => k);
+
 // ─── THEME PALETTE — Ocean Depth ─────────────────────────────────────────────
 // Defined early so ALL helpers and components can reference T safely.
 const T = {
@@ -140,10 +143,14 @@ const DAY_LABELS=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 
 // ─── MODAL ────────────────────────────────────────────────────────────────────
 function Modal({ title, onClose, children, descriptionId }) {
-  const titleId  = useId();
-  const panelRef = useRef(null);
+  const titleId      = useId();
+  const panelRef     = useRef(null);
+  const prevFocusRef = useRef(null);
 
   useEffect(() => {
+    // Remember what had focus so we can restore it on close
+    prevFocusRef.current = document.activeElement;
+
     const el = panelRef.current;
     if (!el) return;
 
@@ -172,6 +179,8 @@ function Modal({ title, onClose, children, descriptionId }) {
     return () => {
       el.removeEventListener("keydown", trap);
       document.removeEventListener("keydown", esc);
+      // Restore focus to the element that opened the modal
+      prevFocusRef.current?.focus();
     };
   }, [onClose]);
 
@@ -355,40 +364,52 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     identityId: initial.identityId || identities[0]?.id || "",
     frequency:  initial.frequency  || DEFAULT_FREQUENCY,
   });
+  const [submitted, setSubmitted] = useState(false);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const valid = form.label.trim().length > 0 && form.identityId;
 
+  const fId = useId();
+  const ids = {
+    label:      fId + "-label",
+    identityId: fId + "-identity",
+    trigger:    fId + "-trigger",
+    time:       fId + "-time",
+    location:   fId + "-location",
+  };
+
   return (
     <div style={{ padding: "0 20px 20px" }}>
-      <label style={S.fieldLabel}>Habit Name *</label>
-      <input style={S.input} value={form.label} onChange={e=>set("label",e.target.value)} placeholder="e.g. Meditate 10 min" autoFocus maxLength={80} />
+      <label htmlFor={ids.label} style={S.fieldLabel}>Habit Name *</label>
+      <input id={ids.label} style={S.input} value={form.label} onChange={e=>set("label",e.target.value)} placeholder="e.g. Meditate 10 min" autoFocus maxLength={80} />
 
-      <label style={S.fieldLabel}>Identity *</label>
-      <select style={S.input} value={form.identityId} onChange={e=>set("identityId",e.target.value)}>
+      <label htmlFor={ids.identityId} style={S.fieldLabel}>Identity *</label>
+      <select id={ids.identityId} style={S.input} value={form.identityId} onChange={e=>set("identityId",e.target.value)}>
         {identities.map(i=><option key={i.id} value={i.id}>{i.icon} {i.label}</option>)}
       </select>
 
-      <label style={S.fieldLabel}><span aria-hidden="true">⚡</span> Trigger (what cues this habit?)</label>
-      <input style={S.input} value={form.trigger} onChange={e=>set("trigger",e.target.value)} placeholder="e.g. After morning coffee" maxLength={120} />
+      <label htmlFor={ids.trigger} style={S.fieldLabel}><span aria-hidden="true">⚡</span> Trigger (what cues this habit?)</label>
+      <input id={ids.trigger} style={S.input} value={form.trigger} onChange={e=>set("trigger",e.target.value)} placeholder="e.g. After morning coffee" maxLength={120} />
 
-      <label style={S.fieldLabel}><span aria-hidden="true">🕐</span> Time</label>
-      <input style={S.input} type="time" value={form.time} onChange={e=>set("time",e.target.value)} />
+      <label htmlFor={ids.time} style={S.fieldLabel}><span aria-hidden="true">🕐</span> Time</label>
+      <input id={ids.time} style={S.input} type="time" value={form.time} onChange={e=>set("time",e.target.value)} />
 
-      <label style={S.fieldLabel}><span aria-hidden="true">📍</span> Location</label>
-      <input style={S.input} value={form.location} onChange={e=>set("location",e.target.value)} placeholder="e.g. Kitchen" maxLength={50} />
+      <label htmlFor={ids.location} style={S.fieldLabel}><span aria-hidden="true">📍</span> Location</label>
+      <input id={ids.location} style={S.input} value={form.location} onChange={e=>set("location",e.target.value)} placeholder="e.g. Kitchen" maxLength={50} />
 
       <label style={S.fieldLabel}><span aria-hidden="true">🔁</span> Frequency</label>
       <FrequencyPicker value={form.frequency} onChange={v=>set("frequency",v)} />
 
       <div style={{ display:"flex", gap:8, marginTop:20 }}>
-        <button style={S.btnSecondary} onClick={onCancel}>Cancel</button>
-        <button style={{ ...S.btnPrimary, opacity: valid?1:0.4 }} onClick={()=>valid&&onSave(form)} disabled={!valid}>
+        <button type="button" style={S.btnSecondary} onClick={onCancel}>Cancel</button>
+        <button type="button" style={{ ...S.btnPrimary, opacity: valid?1:0.4 }}
+          onClick={() => { setSubmitted(true); if (valid) onSave(form); }}
+          aria-disabled={!valid}>
           {mode==="add" ? "Add Habit" : "Save Changes"}
         </button>
       </div>
-      {!valid && (
-        <div role="status" style={{ fontSize:12, color:T.muted, marginTop:8, textAlign:"center" }}>
-          {!form.label.trim() ? "Habit name is required to continue" : "Select an identity to continue"}
+      {submitted && !valid && (
+        <div role="alert" style={{ fontSize:12, color:T.red, marginTop:8, textAlign:"center" }}>
+          {!form.label.trim() ? "Habit name is required" : "Select an identity to continue"}
         </div>
       )}
     </div>
@@ -402,13 +423,15 @@ function IdentityForm({ initial={}, onSave, onCancel, mode="add" }) {
     icon:     initial.icon     || "🎯",
     colorIdx: initial.colorIdx ?? 0,
   });
+  const [submitted, setSubmitted] = useState(false);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const valid = form.label.trim().length > 0;
+  const labelId = useId() + "-identity-label";
 
   return (
     <div style={{ padding:"0 20px 20px" }}>
-      <label style={S.fieldLabel}>Identity Statement *</label>
-      <input style={S.input} value={form.label} onChange={e=>set("label",e.target.value)} placeholder="e.g. I am a Creative Person" autoFocus maxLength={60} />
+      <label htmlFor={labelId} style={S.fieldLabel}>Identity Statement *</label>
+      <input id={labelId} style={S.input} value={form.label} onChange={e=>set("label",e.target.value)} placeholder="e.g. I am a Creative Person" autoFocus maxLength={60} />
 
       <label style={S.fieldLabel}>Icon</label>
       <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:16 }} role="group" aria-label="Choose icon">
@@ -431,14 +454,16 @@ function IdentityForm({ initial={}, onSave, onCancel, mode="add" }) {
       </div>
 
       <div style={{ display:"flex", gap:10 }}>
-        <button style={S.btnSecondary} onClick={onCancel}>Cancel</button>
-        <button style={{ ...S.btnPrimary, opacity:valid?1:0.4 }} onClick={()=>valid&&onSave(form)} disabled={!valid}>
+        <button type="button" style={S.btnSecondary} onClick={onCancel}>Cancel</button>
+        <button type="button" style={{ ...S.btnPrimary, opacity:valid?1:0.4 }}
+          onClick={() => { setSubmitted(true); if (valid) onSave(form); }}
+          aria-disabled={!valid}>
           {mode==="add" ? "Add Identity" : "Save Changes"}
         </button>
       </div>
-      {!valid && (
-        <div role="status" style={{ fontSize:12, color:T.muted, marginTop:8, textAlign:"center" }}>
-          Identity statement is required to continue
+      {submitted && !valid && (
+        <div role="alert" style={{ fontSize:12, color:T.red, marginTop:8, textAlign:"center" }}>
+          Identity statement is required
         </div>
       )}
     </div>
@@ -474,12 +499,15 @@ export default function App() {
   const [syncing,      setSyncing]     = useState(false);
   const [saveError,    setSaveError]   = useState(false);
   const [signInError,  setSignInError] = useState(null);
+  const [signingIn,    setSigningIn]   = useState(false);
+  const [isOffline,    setIsOffline]   = useState(() => !navigator.onLine);
+  const [undoDelete,   setUndoDelete]  = useState(null);
 
   // Modal states
   const [modal,    setModal]    = useState(null);
   const [modalCtx, setModalCtx] = useState(null);
 
-  const todayKey     = useMemo(() => getTodayKey(), []);
+  const [todayKey, setTodayKey] = useState(getTodayKey);
   const todayData    = data[todayKey]    || {};
   const selectedData = data[selectedDate] || {};
   const allHabits    = useMemo(() => identities.flatMap(i => i.habits), [identities]);
@@ -506,6 +534,7 @@ export default function App() {
   // ── Timers stored in refs so they can be cleared on re-fire or unmount ──
   const celebrationTimerRef = useRef(null);
   const justCheckedTimerRef = useRef(null);
+  const undoTimerRef        = useRef(null);
 
   // ── Auth listener ──
   useEffect(() => {
@@ -516,13 +545,27 @@ export default function App() {
       setUser(u);
       if (u) {
         setDataLoading(true);
-        const [idSnap, ciSnap] = await Promise.all([
-          getDoc(identitiesRef(u.uid)),
-          getDoc(checkInsRef(u.uid)),
-        ]);
-        if (idSnap.exists()) setIdentities(idSnap.data().data);
-        if (ciSnap.exists()) setData(ciSnap.data().data);
-        setDataLoading(false);
+        try {
+          const [idSnap, ciSnap] = await Promise.all([
+            getDoc(identitiesRef(u.uid)),
+            getDoc(checkInsRef(u.uid)),
+          ]);
+          if (idSnap.exists()) setIdentities(idSnap.data().data);
+          if (ciSnap.exists()) {
+            // Prune check-ins older than 366 days to prevent Firestore 1MB doc limit
+            const cutoff = new Date();
+            cutoff.setDate(cutoff.getDate() - 366);
+            const cutoffKey = cutoff.toISOString().slice(0, 10);
+            const raw = ciSnap.data().data || {};
+            const pruned = Object.fromEntries(Object.entries(raw).filter(([k]) => k >= cutoffKey));
+            setData(pruned);
+          }
+        } catch (err) {
+          console.error("Failed to load data from Firestore:", err);
+          setSaveError(true); // reuse the existing error banner
+        } finally {
+          setDataLoading(false);
+        }
       }
     });
   }, []);
@@ -553,13 +596,18 @@ export default function App() {
 
   // ── Google sign-in ──
   const signIn = async () => {
+    if (signingIn) return;
+    setSigningIn(true);
     setSignInError(null);
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: "select_account" });
-    try { await signInWithPopup(_auth, provider); }
-    catch (e) {
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      await signInWithPopup(_auth, provider);
+    } catch (e) {
       console.error(e);
       setSignInError("Sign-in failed. Please try again.");
+    } finally {
+      setSigningIn(false);
     }
   };
 
@@ -614,9 +662,57 @@ export default function App() {
   useEffect(() => () => {
     clearTimeout(celebrationTimerRef.current);
     clearTimeout(justCheckedTimerRef.current);
+    clearTimeout(undoTimerRef.current);
+  }, []);
+
+  // ── Midnight key refresh — keeps todayKey accurate if app runs overnight ──
+  useEffect(() => {
+    const msToMidnight = () => {
+      const now = new Date();
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) - now;
+    };
+    let t = setTimeout(function tick() {
+      setTodayKey(getTodayKey());
+      t = setTimeout(tick, msToMidnight());
+    }, msToMidnight());
+    return () => clearTimeout(t);
+  }, []);
+
+  // ── Stable modal-open callbacks (useCallback so memo'd child views don't re-render on every syncing/toast state change) ──
+  const openEditHabit     = useCallback((identityId, habit) => { setModalCtx({ identityId, habitId: habit.id, habit }); setModal("editHabit"); }, []);
+  const openDeleteHabit   = useCallback((identityId, habit) => { setModalCtx({ identityId, habitId: habit.id, habit }); setModal("confirmDeleteHabit"); }, []);
+  const openEditIdentity  = useCallback((ident) => { const colorIdx = IDENTITY_COLORS.indexOf(ident.color); setModalCtx({ identityId: ident.id, ident, colorIdx: colorIdx>=0?colorIdx:0 }); setModal("editIdentity"); }, []);
+  const openDeleteIdentity= useCallback((ident) => { setModalCtx({ identityId: ident.id, ident }); setModal("confirmDeleteIdentity"); }, []);
+  const openAddHabit      = useCallback((defaultIdentityId) => { setModalCtx(defaultIdentityId ? { defaultIdentityId } : null); setModal("addHabit"); }, []);
+  const openAddIdentity   = useCallback(() => setModal("addIdentity"), []);
+
+  // ── Online / offline detection ──
+  useEffect(() => {
+    const goOnline  = () => setIsOffline(false);
+    const goOffline = () => setIsOffline(true);
+    window.addEventListener("online",  goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => {
+      window.removeEventListener("online",  goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
   }, []);
 
   // ── Loading / Auth gates ──
+  if (_envMissing.length) {
+    return (
+      <div style={{ ...S.root, alignItems:"center", justifyContent:"center", padding:32 }}>
+        <div style={{ fontSize:40, marginBottom:16 }} aria-hidden="true">⚙️</div>
+        <div style={{ fontSize:18, fontWeight:700, color:T.red, marginBottom:8 }}>Configuration Error</div>
+        <div style={{ fontSize:13, color:T.text2, marginBottom:16, textAlign:"center", lineHeight:1.7 }}>
+          Missing Firebase environment variables. Copy <code>.env.example</code> → <code>.env</code> and fill in your values.
+        </div>
+        <div style={{ background:T.red+"12", border:`1px solid ${T.red}44`, borderRadius:12, padding:"12px 16px", width:"100%", maxWidth:340 }}>
+          {_envMissing.map(k => <div key={k} style={{ fontSize:12, fontFamily:"monospace", color:T.red, padding:"2px 0" }}>✗ {k}</div>)}
+        </div>
+      </div>
+    );
+  }
   if (user === undefined) {
     return (
       <div style={{ ...S.root, alignItems:"center", justifyContent:"center" }}>
@@ -641,14 +737,20 @@ export default function App() {
               {signInError}
             </div>
           )}
-          <button onClick={signIn} style={{ width:"100%", maxWidth:320, display:"flex", alignItems:"center", justifyContent:"center", gap:12, fontSize:15, fontWeight:700, padding:"15px 20px", background:"#fff", border:`1.5px solid ${T.border}`, borderRadius:14, color:T.text, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", boxShadow:"0 1px 4px #00000010" }}>
-            <svg width="20" height="20" viewBox="0 0 18 18" aria-hidden="true">
-              <path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 002.38-5.88c0-.57-.05-.66-.15-1.18z"/>
-              <path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2.01c-.72.48-1.63.76-2.7.76-2.1 0-3.8-1.36-4.42-3.21H1.87v2.09A8 8 0 008.98 17z"/>
-              <path fill="#FBBC05" d="M4.56 10.6A4.6 4.6 0 014.3 9c0-.56.1-1.1.26-1.6V5.31H1.87A8 8 0 001 9c0 1.3.31 2.52.87 3.6l2.69-2z"/>
-              <path fill="#EA4335" d="M8.98 3.8c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 008.98 1a8 8 0 00-7.11 4.31l2.69 2.09C5.18 5.16 6.89 3.8 8.98 3.8z"/>
-            </svg>
-            Sign in with Google
+          <button onClick={signIn} disabled={signingIn} aria-busy={signingIn}
+            style={{ width:"100%", maxWidth:320, display:"flex", alignItems:"center", justifyContent:"center", gap:12, fontSize:15, fontWeight:700, padding:"15px 20px", background:"#fff", border:`1.5px solid ${T.border}`, borderRadius:14, color:T.text, cursor: signingIn ? "wait" : "pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", boxShadow:"0 1px 4px #00000010", opacity: signingIn ? 0.65 : 1, transition:"opacity 0.2s" }}>
+            {signingIn
+              ? <><div aria-hidden="true" style={{width:20,height:20,borderRadius:"50%",border:`2px solid ${T.border}`,borderTopColor:T.accent,animation:"spin 0.8s linear infinite",flexShrink:0}}/> Signing in…</>
+              : <>
+                  <svg width="20" height="20" viewBox="0 0 18 18" aria-hidden="true">
+                    <path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 002.38-5.88c0-.57-.05-.66-.15-1.18z"/>
+                    <path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2.01c-.72.48-1.63.76-2.7.76-2.1 0-3.8-1.36-4.42-3.21H1.87v2.09A8 8 0 008.98 17z"/>
+                    <path fill="#FBBC05" d="M4.56 10.6A4.6 4.6 0 014.3 9c0-.56.1-1.1.26-1.6V5.31H1.87A8 8 0 001 9c0 1.3.31 2.52.87 3.6l2.69-2z"/>
+                    <path fill="#EA4335" d="M8.98 3.8c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 008.98 1a8 8 0 00-7.11 4.31l2.69 2.09C5.18 5.16 6.89 3.8 8.98 3.8z"/>
+                  </svg>
+                  Sign in with Google
+                </>
+            }
           </button>
         </main>
       </div>
@@ -697,11 +799,26 @@ export default function App() {
 
   const deleteHabit = () => {
     const { identityId, habitId } = modalCtx;
-    setIdentities(prev => prev.map(ident =>
-      ident.id !== identityId ? ident :
-      { ...ident, habits: ident.habits.filter(h => h.id !== habitId) }
+    const ident = identities.find(i => i.id === identityId);
+    const habitIdx = ident?.habits.findIndex(h => h.id === habitId) ?? -1;
+    const deletedHabit = ident?.habits[habitIdx];
+    setIdentities(prev => prev.map(i =>
+      i.id !== identityId ? i : { ...i, habits: i.habits.filter(h => h.id !== habitId) }
     ));
     setModal(null);
+    if (deletedHabit) {
+      clearTimeout(undoTimerRef.current);
+      setUndoDelete({
+        label: `"${deletedHabit.label}" deleted`,
+        restore: () => setIdentities(prev => prev.map(i =>
+          i.id !== identityId ? i : {
+            ...i,
+            habits: [...i.habits.slice(0, habitIdx), deletedHabit, ...i.habits.slice(habitIdx)],
+          }
+        )),
+      });
+      undoTimerRef.current = setTimeout(() => setUndoDelete(null), 5000);
+    }
   };
 
   // ── CRUD: Identities ──
@@ -724,32 +841,24 @@ export default function App() {
 
   const deleteIdentity = () => {
     const { identityId } = modalCtx;
+    const identIdx = identities.findIndex(i => i.id === identityId);
+    const deletedIdent = identities[identIdx];
     setIdentities(prev => prev.filter(i => i.id !== identityId));
     setModal(null);
+    if (deletedIdent) {
+      clearTimeout(undoTimerRef.current);
+      setUndoDelete({
+        label: `Identity "${shortLabel(deletedIdent.label)}" deleted`,
+        restore: () => setIdentities(prev => [
+          ...prev.slice(0, identIdx),
+          deletedIdent,
+          ...prev.slice(identIdx),
+        ]),
+      });
+      undoTimerRef.current = setTimeout(() => setUndoDelete(null), 5000);
+    }
   };
 
-  const openEditHabit = (identityId, habit) => {
-    setModalCtx({ identityId, habitId: habit.id, habit });
-    setModal("editHabit");
-  };
-  const openDeleteHabit = (identityId, habit) => {
-    setModalCtx({ identityId, habitId: habit.id, habit });
-    setModal("confirmDeleteHabit");
-  };
-  const openEditIdentity = (ident) => {
-    const colorIdx = IDENTITY_COLORS.indexOf(ident.color);
-    setModalCtx({ identityId: ident.id, ident, colorIdx: colorIdx>=0?colorIdx:0 });
-    setModal("editIdentity");
-  };
-  const openDeleteIdentity = (ident) => {
-    setModalCtx({ identityId: ident.id, ident });
-    setModal("confirmDeleteIdentity");
-  };
-
-  const openAddHabit = (defaultIdentityId) => {
-    setModalCtx(defaultIdentityId ? { defaultIdentityId } : null);
-    setModal("addHabit");
-  };
 
   return (
     <div style={S.root}>
@@ -766,6 +875,19 @@ export default function App() {
         }}>
           ⚠️ Save failed — check your connection.{" "}
           <button onClick={()=>setSaveError(false)} style={{ color:"#fff", background:"transparent", border:"none", cursor:"pointer", textDecoration:"underline", fontWeight:700 }}>Dismiss</button>
+        </div>
+      )}
+
+      {/* ── Offline Banner ── */}
+      {isOffline && (
+        <div role="status" aria-live="polite" style={{
+          position:"fixed", top:0, left:"50%", transform:"translateX(-50%)",
+          width:"100%", maxWidth:430, zIndex:201,
+          background:"#374151", color:"#fff", fontSize:13, fontWeight:600,
+          textAlign:"center", padding:"10px 20px",
+          paddingTop:"calc(env(safe-area-inset-top,0px) + 10px)",
+        }}>
+          📶 You're offline — changes will sync when reconnected
         </div>
       )}
 
@@ -845,19 +967,34 @@ export default function App() {
           </div>
         </div>
         <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
-          <button onClick={()=>fbSignOut(_auth)} style={{ background:"transparent", border:`1px solid ${T.border}`, borderRadius:20, fontSize:11, color:T.muted, padding:"3px 10px", cursor:"pointer", fontFamily:"inherit" }}>
-            Sign out
+          <button onClick={()=>fbSignOut(_auth)} title={user.email||undefined} style={{ background:"transparent", border:`1px solid ${T.border}`, borderRadius:20, fontSize:11, color:T.muted, padding:"3px 10px", cursor:"pointer", fontFamily:"inherit", maxWidth:120, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            {user.displayName ? `${user.displayName.split(" ")[0]} · Sign out` : "Sign out"}
           </button>
           <div style={S.ringWrap}>
-            <svg width="68" height="68" viewBox="0 0 68 68" aria-label={`${pct}% complete ${selectedDate === todayKey ? "today" : "on " + formatNavDate(selectedDate)}`} role="img">
-              <circle cx="34" cy="34" r="28" fill="none" stroke={T.border} strokeWidth="5"/>
-              <circle cx="34" cy="34" r="28" fill="none"
-                stroke={pct===100?T.gold:T.primary} strokeWidth="5"
-                strokeDasharray={`${(pct/100)*176} 176`} strokeLinecap="round"
-                transform="rotate(-90 34 34)" style={{transition:"stroke-dasharray 0.6s ease"}}/>
-              <text x="34" y="39" textAnchor="middle" fill={T.text} fontSize="14" fontWeight="800" fontFamily="Space Grotesk,sans-serif" style={{fontVariantNumeric:"tabular-nums"}} aria-hidden="true">{pct}%</text>
-            </svg>
-            <div style={{...S.ringLabel, fontVariantNumeric:"tabular-nums"}} aria-hidden="true">{totalDone}/{totalTotal} done</div>
+            {(() => {
+              const ringTitleId = "ring-title-" + view;
+              return (
+                <svg width="68" height="68" viewBox="0 0 68 68" role="img" aria-labelledby={ringTitleId}
+                  className={pct===100 ? "pop" : ""}>
+                  <title id={ringTitleId}>
+                    {totalTotal === 0
+                      ? "No habits scheduled"
+                      : `${pct}% complete ${selectedDate === todayKey ? "today" : "on " + formatNavDate(selectedDate)}`}
+                  </title>
+                  <circle cx="34" cy="34" r="28" fill="none" stroke={T.border} strokeWidth="5"/>
+                  <circle cx="34" cy="34" r="28" fill="none"
+                    stroke={pct===100?T.gold:T.primary} strokeWidth="5"
+                    strokeDasharray={`${(pct/100)*176} 176`} strokeLinecap="round"
+                    transform="rotate(-90 34 34)" style={{transition:"stroke-dasharray 0.6s ease"}}/>
+                  <text x="34" y="39" textAnchor="middle" fill={T.text} fontSize="14" fontWeight="800" fontFamily="Space Grotesk,sans-serif" style={{fontVariantNumeric:"tabular-nums"}} aria-hidden="true">
+                    {totalTotal === 0 ? "—" : `${pct}%`}
+                  </text>
+                </svg>
+              );
+            })()}
+            <div style={{...S.ringLabel, fontVariantNumeric:"tabular-nums"}} aria-hidden="true">
+              {totalTotal === 0 ? "none today" : `${totalDone}/${totalTotal} done`}
+            </div>
           </div>
         </div>
       </header>
@@ -875,6 +1012,7 @@ export default function App() {
             openEditHabit={openEditHabit}
             setModal={setModal}
             openAddHabit={openAddHabit}
+            openAddIdentity={openAddIdentity}
             selectedDate={selectedDate}
             setSelectedDate={setSelectedDate}
             todayKey={todayKey}
@@ -889,12 +1027,42 @@ export default function App() {
             onAddHabit={openAddHabit}
             onEditHabit={openEditHabit}
             onDeleteHabit={openDeleteHabit}
-            onAddIdentity={()=>setModal("addIdentity")}
+            onAddIdentity={openAddIdentity}
             onEditIdentity={openEditIdentity}
             onDeleteIdentity={openDeleteIdentity}
           />
         )}
       </main>
+
+      {/* ── Undo Delete Toast ── */}
+      {undoDelete && (
+        <div role="status" aria-live="polite" className="toast-in" style={{
+          position:"fixed",
+          bottom:"calc(env(safe-area-inset-bottom,0px) + 72px)",
+          left:"50%", transform:"translateX(-50%)",
+          background:T.text, color:"#fff", borderRadius:14,
+          padding:"12px 14px", display:"flex", alignItems:"center", gap:10,
+          zIndex:998, boxShadow:"0 4px 24px #00000030",
+          maxWidth:"calc(100vw - 32px)", width:390, fontSize:13, fontWeight:600,
+        }}>
+          <span style={{flex:1,lineHeight:1.4}}>{undoDelete.label}</span>
+          <button
+            onClick={() => {
+              undoDelete.restore();
+              clearTimeout(undoTimerRef.current);
+              setUndoDelete(null);
+            }}
+            style={{ background:"transparent", border:"1.5px solid rgba(255,255,255,0.45)", borderRadius:8, color:"#fff", fontSize:12, fontWeight:700, padding:"5px 12px", cursor:"pointer", flexShrink:0, WebkitTapHighlightColor:"transparent" }}>
+            Undo
+          </button>
+          <button
+            onClick={() => { clearTimeout(undoTimerRef.current); setUndoDelete(null); }}
+            aria-label="Dismiss"
+            style={{ background:"transparent", border:"none", color:"rgba(255,255,255,0.55)", fontSize:16, cursor:"pointer", padding:"0 2px", lineHeight:1, WebkitTapHighlightColor:"transparent" }}>
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* ── Bottom Nav ── */}
       <nav style={S.bottomNav} aria-label="Main navigation">
@@ -905,9 +1073,10 @@ export default function App() {
           {id:"manage",  icon:"⚙️",  label:"Manage"},
         ].map(t=>(
           <button key={t.id} onClick={()=>{ setView(t.id); if(t.id==="today") setSelectedDate(todayKey); }}
-            style={S.navBtn} aria-current={view===t.id?"page":undefined}>
+            style={{ ...S.navBtn, background: view===t.id ? T.accent+"14" : "transparent", borderRadius:12, margin:"4px 4px 0" }}
+            aria-current={view===t.id?"page":undefined}>
             <span style={S.navIcon} aria-hidden="true">{t.icon}</span>
-            <span style={{...S.navLabel, color:view===t.id?T.text:T.muted, fontWeight:view===t.id?700:500}}>{t.label}</span>
+            <span style={{...S.navLabel, color:view===t.id?T.primary:T.muted, fontWeight:view===t.id?700:500}}>{t.label}</span>
             {view===t.id && <div style={{width:4,height:4,borderRadius:"50%",background:T.gold,marginTop:1}} aria-hidden="true"/>}
           </button>
         ))}
@@ -917,7 +1086,7 @@ export default function App() {
 }
 
 // ─── MANAGE VIEW ──────────────────────────────────────────────────────────────
-function ManageView({ identities, onAddHabit, onEditHabit, onDeleteHabit, onAddIdentity, onEditIdentity, onDeleteIdentity }) {
+const ManageView = memo(function ManageView({ identities, onAddHabit, onEditHabit, onDeleteHabit, onAddIdentity, onEditIdentity, onDeleteIdentity }) {
   return (
     <div style={S.content}>
       <div style={{...S.card,padding:"14px 16px",background:`linear-gradient(135deg,rgba(2,132,199,0.07),rgba(245,158,11,0.04))`}}>
@@ -984,7 +1153,7 @@ function ManageView({ identities, onAddHabit, onEditHabit, onDeleteHabit, onAddI
       <button onClick={onAddIdentity} style={S.addIdentityBtn}>+ Add New Identity</button>
     </div>
   );
-}
+});
 
 // ─── TIME SLOT CLASSIFIER ────────────────────────────────────────────────────
 const TIME_SLOTS = [
@@ -1202,7 +1371,7 @@ function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
 
   return (
     <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:14 }} role="group" aria-label="Day navigation">
-      <button onClick={()=>go(-1)} disabled={!canPrev} aria-label="Previous day" aria-disabled={!canPrev} style={{
+      <button onClick={()=>canPrev&&go(-1)} aria-label="Previous day" aria-disabled={!canPrev} style={{
         width:36, height:36, borderRadius:"50%", border:`1.5px solid ${canPrev?T.border:T.surf2}`,
         background:T.surface, color:canPrev?T.text2:T.border, fontSize:18, lineHeight:1,
         cursor:canPrev?"pointer":"default", display:"flex", alignItems:"center", justifyContent:"center",
@@ -1217,14 +1386,14 @@ function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
           <button onClick={()=>setSelectedDate(todayKey)} aria-label="Go to today" style={{
             marginTop:3, fontSize:10, fontWeight:700, color:T.accent,
             background:T.accent+"18", border:`1px solid ${T.accent}44`,
-            borderRadius:20, padding:"2px 10px", cursor:"pointer",
+            borderRadius:20, padding:"8px 12px", cursor:"pointer",
             letterSpacing:"0.04em", textTransform:"uppercase",
-            WebkitTapHighlightColor:"transparent",
+            WebkitTapHighlightColor:"transparent", minHeight:36, lineHeight:1,
           }}>← Back to Today</button>
         )}
       </div>
 
-      <button onClick={()=>go(1)} disabled={!canNext} aria-label="Next day" aria-disabled={!canNext} style={{
+      <button onClick={()=>canNext&&go(1)} aria-label="Next day" aria-disabled={!canNext} style={{
         width:36, height:36, borderRadius:"50%", border:`1.5px solid ${canNext?T.border:T.surf2}`,
         background:T.surface, color:canNext?T.text2:T.border, fontSize:18, lineHeight:1,
         cursor:canNext?"pointer":"default", display:"flex", alignItems:"center", justifyContent:"center",
@@ -1236,7 +1405,7 @@ function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
 }
 
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
-function TodayView({ identities, allHabits, todayData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, selectedDate, setSelectedDate, todayKey }) {
+const TodayView = memo(function TodayView({ identities, allHabits, todayData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
 
@@ -1254,6 +1423,16 @@ function TodayView({ identities, allHabits, todayData, toggle, justChecked, getS
 
   const quote = useMemo(() => getDailyQuote(), []);
 
+  // Memoized identity legend scores — avoids recomputing isScheduledOn for all habits on every render
+  const identityScores = useMemo(() =>
+    identities.map(i => {
+      const scheduled = i.habits.filter(h => isScheduledOn(h.frequency, selectedDate));
+      const done = scheduled.filter(h => todayData[h.id]).length;
+      return { id:i.id, color:i.color, label:i.label, done, total:scheduled.length };
+    }),
+    [identities, selectedDate, todayData]
+  );
+
   // ── Empty state — no identities yet ──
   if (identities.length === 0) {
     return (
@@ -1264,7 +1443,7 @@ function TodayView({ identities, allHabits, todayData, toggle, justChecked, getS
         <div style={{fontSize:14,color:T.muted,lineHeight:1.7,maxWidth:280,marginBottom:28}}>
           Create your first identity — who do you want to become? Then add habits that reinforce it.
         </div>
-        <button onClick={()=>setModal("addIdentity")} style={{...S.btnPrimary, width:"100%", maxWidth:280}}>
+        <button onClick={openAddIdentity} style={{...S.btnPrimary, width:"100%", maxWidth:280}}>
           + Create First Identity
         </button>
         <div style={{...S.footer, width:"100%", marginTop:40}}>
@@ -1289,21 +1468,18 @@ function TodayView({ identities, allHabits, todayData, toggle, justChecked, getS
         {quote.author && <div style={{ fontSize:11,color:T.gold,fontWeight:700,marginTop:6 }}>— {quote.author}</div>}
       </div>
 
-      {/* Identity legend bar — frequency-aware counts */}
+      {/* Identity legend bar — uses identityScores memoized at component level */}
       <div style={{ ...S.card, padding:"12px 14px" }}>
         <div style={{ fontSize:10,color:T.muted,marginBottom:8,letterSpacing:"0.1em",fontWeight:700,textTransform:"uppercase" }}>Your Identities</div>
         <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-          {identities.map(i => {
-            const scheduledHabitsForIdent = i.habits.filter(h => isScheduledOn(h.frequency, selectedDate));
-            const done     = scheduledHabitsForIdent.filter(h => todayData[h.id]).length;
-            const total    = scheduledHabitsForIdent.length;
-            const allDone  = total > 0 && done === total;
+          {identityScores.map(({ id, color, label, done, total }) => {
+            const allDone = total > 0 && done === total;
             return (
-              <div key={i.id}
-                aria-label={`${shortLabel(i.label)}: ${allDone ? "complete" : total > 0 ? `${done} of ${total}` : "none scheduled"}`}
+              <div key={id}
+                aria-label={`${shortLabel(label)}: ${allDone ? "complete" : total > 0 ? `${done} of ${total}` : "none scheduled"}`}
                 style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, fontWeight:600 }}>
-                <span style={{ width:8, height:8, borderRadius:"50%", background:i.color, flexShrink:0, display:"inline-block" }} aria-hidden="true"/>
-                <span style={{ color:i.color }}>{shortLabel(i.label)}</span>
+                <span style={{ width:8, height:8, borderRadius:"50%", background:color, flexShrink:0, display:"inline-block" }} aria-hidden="true"/>
+                <span style={{ color }}>{shortLabel(label)}</span>
                 <span style={{ color:T.muted }}>{allDone ? "✓" : total > 0 ? `${done}/${total}` : "–"}</span>
               </div>
             );
@@ -1460,7 +1636,7 @@ function TodayView({ identities, allHabits, todayData, toggle, justChecked, getS
         <span style={{ fontSize:18, color:T.primary, fontWeight:700 }} aria-hidden="true">+</span>
         <span style={{ fontSize:13, color:T.text2, fontWeight:500 }}>Add a new habit</span>
       </button>
-      <button onClick={()=>setModal("addIdentity")} style={S.addIdentityBtn}>+ Add New Identity</button>
+      <button onClick={openAddIdentity} style={S.addIdentityBtn}>+ Add New Identity</button>
 
       <div style={S.footer}>
         <span style={S.footerQuote}>"Habits are the compound interest of self-improvement."</span>
@@ -1468,10 +1644,10 @@ function TodayView({ identities, allHabits, todayData, toggle, justChecked, getS
       </div>
     </div>
   );
-}
+});
 
 // ─── WEEK VIEW ────────────────────────────────────────────────────────────────
-function WeekView({ data, todayKey, identities }) {
+const WeekView = memo(function WeekView({ data, todayKey, identities }) {
   const [weekOffset, setWeekOffset] = useState(0);
 
   // Compute the 7 dates for the currently displayed week (Mon–Sun)
@@ -1491,7 +1667,7 @@ function WeekView({ data, todayKey, identities }) {
 
   return (
     <div style={S.content}>
-      {/* Week navigation */}
+      {/* Week navigation + dot legend */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:T.surface, borderRadius:14, border:`1px solid ${T.border}`, padding:"8px 12px" }}>
         <button onClick={() => setWeekOffset(o => o + 1)} aria-label="Previous week"
           style={{ ...S.crudBtn, width:36, height:36, fontSize:20 }}>
@@ -1504,6 +1680,20 @@ function WeekView({ data, todayKey, identities }) {
           <span aria-hidden="true">›</span>
         </button>
       </div>
+
+      {/* Dot legend */}
+      <div style={{ display:"flex", gap:14, fontSize:10, color:T.muted, paddingLeft:4, flexWrap:"wrap" }} aria-hidden="true">
+        <span style={{ display:"flex", alignItems:"center", gap:4 }}>
+          <span style={{ display:"inline-block", width:10, height:10, borderRadius:3, background:T.primary }}/>Done
+        </span>
+        <span style={{ display:"flex", alignItems:"center", gap:4 }}>
+          <span style={{ display:"inline-block", width:10, height:10, borderRadius:3, border:`1px solid ${T.border}`, background:T.surf2 }}/>Missed
+        </span>
+        <span style={{ display:"flex", alignItems:"center", gap:4 }}>
+          <span style={{ display:"inline-block", width:10, height:10, borderRadius:3, border:`1px dashed ${T.border}` }}/>Not scheduled
+        </span>
+      </div>
+
       {identities.map(identity=>(
         <div key={identity.id} style={S.card}>
           <div style={{...S.cardLabel,color:identity.color,marginBottom:12}}>
@@ -1566,15 +1756,27 @@ function WeekView({ data, todayKey, identities }) {
       </div>
     </div>
   );
-}
+});
 
 // ─── STREAKS VIEW ─────────────────────────────────────────────────────────────
-function StreaksView({ getStreak, identities }) {
-  const allHabits=identities.flatMap(i=>i.habits.map(h=>({...h,identity:i,streak:getStreak(h.id, h.frequency)})));
-  const sorted=[...allHabits].sort((a,b)=>b.streak-a.streak);
-  const topStreak=sorted[0]?.streak||0;
+const StreaksView = memo(function StreaksView({ getStreak, identities }) {
+  const allHabits = useMemo(() =>
+    identities.flatMap(i => i.habits.map(h => ({ ...h, identity:i, streak:getStreak(h.id, h.frequency) }))),
+    [identities, getStreak]
+  );
+  const sorted    = useMemo(() => [...allHabits].sort((a,b) => b.streak - a.streak), [allHabits]);
+  const topStreak = sorted[0]?.streak || 0;
   return (
     <div style={S.content}>
+      {topStreak === 0 && identities.some(i => i.habits.length > 0) && (
+        <div style={{ textAlign:"center", padding:"32px 16px" }}>
+          <div style={{ fontSize:48, marginBottom:12 }} aria-hidden="true">🔥</div>
+          <div style={{ fontSize:16, fontWeight:700, color:T.text, marginBottom:6 }}>No active streaks yet</div>
+          <div style={{ fontSize:13, color:T.muted, lineHeight:1.7 }}>
+            Check in today to start your first streak.
+          </div>
+        </div>
+      )}
       {topStreak>0&&(
         <div style={{...S.card,background:`linear-gradient(135deg,${T.gold}18,${T.accent}10)`,borderColor:T.gold+"55",textAlign:"center",padding:"28px 16px"}}>
           <div style={{fontSize:52}} aria-hidden="true">🔥</div>
@@ -1642,7 +1844,7 @@ function StreaksView({ getStreak, identities }) {
       </div>
     </div>
   );
-}
+});
 
 // ─── MOTIVATIONAL QUOTES ──────────────────────────────────────────────────────
 const QUOTES = [
@@ -1722,7 +1924,8 @@ const S = {
   footer:{padding:"20px 4px 16px",display:"flex",flexDirection:"column",gap:6,borderTop:`1px solid ${T.border}`,marginTop:8},
   footerQuote:{fontSize:14,color:T.text2,fontStyle:"italic",lineHeight:1.75,fontWeight:500,fontFamily:FONT_BODY,letterSpacing:"0.01em"},
   footerAuthor:{fontSize:12,color:T.gold,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:FONT_BODY},
-  weekGrid:{display:"grid",gridTemplateColumns:"1fr repeat(7, minmax(20px,26px))",gap:"6px clamp(2px,1vw,4px)",alignItems:"center"},  weekDayH:{fontSize:10,textAlign:"center",letterSpacing:"0.04em",fontWeight:600,color:T.muted},
+  weekGrid:{display:"grid",gridTemplateColumns:"1fr repeat(7, minmax(20px,26px))",gap:"6px clamp(2px,1vw,4px)",alignItems:"center"},
+  weekDayH:{fontSize:10,textAlign:"center",letterSpacing:"0.04em",fontWeight:600,color:T.muted},
   weekHabitLabel:{fontSize:12,color:T.muted,paddingRight:6,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},
   weekDot:{width:"clamp(18px,5vw,22px)",height:"clamp(18px,5vw,22px)",borderRadius:6,margin:"0 auto",transition:"background 0.3s",border:`1px solid ${T.border}`},
   summaryRow:{display:"flex",alignItems:"center",gap:10,marginBottom:12},
@@ -1783,8 +1986,8 @@ const css=`
   .check-pop { animation: checkPop 0.3s ease forwards; }
   .card-leaving { animation: cardLeave 0.55s ease forwards; pointer-events:none; overflow:hidden; }
   select option { background: #FFFFFF; color: #1A1208; }
-  ::-webkit-scrollbar { display: none; }
-  * { scrollbar-width: none; }
+  #root ::-webkit-scrollbar { display: none; }
+  #root * { scrollbar-width: none; }
   @media (hover: hover) {
     button:hover:not(.habit-toggle) { opacity: 0.82; }
     .habit-toggle:hover { background: rgba(2,132,199,0.04) !important; }
