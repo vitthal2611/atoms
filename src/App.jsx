@@ -67,8 +67,8 @@ const DEFAULT_IDENTITIES = [
   },
 ];
 
-const IDENTITY_COLORS = ["#4CAF7D","#5B8DEF","#E07B54","#C17F24","#9B59B6","#E74C8B","#26C6DA","#F39C12"];
-const IDENTITY_DIMS   = ["#1a3028","#1a2038","#2e1a10","#2e1e08","#1e0f2e","#2e0f1e","#0f2630","#2e1e00"];
+const IDENTITY_COLORS = ["#00C48C","#4E7AFF","#FF6B35","#FFB300","#8B5CF6","#FF3D8B","#00BBDD","#FF7043"];
+const IDENTITY_DIMS   = ["#00291E","#0A1A4A","#3D1800","#3D2900","#1A0047","#3D0024","#003040","#3D1800"];
 const ICONS = ["🏃","📚","👨‍👧","❤️","💰","🧘","🎯","💪","🌱","🎨","🏋️","✍️","🧠","🌟","🍎","🎵"];
 
 const MILESTONES = [
@@ -994,30 +994,31 @@ function getDailyQuote() {
   return QUOTES[day % QUOTES.length];
 }
 
-// ─── LIGHT THEME PALETTE ──────────────────────────────────────────────────────
-// BG:      #FDF8F2  — warm cream
+// ─── THEME PALETTE — Cool modern, high contrast ──────────────────────────────
+// BG:      #F5F7FF  — cool blue-white (crisp, premium feel)
 // Surface: #FFFFFF  — pure white cards
-// Surface2:#F5F0E8  — subtle warm tint
-// Border:  #E8E0D4  — soft warm border
-// Text:    #1A1208  — deep warm black
-// Muted:   #8B7355  — warm brown-grey
-// Accent:  #E8521A  — energetic coral-orange
-// Green:   #2E7D4F  — rich forest green
-// Gold:    #B8860B  — deep amber
+// Surface2:#ECEFFE  — light indigo tint for secondary surfaces
+// Border:  #E0E3F8  — cool, clean border
+// Text:    #0D0F24  — deep indigo-black (sharper than warm black)
+// Text2:   #3A3F6E  — medium indigo-slate
+// Muted:   #7B82AD  — muted blue-slate
+// Accent:  #FF4757  — vivid coral-red (energetic, motivating)
+// Green:   #00C48C  — vivid emerald (vibrant, life-affirming)
+// Gold:    #FFB300  — vivid amber (warm contrast)
 
 const T = {
-  bg:      "#FDF8F2",
+  bg:      "#F5F7FF",
   surface: "#FFFFFF",
-  surf2:   "#F5F0E8",
-  border:  "#E8E0D4",
-  border2: "#D4C9B8",
-  text:    "#1A1208",
-  text2:   "#5C4A32",
-  muted:   "#9B8670",
-  accent:  "#E8521A",
-  green:   "#2E7D4F",
-  gold:    "#B8860B",
-  red:     "#C0392B",
+  surf2:   "#ECEFFE",
+  border:  "#E0E3F8",
+  border2: "#BEC3E4",
+  text:    "#0D0F24",
+  text2:   "#3A3F6E",
+  muted:   "#7B82AD",
+  accent:  "#FF4757",
+  green:   "#00C48C",
+  gold:    "#FFB300",
+  red:     "#FF3B5C",
 };
 
 // ─── STYLES — LIGHT MOBILE FIRST ─────────────────────────────────────────────
@@ -1198,7 +1199,7 @@ const css=`
 
   body {
     margin: 0;
-    background: #FDF8F2;
+    background: #F5F7FF;
     overscroll-behavior-y: none;
     -webkit-tap-highlight-color: transparent;
   }
@@ -1208,8 +1209,8 @@ const css=`
     -webkit-appearance: none;
   }
   input:focus, select:focus {
-    border-color: #2E7D4F !important;
-    box-shadow: 0 0 0 3px #2E7D4F22;
+    border-color: #4E7AFF !important;
+    box-shadow: 0 0 0 3px #4E7AFF22;
   }
 
   button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
