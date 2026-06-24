@@ -4,13 +4,15 @@ import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "firebase/auth";
 
 // ─── FIREBASE ────────────────────────────────────────────────────────────────
+// Config is read from .env (VITE_ prefix exposes vars to the browser bundle).
+// Copy .env.example → .env and fill in your values. Never commit .env.
 const _fbConfig = {
-  apiKey:            "AIzaSyDY-LZIb3RZlYAH1eBcTejzGdhZ-b5PEGg",
-  authDomain:        "budgetbuddy-9d7da.firebaseapp.com",
-  projectId:         "budgetbuddy-9d7da",
-  storageBucket:     "budgetbuddy-9d7da.firebasestorage.app",
-  messagingSenderId: "52697566663",
-  appId:             "1:52697566663:web:c58b872b4ef3d3efac9de2",
+  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId:             import.meta.env.VITE_FIREBASE_APP_ID,
 };
 const _fbApp = getApps().length ? getApps()[0] : initializeApp(_fbConfig);
 const _db    = getFirestore(_fbApp);
@@ -40,6 +42,7 @@ const T = {
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const IDENTITY_COLORS = ["#00C48C","#4E7AFF","#FF6B35","#FFB300","#8B5CF6","#FF3D8B","#00BBDD","#FF7043"];
 const IDENTITY_DIMS   = ["#00291E","#0A1A4A","#3D1800","#3D2900","#1A0047","#3D0024","#003040","#3D1800"];
+const COLOR_NAMES     = ["Teal","Blue","Orange","Amber","Purple","Pink","Cyan","Red-Orange"];
 const ICONS = ["🏃","📚","👨‍👧","❤️","💰","🧘","🎯","💪","🌱","🎨","🏋️","✍️","🧠","🌟","🍎","🎵"];
 
 const MILESTONES = [
@@ -76,6 +79,11 @@ function uid() {
     return crypto.randomUUID();
   }
   return Math.random().toString(36).slice(2,10);
+}
+
+// Strip the "I am a / I am an / I am " prefix from identity labels for compact display
+function shortLabel(label) {
+  return label.replace(/^I am an? /i, "").replace(/^I am /i, "");
 }
 
 // ─── FREQUENCY HELPERS ────────────────────────────────────────────────────────
@@ -352,7 +360,7 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
   return (
     <div style={{ padding: "0 20px 20px" }}>
       <label style={S.fieldLabel}>Habit Name *</label>
-      <input style={S.input} value={form.label} onChange={e=>set("label",e.target.value)} placeholder="e.g. Meditate 10 min" autoFocus />
+      <input style={S.input} value={form.label} onChange={e=>set("label",e.target.value)} placeholder="e.g. Meditate 10 min" autoFocus maxLength={80} />
 
       <label style={S.fieldLabel}>Identity *</label>
       <select style={S.input} value={form.identityId} onChange={e=>set("identityId",e.target.value)}>
@@ -360,13 +368,13 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
       </select>
 
       <label style={S.fieldLabel}><span aria-hidden="true">⚡</span> Trigger (what cues this habit?)</label>
-      <input style={S.input} value={form.trigger} onChange={e=>set("trigger",e.target.value)} placeholder="e.g. After morning coffee" />
+      <input style={S.input} value={form.trigger} onChange={e=>set("trigger",e.target.value)} placeholder="e.g. After morning coffee" maxLength={120} />
 
       <label style={S.fieldLabel}><span aria-hidden="true">🕐</span> Time</label>
       <input style={S.input} type="time" value={form.time} onChange={e=>set("time",e.target.value)} />
 
       <label style={S.fieldLabel}><span aria-hidden="true">📍</span> Location</label>
-      <input style={S.input} value={form.location} onChange={e=>set("location",e.target.value)} placeholder="e.g. Kitchen" />
+      <input style={S.input} value={form.location} onChange={e=>set("location",e.target.value)} placeholder="e.g. Kitchen" maxLength={50} />
 
       <label style={S.fieldLabel}><span aria-hidden="true">🔁</span> Frequency</label>
       <FrequencyPicker value={form.frequency} onChange={v=>set("frequency",v)} />
@@ -377,6 +385,11 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
           {mode==="add" ? "Add Habit" : "Save Changes"}
         </button>
       </div>
+      {!valid && (
+        <div role="status" style={{ fontSize:12, color:T.muted, marginTop:8, textAlign:"center" }}>
+          {!form.label.trim() ? "Habit name is required to continue" : "Select an identity to continue"}
+        </div>
+      )}
     </div>
   );
 }
@@ -394,13 +407,13 @@ function IdentityForm({ initial={}, onSave, onCancel, mode="add" }) {
   return (
     <div style={{ padding:"0 20px 20px" }}>
       <label style={S.fieldLabel}>Identity Statement *</label>
-      <input style={S.input} value={form.label} onChange={e=>set("label",e.target.value)} placeholder="e.g. I am a Creative Person" autoFocus />
+      <input style={S.input} value={form.label} onChange={e=>set("label",e.target.value)} placeholder="e.g. I am a Creative Person" autoFocus maxLength={60} />
 
       <label style={S.fieldLabel}>Icon</label>
-      <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:16 }} role="radiogroup" aria-label="Choose icon">
+      <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:16 }} role="group" aria-label="Choose icon">
         {ICONS.map(ic=>(
           <button key={ic} onClick={()=>set("icon",ic)}
-            aria-label={`Icon ${ic}`} aria-pressed={form.icon===ic}
+            aria-label={`${ic} icon${form.icon===ic ? " (selected)" : ""}`} aria-pressed={form.icon===ic}
             style={{ ...S.iconBtn, background: form.icon===ic ? T.surf2 : "transparent", borderColor: form.icon===ic ? T.gold : T.border }}>
             <span aria-hidden="true">{ic}</span>
           </button>
@@ -408,10 +421,10 @@ function IdentityForm({ initial={}, onSave, onCancel, mode="add" }) {
       </div>
 
       <label style={S.fieldLabel}>Color</label>
-      <div style={{ display:"flex", flexWrap:"wrap", gap:10, marginBottom:24 }} role="radiogroup" aria-label="Choose color">
+      <div style={{ display:"flex", flexWrap:"wrap", gap:10, marginBottom:24 }} role="group" aria-label="Choose color">
         {IDENTITY_COLORS.map((c,i)=>(
           <button key={c} onClick={()=>set("colorIdx",i)}
-            aria-label={`Color ${i+1}`} aria-pressed={form.colorIdx===i}
+            aria-label={`${COLOR_NAMES[i]} color${form.colorIdx===i ? " (selected)" : ""}`} aria-pressed={form.colorIdx===i}
             style={{ width:36, height:36, borderRadius:"50%", background:c, border: form.colorIdx===i ? "3px solid " + T.text : "3px solid transparent", cursor:"pointer" }} />
         ))}
       </div>
@@ -422,6 +435,11 @@ function IdentityForm({ initial={}, onSave, onCancel, mode="add" }) {
           {mode==="add" ? "Add Identity" : "Save Changes"}
         </button>
       </div>
+      {!valid && (
+        <div role="status" style={{ fontSize:12, color:T.muted, marginTop:8, textAlign:"center" }}>
+          Identity statement is required to continue
+        </div>
+      )}
     </div>
   );
 }
@@ -458,10 +476,11 @@ export default function App() {
   const [modal,    setModal]    = useState(null);
   const [modalCtx, setModalCtx] = useState(null);
 
-  const todayKey     = getTodayKey();
+  const todayKey     = useMemo(() => getTodayKey(), []);
   const weekDates    = useMemo(() => getWeekDates(), []);
   const todayData    = data[todayKey]    || {};
   const selectedData = data[selectedDate] || {};
+  const allHabits    = useMemo(() => identities.flatMap(i => i.habits), [identities]);
 
   // ── Debounced Firestore saves ──
   const idTimer   = useRef(null);
@@ -470,7 +489,9 @@ export default function App() {
   const isFirstCi = useRef(true);
 
   // ── Streak cache — avoids 400-iteration loop per habit on every render ──
-  const streakCacheRef = useRef({});
+  const streakCacheRef      = useRef({});
+  // ── Celebration toast timer — stored in ref so it can be cleared on re-fire or unmount ──
+  const celebrationTimerRef = useRef(null);
 
   // ── Auth listener ──
   useEffect(() => {
@@ -528,7 +549,8 @@ export default function App() {
 
   // ── Streak — declared BEFORE any early returns (Rules of Hooks) ──
   const getStreakForHabit = useCallback((habitId, frequency) => {
-    const cacheKey = `${habitId}|${JSON.stringify(frequency)}|${Object.keys(data).length}`;
+    const freqKey  = frequency ? `${frequency.cadence}:${(frequency.days||frequency.dates||[]).join(",")}` : "d";
+    const cacheKey = `${habitId}|${freqKey}|${Object.keys(data).length}`;
     if (streakCacheRef.current[cacheKey] !== undefined) return streakCacheRef.current[cacheKey];
 
     let streak = 0;
@@ -563,10 +585,14 @@ export default function App() {
     const streak = getStreakForHabit(habitId, frequency) + 1;
     const milestone = MILESTONES.find(m=>m.days===streak);
     if(milestone && !selectedData[habitId]) {
+      clearTimeout(celebrationTimerRef.current);
       setCelebrationHabit({habitId,milestone});
-      setTimeout(()=>setCelebrationHabit(null),3500);
+      celebrationTimerRef.current = setTimeout(()=>setCelebrationHabit(null),3500);
     }
   }, [selectedDate, selectedData, getStreakForHabit]);
+
+  // Cleanup celebration timer on unmount
+  useEffect(() => () => clearTimeout(celebrationTimerRef.current), []);
 
   // ── Loading / Auth gates ──
   if (user === undefined) {
@@ -662,8 +688,7 @@ export default function App() {
     setModal(null);
   };
 
-  // ── Scores — frequency-aware ──
-  const allHabits      = identities.flatMap(i => i.habits);
+  // ── Scores — frequency-aware (allHabits is memoized above) ──
   const scheduledToday = allHabits.filter(h => isScheduledOn(h.frequency, selectedDate));
   const totalDone      = scheduledToday.filter(h => selectedData[h.id]).length;
   const totalTotal     = scheduledToday.length;
@@ -712,7 +737,12 @@ export default function App() {
 
       {/* ── Celebration Toast ── */}
       {celebrationHabit && (
-        <div style={S.toast} className="toast-in" role="status" aria-live="polite">
+        <div style={{
+          ...S.toast,
+          top: saveError
+            ? "calc(env(safe-area-inset-top,0px) + 54px)"
+            : "calc(env(safe-area-inset-top,0px) + 12px)",
+        }} className="toast-in" role="alert" aria-live="assertive">
           <span style={{fontSize:28}} aria-hidden="true">{celebrationHabit.milestone.emoji}</span>
           <div>
             <div style={{fontWeight:700,fontSize:14,color:T.text}}>{celebrationHabit.milestone.label}!</div>
@@ -765,7 +795,7 @@ export default function App() {
             </span>}
           </div>
           <h1 style={S.title}>{view==="today"?"Today":view==="week"?"This Week":view==="streaks"?"Streaks":"Manage"}</h1>
-          <div style={S.dateLabel}>{new Date().toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"short"})}</div>
+          <div style={S.dateLabel}>{new Date().toLocaleDateString(navigator.language||undefined,{weekday:"long",day:"numeric",month:"short"})}</div>
         </div>
         <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
           <button onClick={()=>fbSignOut(_auth)} style={{ background:"transparent", border:`1px solid ${T.border}`, borderRadius:20, fontSize:11, color:T.muted, padding:"3px 10px", cursor:"pointer", fontFamily:"inherit" }}>
@@ -790,13 +820,13 @@ export default function App() {
         {view==="today" && (
           <TodayView
             identities={identities}
+            allHabits={allHabits}
             todayData={selectedData}
             toggle={toggle}
             justChecked={justChecked}
             getStreakForHabit={getStreakForHabit}
             openEditHabit={openEditHabit}
             setModal={setModal}
-            setModalCtx={setModalCtx}
             openAddHabit={openAddHabit}
             selectedDate={selectedDate}
             setSelectedDate={setSelectedDate}
@@ -899,7 +929,7 @@ function ManageView({ identities, onAddHabit, onEditHabit, onDeleteHabit, onAddI
 
           <button onClick={()=>onAddHabit(identity.id)} style={{...S.addHabitBtn,borderColor:identity.color+"55"}}>
             <span style={{fontSize:16,color:identity.color,fontWeight:700}} aria-hidden="true">+</span>
-            <span style={{fontSize:13,color:T.text2}}>Add habit to {identity.label.replace("I am a ","").replace("I am ","")}</span>
+            <span style={{fontSize:13,color:T.text2}}>Add habit to {shortLabel(identity.label)}</span>
           </button>
         </div>
       ))}
@@ -975,6 +1005,7 @@ const HabitCard = memo(function HabitCard({ habit, identity, checked, streak, to
 
       {/* ── Tap target ── */}
       <button
+        className="habit-toggle"
         onClick={() => toggle(habit.id, habit.frequency)}
         aria-pressed={checked}
         aria-label={checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
@@ -1099,28 +1130,36 @@ function formatNavDate(dateKey) {
   if (dateKey === today) return "Today";
   const yest = new Date(); yest.setDate(yest.getDate()-1);
   if (dateKey === yest.toISOString().slice(0,10)) return "Yesterday";
-  return date.toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short"});
+  return date.toLocaleDateString(navigator.language||undefined,{weekday:"short",day:"numeric",month:"short"});
 }
+
+// Min date: 90 days back — beyond this streak data is meaningless
+const MIN_NAV_DATE = (() => {
+  const d = new Date();
+  d.setDate(d.getDate() - 90);
+  return d.toISOString().slice(0,10);
+})();
 
 function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
   const isToday = selectedDate === todayKey;
   const canNext = selectedDate < todayKey;
+  const canPrev = selectedDate > MIN_NAV_DATE;
 
   const go = (delta) => {
     const [y,mo,d] = selectedDate.split("-").map(Number);
     const date = new Date(y, mo-1, d);
     date.setDate(date.getDate() + delta);
     const next = date.toISOString().slice(0,10);
-    if (next <= todayKey) setSelectedDate(next);
+    if (next <= todayKey && next >= MIN_NAV_DATE) setSelectedDate(next);
   };
 
   return (
     <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:14 }} role="group" aria-label="Day navigation">
-      <button onClick={()=>go(-1)} aria-label="Previous day" style={{
-        width:36, height:36, borderRadius:"50%", border:`1.5px solid ${T.border}`,
-        background:T.surface, color:T.text2, fontSize:18, lineHeight:1,
-        cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
-        flexShrink:0, WebkitTapHighlightColor:"transparent",
+      <button onClick={()=>go(-1)} disabled={!canPrev} aria-label="Previous day" aria-disabled={!canPrev} style={{
+        width:36, height:36, borderRadius:"50%", border:`1.5px solid ${canPrev?T.border:T.surf2}`,
+        background:T.surface, color:canPrev?T.text2:T.border, fontSize:18, lineHeight:1,
+        cursor:canPrev?"pointer":"default", display:"flex", alignItems:"center", justifyContent:"center",
+        flexShrink:0, WebkitTapHighlightColor:"transparent", opacity: canPrev ? 1 : 0.35,
       }}><span aria-hidden="true">‹</span></button>
 
       <div style={{ flex:1, textAlign:"center" }}>
@@ -1150,17 +1189,20 @@ function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
 }
 
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
-function TodayView({ identities, todayData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, selectedDate, setSelectedDate, todayKey }) {
+function TodayView({ identities, allHabits, todayData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, selectedDate, setSelectedDate, todayKey }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
+  const notTodayListId = useId();
 
-  const allHabits = identities.flatMap(identity =>
-    identity.habits.map(habit => ({ habit, identity, slotId: getSlotId(habit.time) }))
-  );
+  // Build enriched habit list with identity ref and time slot; allHabits is memoized upstream
+  const enrichedHabits  = useMemo(() =>
+    identities.flatMap(identity =>
+      identity.habits.map(habit => ({ habit, identity, slotId: getSlotId(habit.time) }))
+    ), [identities]);
 
-  const scheduledHabits = allHabits.filter(({habit}) => isScheduledOn(habit.frequency, selectedDate));
-  const notTodayHabits  = allHabits.filter(({habit}) => !isScheduledOn(habit.frequency, selectedDate));
+  const scheduledHabits = enrichedHabits.filter(({habit}) => isScheduledOn(habit.frequency, selectedDate));
+  const notTodayHabits  = enrichedHabits.filter(({habit}) => !isScheduledOn(habit.frequency, selectedDate));
 
-  const quote = getDailyQuote();
+  const quote = useMemo(() => getDailyQuote(), []);
 
   // ── Empty state — no identities yet ──
   if (identities.length === 0) {
@@ -1208,13 +1250,25 @@ function TodayView({ identities, todayData, toggle, justChecked, getStreakForHab
             const allDone  = total > 0 && done === total;
             return (
               <span key={i.id} style={{ fontSize:11, fontWeight:700, color: allDone?"#fff":i.color, background: allDone?i.color:i.color+"22", borderRadius:20, padding:"4px 10px", display:"flex", alignItems:"center", gap:4, border:`1px solid ${allDone?i.color:i.color+"44"}` }}>
-                <span aria-hidden="true">{i.icon}</span> {i.label.replace("I am a ","").replace("I am ","")}
+                <span aria-hidden="true">{i.icon}</span> {shortLabel(i.label)}
                 {" "}{allDone ? "✓" : total > 0 ? `${done}/${total}` : "–"}
               </span>
             );
           })}
         </div>
       </div>
+
+      {/* Empty-identity nudge — show a contextual CTA for each identity with no habits */}
+      {identities.filter(i => i.habits.length === 0).map(i => (
+        <div key={i.id} style={{ borderRadius:16, border:`1.5px dashed ${i.color}66`, padding:"14px 16px", background:`${i.color}08`, display:"flex", alignItems:"center", gap:12 }}>
+          <span style={{fontSize:22, flexShrink:0}} aria-hidden="true">{i.icon}</span>
+          <div style={{flex:1, minWidth:0}}>
+            <div style={{fontSize:14,fontWeight:700,color:i.color,lineHeight:1.2}}>{shortLabel(i.label)}</div>
+            <div style={{fontSize:12,color:T.muted,marginTop:2}}>No habits yet — add one to start tracking</div>
+          </div>
+          <button onClick={()=>openAddHabit(i.id)} style={{...S.btnPrimary, padding:"8px 14px", fontSize:12, minHeight:36, flex:"none", width:"auto"}}>+ Add</button>
+        </div>
+      ))}
 
       {/* Time slot sections */}
       {TIME_SLOTS.map(slot => {
@@ -1285,7 +1339,7 @@ function TodayView({ identities, todayData, toggle, justChecked, getStreakForHab
                     </div>
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ fontSize:14, fontWeight:600, color:T.primary, textDecoration:"line-through", textDecorationColor:T.primary+"77", lineHeight:1.2 }}>{habit.label}</div>
-                      <div style={{ fontSize:11, color:T.muted, marginTop:2 }}><span aria-hidden="true">{identity.icon}</span> {identity.label.replace("I am a ","").replace("I am ","")}</div>
+                      <div style={{ fontSize:11, color:T.muted, marginTop:2 }}><span aria-hidden="true">{identity.icon}</span> {shortLabel(identity.label)}</div>
                     </div>
                     {streak >= 2 && (
                       <span style={{ fontSize:11, fontWeight:800, color:T.gold, background:T.gold+"20", padding:"2px 8px", borderRadius:20, flexShrink:0 }} aria-label={`${streak} day streak`}>
@@ -1307,6 +1361,7 @@ function TodayView({ identities, todayData, toggle, justChecked, getStreakForHab
           <button
             onClick={() => setNotTodayExpanded(e => !e)}
             aria-expanded={notTodayExpanded}
+            aria-controls={notTodayListId}
             style={{
               display:"flex", alignItems:"center", gap:8, width:"100%",
               background:"transparent", border:"none", cursor:"pointer", padding:"4px 2px",
@@ -1319,7 +1374,7 @@ function TodayView({ identities, todayData, toggle, justChecked, getStreakForHab
             <span style={{ fontSize:12, color:T.muted }} aria-hidden="true">{notTodayExpanded ? "▲" : "▼"}</span>
           </button>
           {notTodayExpanded && (
-            <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:5 }}>
+            <div id={notTodayListId} style={{ marginTop:8, display:"flex", flexDirection:"column", gap:5 }}>
               {notTodayHabits.map(({ habit, identity }) => {
                 const { bg, color } = getFreqColor(habit.frequency);
                 return (
@@ -1333,7 +1388,7 @@ function TodayView({ identities, todayData, toggle, justChecked, getStreakForHab
                     </div>
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ fontSize:13, fontWeight:600, color:T.muted }}>{habit.label}</div>
-                      <div style={{ fontSize:11, color:T.muted, marginTop:2 }}><span aria-hidden="true">{identity.icon}</span> {identity.label.replace("I am a ","").replace("I am ","")}</div>
+                      <div style={{ fontSize:11, color:T.muted, marginTop:2 }}><span aria-hidden="true">{identity.icon}</span> {shortLabel(identity.label)}</div>
                     </div>
                     <span style={{ fontSize:10, fontWeight:700, color, background:bg, padding:"3px 8px", borderRadius:20, flexShrink:0, whiteSpace:"nowrap" }}>
                       {getFreqLabel(habit.frequency)}
@@ -1384,13 +1439,17 @@ function WeekView({ data, weekDates, todayKey, identities }) {
                       const done      = !!(data[d]&&data[d][habit.id]);
                       const scheduled = isScheduledOn(habit.frequency, d);
                       const future    = d > todayKey;
+                      const dotLabel  = done ? "Done" : future ? "Future" : scheduled ? "Missed" : "Not scheduled";
                       return (
-                        <div key={d} style={{
+                        <div key={d} aria-label={dotLabel} style={{
                           ...S.weekDot,
                           background: done ? identity.color : scheduled ? T.surf2 : "transparent",
                           border: done ? `1px solid ${identity.color}` : scheduled ? `1px solid ${T.border}` : `1px dashed ${T.border}`,
                           opacity: future ? 0.35 : scheduled ? 1 : 0.4,
-                        }} aria-label={done ? "Done" : scheduled ? "Missed" : undefined}/>
+                          display:"flex", alignItems:"center", justifyContent:"center",
+                        }}>
+                          {done && <span style={{fontSize:10,color:"#fff",fontWeight:900,lineHeight:1}} aria-hidden="true">✓</span>}
+                        </div>
                       );
                     })}
                   </Fragment>
@@ -1412,7 +1471,7 @@ function WeekView({ data, weekDates, todayKey, identities }) {
           return (
             <div key={identity.id} style={S.summaryRow}>
               <span style={{fontSize:12,color:T.text2,minWidth:110,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>
-                <span aria-hidden="true">{identity.icon}</span> {identity.label.replace("I am a ","").replace("I am ","")}
+                <span aria-hidden="true">{identity.icon}</span> {shortLabel(identity.label)}
               </span>
               <div style={S.summaryBar}><div style={{...S.summaryFill,width:`${pct}%`,background:identity.color}}/></div>
               <span style={{fontSize:12,color:identity.color,minWidth:36,textAlign:"right",fontWeight:700}}>{pct}%</span>
@@ -1578,10 +1637,9 @@ const S = {
   footer:{padding:"20px 4px 16px",display:"flex",flexDirection:"column",gap:6,borderTop:`1px solid ${T.border}`,marginTop:8},
   footerQuote:{fontSize:14,color:T.text2,fontStyle:"italic",lineHeight:1.75,fontWeight:500,fontFamily:FONT_BODY,letterSpacing:"0.01em"},
   footerAuthor:{fontSize:12,color:T.gold,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:FONT_BODY},
-  weekGrid:{display:"grid",gridTemplateColumns:"1fr repeat(7, 26px)",gap:"6px 4px",alignItems:"center"},
-  weekDayH:{fontSize:10,textAlign:"center",letterSpacing:"0.04em",fontWeight:600,color:T.muted},
+  weekGrid:{display:"grid",gridTemplateColumns:"1fr repeat(7, minmax(20px,26px))",gap:"6px clamp(2px,1vw,4px)",alignItems:"center"},  weekDayH:{fontSize:10,textAlign:"center",letterSpacing:"0.04em",fontWeight:600,color:T.muted},
   weekHabitLabel:{fontSize:12,color:T.muted,paddingRight:6,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},
-  weekDot:{width:22,height:22,borderRadius:6,margin:"0 auto",transition:"background 0.3s",border:`1px solid ${T.border}`},
+  weekDot:{width:"clamp(18px,5vw,22px)",height:"clamp(18px,5vw,22px)",borderRadius:6,margin:"0 auto",transition:"background 0.3s",border:`1px solid ${T.border}`},
   summaryRow:{display:"flex",alignItems:"center",gap:10,marginBottom:12},
   summaryBar:{flex:1,height:6,background:T.surf2,borderRadius:99,overflow:"hidden",border:`1px solid ${T.border}`},
   summaryFill:{height:"100%",borderRadius:99,transition:"width 0.5s"},
@@ -1642,9 +1700,12 @@ const css=`
   select option { background: #FFFFFF; color: #1A1208; }
   ::-webkit-scrollbar { display: none; }
   * { scrollbar-width: none; }
-  @media (hover: hover) { button:hover { opacity: 0.82; } }
+  @media (hover: hover) {
+    button:hover:not(.habit-toggle) { opacity: 0.82; }
+    .habit-toggle:hover { background: rgba(2,132,199,0.04) !important; }
+  }
   @media (prefers-reduced-motion: reduce) {
     * { animation: none !important; transition: none !important; }
-    .card-leaving { opacity: 0.3 !important; }
+    .card-leaving { opacity: 0 !important; }
   }
 `;
