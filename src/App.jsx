@@ -19,7 +19,8 @@ const _db    = getFirestore(_fbApp);
 const _auth  = getAuth(_fbApp);
 
 function identitiesRef(uid) { return doc(_db, "users", uid, "atomicHabits", "identities"); }
-function checkInsRef(uid)   { return doc(_db, "users", uid, "atomicHabits", "checkIns"); }
+function checkInsRef(uid)    { return doc(_db, "users", uid, "atomicHabits", "checkIns"); }
+function dailyTasksRef(uid)  { return doc(_db, "users", uid, "atomicHabits", "dailyTasks"); }
 
 // Detect missing env vars early — surfaces a helpful screen instead of cryptic Firebase errors
 const _envMissing = Object.entries(_fbConfig).filter(([, v]) => !v).map(([k]) => k);
@@ -502,6 +503,7 @@ export default function App() {
   const [signingIn,    setSigningIn]   = useState(false);
   const [isOffline,    setIsOffline]   = useState(() => !navigator.onLine);
   const [undoDelete,   setUndoDelete]  = useState(null);
+  const [dailyTasks,   setDailyTasks]  = useState({});       // { [dateKey]: [{id, text, done}] }
 
   // Modal states
   const [modal,    setModal]    = useState(null);
@@ -535,30 +537,39 @@ export default function App() {
   const celebrationTimerRef = useRef(null);
   const justCheckedTimerRef = useRef(null);
   const undoTimerRef        = useRef(null);
+  const dtTimer             = useRef(null);
+  const isFirstDt           = useRef(true);
 
   // ── Auth listener ──
   useEffect(() => {
     return onAuthStateChanged(_auth, async (u) => {
       isFirstId.current = true;
       isFirstCi.current = true;
+      isFirstDt.current = true;
       streakCacheRef.current = {};
       setUser(u);
       if (u) {
         setDataLoading(true);
         try {
-          const [idSnap, ciSnap] = await Promise.all([
+          const [idSnap, ciSnap, dtSnap] = await Promise.all([
             getDoc(identitiesRef(u.uid)),
             getDoc(checkInsRef(u.uid)),
+            getDoc(dailyTasksRef(u.uid)),
           ]);
           if (idSnap.exists()) setIdentities(idSnap.data().data);
+          // Prune entries older than 366 days to prevent Firestore 1MB doc limit
+          const cutoff = new Date();
+          cutoff.setDate(cutoff.getDate() - 366);
+          const cutoffKey = cutoff.toISOString().slice(0, 10);
           if (ciSnap.exists()) {
-            // Prune check-ins older than 366 days to prevent Firestore 1MB doc limit
-            const cutoff = new Date();
-            cutoff.setDate(cutoff.getDate() - 366);
-            const cutoffKey = cutoff.toISOString().slice(0, 10);
             const raw = ciSnap.data().data || {};
             const pruned = Object.fromEntries(Object.entries(raw).filter(([k]) => k >= cutoffKey));
             setData(pruned);
+          }
+          if (dtSnap.exists()) {
+            const raw = dtSnap.data().data || {};
+            const pruned = Object.fromEntries(Object.entries(raw).filter(([k]) => k >= cutoffKey));
+            setDailyTasks(pruned);
           }
         } catch (err) {
           console.error("Failed to load data from Firestore:", err);
@@ -593,6 +604,18 @@ export default function App() {
         .finally(() => setSyncing(false));
     }, 800);
   }, [data, user]);
+
+  useEffect(() => {
+    if (!user || isFirstDt.current) { isFirstDt.current = false; return; }
+    clearTimeout(dtTimer.current);
+    dtTimer.current = setTimeout(() => {
+      setSyncing(true);
+      setSaveError(false);
+      setDoc(dailyTasksRef(user.uid), { data: dailyTasks })
+        .catch(err => { console.error("Daily tasks save failed:", err); setSaveError(true); })
+        .finally(() => setSyncing(false));
+    }, 800);
+  }, [dailyTasks, user]);
 
   // ── Google sign-in ──
   const signIn = async () => {
@@ -685,6 +708,29 @@ export default function App() {
   const openDeleteIdentity= useCallback((ident) => { setModalCtx({ identityId: ident.id, ident }); setModal("confirmDeleteIdentity"); }, []);
   const openAddHabit      = useCallback((defaultIdentityId) => { setModalCtx(defaultIdentityId ? { defaultIdentityId } : null); setModal("addHabit"); }, []);
   const openAddIdentity   = useCallback(() => setModal("addIdentity"), []);
+
+  // ── Daily task CRUD (stable callbacks — only touch setDailyTasks) ──
+  const addTask = useCallback((dateKey, text) => {
+    setDailyTasks(prev => {
+      const existing = prev[dateKey] || [];
+      if (existing.length >= 3) return prev;
+      return { ...prev, [dateKey]: [...existing, { id: uid(), text, done: false }] };
+    });
+  }, []);
+
+  const toggleTask = useCallback((dateKey, taskId) => {
+    setDailyTasks(prev => ({
+      ...prev,
+      [dateKey]: (prev[dateKey] || []).map(t => t.id === taskId ? { ...t, done: !t.done } : t),
+    }));
+  }, []);
+
+  const deleteTask = useCallback((dateKey, taskId) => {
+    setDailyTasks(prev => ({
+      ...prev,
+      [dateKey]: (prev[dateKey] || []).filter(t => t.id !== taskId),
+    }));
+  }, []);
 
   // ── Online / offline detection ──
   useEffect(() => {
@@ -1016,6 +1062,10 @@ export default function App() {
             selectedDate={selectedDate}
             setSelectedDate={setSelectedDate}
             todayKey={todayKey}
+            dailyTasks={dailyTasks}
+            addTask={addTask}
+            toggleTask={toggleTask}
+            deleteTask={deleteTask}
           />
         )}
 
@@ -1404,8 +1454,130 @@ function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
   );
 }
 
+// ─── TOP 3 TASKS CARD ─────────────────────────────────────────────────────────
+const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd, onToggle, onDelete }) {
+  const [inputVisible, setInputVisible] = useState(false);
+  const [inputVal,     setInputVal]     = useState("");
+  const inputRef = useRef(null);
+  const MAX = 3;
+
+  useEffect(() => {
+    if (inputVisible && inputRef.current) inputRef.current.focus();
+  }, [inputVisible]);
+
+  const handleAdd = () => {
+    const t = inputVal.trim();
+    if (!t) return;
+    onAdd(dateKey, t);
+    setInputVal("");
+    // Auto-close input once the 3rd slot is about to be filled
+    if (tasks.length + 1 >= MAX) setInputVisible(false);
+  };
+
+  const doneCnt = tasks.filter(t => t.done).length;
+  const allDone = tasks.length > 0 && doneCnt === tasks.length;
+
+  return (
+    <div style={{ borderRadius:16, background:T.surface, border:`1.5px solid ${T.border}`, overflow:"hidden" }}>
+      {/* Header */}
+      <div style={{ display:"flex", alignItems:"center", gap:8, padding:"12px 14px 10px", borderBottom:`1px solid ${T.surf2}` }}>
+        <span style={{ fontSize:16 }} aria-hidden="true">🎯</span>
+        <span style={{ flex:1, fontSize:13, fontWeight:700, color:T.text, fontFamily:"'Space Grotesk','Inter',sans-serif", letterSpacing:".3px" }}>
+          Top 3 tasks today
+        </span>
+        <span aria-label={`${doneCnt} of ${MAX} tasks done`} style={{
+          fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20,
+          background: allDone ? T.primary+"18" : T.gold+"20",
+          color:      allDone ? T.primary       : "#92400E",
+        }}>
+          {doneCnt} / {MAX}
+        </span>
+      </div>
+
+      {/* Task rows */}
+      {tasks.map(task => (
+        <div key={task.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", borderBottom:`1px solid ${T.surf2}` }}>
+          <button
+            onClick={() => onToggle(dateKey, task.id)}
+            aria-pressed={task.done}
+            aria-label={task.done ? `Uncheck: ${task.text}` : `Check: ${task.text}`}
+            style={{
+              width:22, height:22, borderRadius:"50%", flexShrink:0,
+              border:`2px solid ${task.done ? T.primary : T.border2}`,
+              background: task.done ? T.primary : "transparent",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"all 0.15s",
+            }}
+          >
+            {task.done && <span style={{ fontSize:11, color:"#fff", fontWeight:900, lineHeight:1 }} aria-hidden="true">✓</span>}
+          </button>
+          <span style={{ flex:1, fontSize:13, lineHeight:1.4,
+            color:           task.done ? T.muted  : T.text,
+            textDecoration:  task.done ? "line-through" : "none",
+            textDecorationColor: T.muted,
+          }}>
+            {task.text}
+          </span>
+          {isToday && (
+            <button
+              onClick={() => onDelete(dateKey, task.id)}
+              aria-label={`Delete task: ${task.text}`}
+              style={{ background:"transparent", border:"none", color:T.border2, fontSize:15, cursor:"pointer", padding:"4px 6px", lineHeight:1, WebkitTapHighlightColor:"transparent" }}
+            >
+              <span aria-hidden="true">✕</span>
+            </button>
+          )}
+        </div>
+      ))}
+
+      {/* Add row / inline input */}
+      {isToday && tasks.length < MAX && (
+        inputVisible ? (
+          <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 12px", background:T.bg }}>
+            <input
+              ref={inputRef}
+              value={inputVal}
+              onChange={e => setInputVal(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter") handleAdd();
+                if (e.key === "Escape") { setInputVisible(false); setInputVal(""); }
+              }}
+              placeholder="What needs to get done today?"
+              maxLength={80}
+              aria-label="New task text"
+              style={{ flex:1, border:`1px solid ${T.accent}`, borderRadius:8, padding:"7px 10px", fontSize:13, background:"#fff", color:T.text, outline:"none", fontFamily:"inherit" }}
+            />
+            <button
+              onClick={handleAdd}
+              style={{ background:T.primary, color:"#fff", border:"none", borderRadius:8, padding:"7px 14px", fontSize:12, fontWeight:700, cursor:"pointer", flexShrink:0, WebkitTapHighlightColor:"transparent" }}
+            >
+              Add
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setInputVisible(true)}
+            aria-label="Add a task for today"
+            style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", width:"100%", background:"transparent", border:"none", cursor:"pointer", WebkitTapHighlightColor:"transparent" }}
+          >
+            <div aria-hidden="true" style={{ width:22, height:22, borderRadius:"50%", border:`2px dashed ${T.accent}`, display:"flex", alignItems:"center", justifyContent:"center", color:T.accent, fontSize:16, lineHeight:1, flexShrink:0 }}>+</div>
+            <span style={{ fontSize:13, color:T.accent, fontWeight:500 }}>Add a task…</span>
+          </button>
+        )
+      )}
+
+      {/* Locked / all-done message */}
+      {isToday && tasks.length >= MAX && (
+        <div style={{ padding:"8px 14px 10px", fontSize:11, color:T.muted, textAlign:"center" }}>
+          {allDone ? "All done — great work! 🎉" : "You're locked in — 3 tasks set 🔒"}
+        </div>
+      )}
+    </div>
+  );
+});
+
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
-const TodayView = memo(function TodayView({ identities, allHabits, todayData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey }) {
+const TodayView = memo(function TodayView({ identities, allHabits, todayData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
 
@@ -1467,6 +1639,16 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, to
     <div style={S.content}>
       {/* Day Navigator */}
       <DayNavigator selectedDate={selectedDate} setSelectedDate={setSelectedDate} todayKey={todayKey} />
+
+      {/* Top 3 Tasks */}
+      <TopTasksCard
+        tasks={dailyTasks[selectedDate] || []}
+        dateKey={selectedDate}
+        isToday={selectedDate === todayKey}
+        onAdd={addTask}
+        onToggle={toggleTask}
+        onDelete={deleteTask}
+      />
 
       {/* Daily quote banner */}
       <div style={{ background:`linear-gradient(135deg,rgba(2,132,199,0.09),rgba(245,158,11,0.07))`, border:`1px solid rgba(2,132,199,0.2)`, borderRadius:16, padding:"14px 16px" }}>
@@ -1905,104 +2087,42 @@ const S = {
   fieldLabel:{display:"block",fontSize:11,letterSpacing:"0.08em",color:T.muted,fontWeight:700,marginBottom:8,marginTop:18,textTransform:"uppercase",fontFamily:FONT_BODY},
   input:{width:"100%",background:T.surf2,border:`1.5px solid ${T.border}`,borderRadius:12,padding:"14px 14px",color:T.text,fontSize:16,fontFamily:"inherit",outline:"none",boxSizing:"border-box",appearance:"none",WebkitAppearance:"none"},
   iconBtn:{width:46,height:46,border:`2px solid ${T.border}`,borderRadius:12,cursor:"pointer",fontSize:20,display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent",background:T.surf2},
-  btnPrimary:{flex:1,padding:"15px 0",background:T.primary,border:"none",borderRadius:14,color:"#fff",fontSize:16,fontWeight:700,fontFamily:"inherit",cursor:"pointer",WebkitTapHighlightColor:"transparent",minHeight:52},
-  btnSecondary:{flex:1,padding:"15px 0",background:T.surf2,border:`1.5px solid ${T.border}`,borderRadius:14,color:T.text2,fontSize:16,fontWeight:600,fontFamily:"inherit",cursor:"pointer",WebkitTapHighlightColor:"transparent",minHeight:52},
-  card:{borderRadius:18,border:`1px solid ${T.border}`,padding:"14px",background:T.surface,transition:"background 0.3s,border-color 0.3s",boxShadow:"0 1px 4px #00000008"},
-  cardHeader:{display:"flex",alignItems:"center",gap:10,marginBottom:10},
-  cardIcon:{fontSize:22,flexShrink:0,lineHeight:1},
-  cardLabel:{fontSize:15,fontWeight:700,fontFamily:FONT_DISPLAY,letterSpacing:"-0.02em",lineHeight:1.2,color:T.text},
-  cardSub:{fontSize:11,color:T.muted,marginTop:2,fontWeight:500},
-  badge:{marginLeft:"auto",fontSize:10,fontWeight:800,color:"#fff",padding:"4px 10px",borderRadius:20,letterSpacing:"0.04em",flexShrink:0,minHeight:22,display:"flex",alignItems:"center"},
-  progressBar:{height:4,background:T.surf2,borderRadius:99,marginBottom:12,overflow:"hidden",border:`1px solid ${T.border}`},
-  progressFill:{height:"100%",borderRadius:99,transition:"width 0.5s ease"},
-  streakBadge:{fontSize:11,fontWeight:700,color:T.accent,flexShrink:0,background:T.accent+"18",padding:"3px 9px",borderRadius:20,lineHeight:1.5,border:`1px solid ${T.accent}33`},
-  checkbox:{width:28,height:28,borderRadius:8,border:`2px solid ${T.border2}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all 0.2s",minWidth:28,background:T.surf2},
-  checkmark:{fontSize:14,color:"#fff",fontWeight:900},
-  iconActionBtn:{width:44,height:44,background:"transparent",border:"none",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"color 0.2s",WebkitTapHighlightColor:"transparent",borderRadius:10},
-  crudBtn:{background:"transparent",border:"none",cursor:"pointer",fontSize:18,color:T.muted,padding:"0",borderRadius:8,width:44,height:44,display:"flex",alignItems:"center",justifyContent:"center",WebkitTapHighlightColor:"transparent",transition:"color 0.2s"},
-  addHabitBtn:{display:"flex",alignItems:"center",gap:10,padding:"13px 14px",background:T.surf2,border:`1.5px dashed ${T.border2}`,borderRadius:14,cursor:"pointer",width:"100%",marginTop:6,minHeight:48,WebkitTapHighlightColor:"transparent"},
-  addIdentityBtn:{padding:"15px",background:T.surf2,border:`2px dashed ${T.border2}`,borderRadius:18,color:T.muted,fontSize:15,fontWeight:600,cursor:"pointer",width:"100%",fontFamily:"inherit",minHeight:52,WebkitTapHighlightColor:"transparent",transition:"border-color 0.2s"},
-  triggerPanel:{padding:"10px 12px",border:`1px solid ${T.border}`,borderTop:"none",borderRadius:"0 0 12px 12px",background:T.surf2},
-  triggerRow:{display:"flex",alignItems:"flex-start",gap:8},
-  triggerIcon:{fontSize:13,flexShrink:0,marginTop:1},
-  triggerKey:{fontSize:9,letterSpacing:"0.1em",color:T.muted,fontWeight:700},
-  triggerVal:{fontSize:12,color:T.text2,marginTop:2,lineHeight:1.4},
-  nextMilestone:{marginTop:10,padding:"10px 12px",background:T.gold+"12",borderRadius:10,border:`1px solid ${T.gold}33`},
-  milestoneBar:{height:4,background:T.border,borderRadius:99,marginTop:6,overflow:"hidden"},
-  milestoneFill:{height:"100%",borderRadius:99,transition:"width 0.5s"},
-  footer:{padding:"20px 4px 16px",display:"flex",flexDirection:"column",gap:6,borderTop:`1px solid ${T.border}`,marginTop:8},
-  footerQuote:{fontSize:14,color:T.text2,fontStyle:"italic",lineHeight:1.75,fontWeight:500,fontFamily:FONT_BODY,letterSpacing:"0.01em"},
-  footerAuthor:{fontSize:12,color:T.gold,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:FONT_BODY},
-  weekGrid:{display:"grid",gridTemplateColumns:"1fr repeat(7, minmax(20px,26px))",gap:"6px clamp(2px,1vw,4px)",alignItems:"center"},
-  weekDayH:{fontSize:10,textAlign:"center",letterSpacing:"0.04em",fontWeight:600,color:T.muted},
-  weekHabitLabel:{fontSize:12,color:T.muted,paddingRight:6,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},
-  weekDot:{width:"clamp(18px,5vw,22px)",height:"clamp(18px,5vw,22px)",borderRadius:6,margin:"0 auto",transition:"background 0.3s",border:`1px solid ${T.border}`},
-  summaryRow:{display:"flex",alignItems:"center",gap:10,marginBottom:12},
-  summaryBar:{flex:1,height:6,background:T.surf2,borderRadius:99,overflow:"hidden",border:`1px solid ${T.border}`},
+  btnPrimary:{flex:1,background:T.primary,color:"#fff",border:"none",borderRadius:12,padding:"15px 20px",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit",WebkitTapHighlightColor:"transparent",transition:"opacity 0.2s"},
+  btnSecondary:{flex:1,background:T.surf2,color:T.text2,border:`1.5px solid ${T.border}`,borderRadius:12,padding:"15px 20px",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit",WebkitTapHighlightColor:"transparent"},
+  addHabitBtn:{display:"flex",alignItems:"center",gap:10,background:T.surface,border:`1.5px dashed ${T.border}`,borderRadius:14,padding:"14px 16px",cursor:"pointer",width:"100%",WebkitTapHighlightColor:"transparent",marginTop:4},
+  addIdentityBtn:{display:"flex",alignItems:"center",justifyContent:"center",background:"transparent",border:`1.5px dashed ${T.border2}`,borderRadius:14,padding:"14px 16px",cursor:"pointer",width:"100%",WebkitTapHighlightColor:"transparent",color:T.primary,fontSize:14,fontWeight:700,fontFamily:"inherit"},
+  card:{background:T.surface,borderRadius:16,border:`1px solid ${T.border}`,padding:"14px 16px"},
+  cardLabel:{fontSize:13,fontWeight:700,color:T.text,fontFamily:"'Space Grotesk','Inter',sans-serif",letterSpacing:"-0.01em",display:"flex",alignItems:"center",gap:6},
+  weekGrid:{display:"grid",gridTemplateColumns:"120px repeat(7, 1fr)",gap:6,overflowX:"auto"},
+  weekDayH:{fontSize:10,fontWeight:700,color:T.muted,textAlign:"center",padding:"2px 0",letterSpacing:"0.06em"},
+  weekHabitLabel:{fontSize:11,color:T.text2,fontWeight:500,display:"flex",alignItems:"center",paddingRight:6,lineHeight:1.3},
+  weekDot:{width:"100%",aspectRatio:"1",borderRadius:5,minWidth:22},
+  crudBtn:{background:"transparent",border:"none",color:T.muted,cursor:"pointer",fontSize:16,padding:"6px 8px",lineHeight:1,borderRadius:8,WebkitTapHighlightColor:"transparent",display:"flex",alignItems:"center",justifyContent:"center"},
+  footer:{textAlign:"center",padding:"20px 0 8px",display:"flex",flexDirection:"column",gap:4},
+  footerQuote:{fontSize:12,color:T.muted,fontStyle:"italic",lineHeight:1.6},
+  footerAuthor:{fontSize:11,color:T.border2,fontWeight:700},
+  streakItem:{display:"flex",flexDirection:"column",gap:4,padding:"10px 0",borderBottom:`1px solid ${T.surf2}`},
+  summaryRow:{display:"flex",alignItems:"center",gap:10,padding:"4px 0"},
+  summaryBar:{flex:1,height:5,background:T.surf2,borderRadius:99,overflow:"hidden",border:`1px solid ${T.border}`},
   summaryFill:{height:"100%",borderRadius:99,transition:"width 0.5s"},
-  streakItem:{padding:"12px 0",borderBottom:`1px solid ${T.border}`},
-  habitList:{display:"flex",flexDirection:"column",gap:2},
-  habitRow:{display:"flex",alignItems:"center",gap:10,padding:"12px 12px",border:"none",cursor:"pointer",textAlign:"left",transition:"background 0.2s",width:"100%",minHeight:56},
-  habitLabel:{fontSize:15,flex:1,transition:"color 0.2s",color:T.text},
-  spinner:{width:32,height:32,borderRadius:"50%",border:`3px solid ${T.border}`,borderTopColor:T.accent,animation:"spin 0.8s linear infinite"},
+  spinner:{width:32,height:32,border:`3px solid ${T.border}`,borderTopColor:T.primary,borderRadius:"50%",animation:"spin 0.8s linear infinite"},
 };
 
-const css=`
-  *, *::before, *::after { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
-  body {
-    margin: 0; background: #F0F9FF; overscroll-behavior-y: none;
-    -webkit-tap-highlight-color: transparent; font-synthesis: none;
-    text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-  .num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
-  input, select, textarea {
-    font-size: 16px !important; font-family: 'Plus Jakarta Sans', sans-serif;
-    -webkit-appearance: none;
-  }
-  input:focus, select:focus { border-color: #0EA5E9 !important; box-shadow: 0 0 0 3px #0EA5E922; }
-  button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
-  button:focus-visible { outline: 2px solid #0EA5E9; outline-offset: 2px; }
-  input:focus-visible, select:focus-visible { outline: none; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  @keyframes pop {
-    0%   { transform: scale(1); }
-    35%  { transform: scale(1.09); }
-    100% { transform: scale(1); }
-  }
-  @keyframes slideUp {
-    from { opacity:0; transform:translateX(-50%) translateY(12px); }
-    to   { opacity:1; transform:translateX(-50%) translateY(0); }
-  }
-  @keyframes sheetIn {
-    from { transform: translateY(100%); }
-    to   { transform: translateY(0); }
-  }
-  @keyframes checkPop {
-    0%   { transform: scale(0.7); opacity:0; }
-    60%  { transform: scale(1.15); }
-    100% { transform: scale(1); opacity:1; }
-  }
-  @keyframes cardLeave {
-    0%   { opacity:1; transform:translateX(0);    max-height:240px; margin-bottom:8px; }
-    55%  { opacity:0; transform:translateX(32px); max-height:240px; margin-bottom:8px; }
-    100% { opacity:0; transform:translateX(32px); max-height:0;     margin-bottom:0; }
-  }
-  .pop { animation: pop 0.3s ease; }
-  .toast-in { animation: slideUp 0.3s ease forwards; }
-  .sheet-in { animation: sheetIn 0.3s cubic-bezier(0.32,0.72,0,1); }
-  .check-pop { animation: checkPop 0.3s ease forwards; }
-  .card-leaving { animation: cardLeave 0.55s ease forwards; pointer-events:none; overflow:hidden; }
-  select option { background: #FFFFFF; color: #1A1208; }
-  #root ::-webkit-scrollbar { display: none; }
-  #root * { scrollbar-width: none; }
-  @media (hover: hover) {
-    button:hover:not(.habit-toggle) { opacity: 0.82; }
-    .habit-toggle:hover { background: rgba(2,132,199,0.04) !important; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    * { animation: none !important; transition: none !important; }
-    .card-leaving { opacity: 0 !important; }
-  }
+const css = `
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root { height: 100%; }
+#root ::-webkit-scrollbar { display: none; }
+#root * { scrollbar-width: none; }
+.habit-toggle:active { opacity: 0.7; transform: scale(0.98); }
+.check-pop { animation: pop 0.25s cubic-bezier(0.34,1.56,0.64,1) both; }
+.card-leaving { animation: fadeOut 0.3s ease forwards; }
+.sheet-in { animation: slideUp 0.28s cubic-bezier(0.32,0.72,0,1) both; }
+.toast-in { animation: fadeSlideDown 0.3s cubic-bezier(0.32,0.72,0,1) both; }
+.pop { animation: pop 0.35s cubic-bezier(0.34,1.56,0.64,1) both; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pop { 0%,100% { transform: scale(1); } 50% { transform: scale(1.18); } }
+@keyframes fadeOut { to { opacity: 0; transform: scale(0.95); } }
+@keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes fadeSlideDown { from { transform: translateX(-50%) translateY(-10px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
 `;
