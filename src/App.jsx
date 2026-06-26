@@ -1409,14 +1409,23 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, to
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
 
-  // Build enriched habit list with identity ref and time slot; allHabits is memoized upstream
+  // Build enriched habit list with identity ref, time slot, and sort key
   const enrichedHabits  = useMemo(() =>
     identities.flatMap(identity =>
-      identity.habits.map(habit => ({ habit, identity, slotId: getSlotId(habit.time) }))
+      identity.habits.map(habit => {
+        // Parse HH:MM (from <input type="time">) → total minutes for precise sort
+        const hm = habit.time ? habit.time.match(/^(\d{1,2}):(\d{2})$/) : null;
+        const sortMinutes = hm
+          ? parseInt(hm[1]) * 60 + parseInt(hm[2])
+          : (parseHour(habit.time) !== null ? parseHour(habit.time) * 60 : Infinity);
+        return { habit, identity, slotId: getSlotId(habit.time), sortMinutes };
+      })
     ), [identities]);
 
   const [scheduledHabits, notTodayHabits] = useMemo(() => {
-    const scheduled = enrichedHabits.filter(({habit}) => isScheduledOn(habit.frequency, selectedDate));
+    const scheduled = enrichedHabits
+      .filter(({habit}) => isScheduledOn(habit.frequency, selectedDate))
+      .sort((a, b) => a.sortMinutes - b.sortMinutes); // earliest time first; no-time habits (Infinity) go last
     const notToday  = enrichedHabits.filter(({habit}) => !isScheduledOn(habit.frequency, selectedDate));
     return [scheduled, notToday];
   }, [enrichedHabits, selectedDate]);
