@@ -76,7 +76,14 @@ function to24h(timeStr) {
   return `${String(h).padStart(2,"0")}:${m}`;
 }
 
-function getTodayKey() { return new Date().toISOString().slice(0,10); }
+// Use local calendar date (not UTC) so the key matches what the user sees on their clock.
+// toISOString() always returns UTC, which shifts the date backward in UTC+ timezones (e.g. IST).
+function dateToKey(d) {
+  return d.getFullYear() + "-" +
+    String(d.getMonth() + 1).padStart(2, "0") + "-" +
+    String(d.getDate()).padStart(2, "0");
+}
+function getTodayKey() { return dateToKey(new Date()); }
 // Use crypto.randomUUID when available (more collision-safe than Math.random)
 function uid() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -138,7 +145,7 @@ function getFreqColor(frequency) {
 function getWeekDates() {
   const today=new Date(), mon=new Date(today);
   mon.setDate(today.getDate()-((today.getDay()+6)%7));
-  return Array.from({length:7},(_,i)=>{ const d=new Date(mon); d.setDate(mon.getDate()+i); return d.toISOString().slice(0,10); });
+  return Array.from({length:7},(_,i)=>{ const d=new Date(mon); d.setDate(mon.getDate()+i); return dateToKey(d); });
 }
 const DAY_LABELS=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 
@@ -504,6 +511,7 @@ export default function App() {
   const [isOffline,    setIsOffline]   = useState(() => !navigator.onLine);
   const [undoDelete,   setUndoDelete]  = useState(null);
   const [dailyTasks,   setDailyTasks]  = useState({});       // { [dateKey]: [{id, text, done}] }
+  const [lastRollover, setLastRollover] = useState("");       // dateKey of last task-rollover run
 
   // Modal states
   const [modal,    setModal]    = useState(null);
@@ -539,6 +547,7 @@ export default function App() {
   const undoTimerRef        = useRef(null);
   const dtTimer             = useRef(null);
   const isFirstDt           = useRef(true);
+  const lastRolloverRef     = useRef("");     // mirrors lastRollover state for stable callbacks
 
   // ── Auth listener ──
   useEffect(() => {
@@ -560,7 +569,7 @@ export default function App() {
           // Prune entries older than 366 days to prevent Firestore 1MB doc limit
           const cutoff = new Date();
           cutoff.setDate(cutoff.getDate() - 366);
-          const cutoffKey = cutoff.toISOString().slice(0, 10);
+          const cutoffKey = dateToKey(cutoff);
           if (ciSnap.exists()) {
             const raw = ciSnap.data().data || {};
             const pruned = Object.fromEntries(Object.entries(raw).filter(([k]) => k >= cutoffKey));
@@ -570,6 +579,9 @@ export default function App() {
             const raw = dtSnap.data().data || {};
             const pruned = Object.fromEntries(Object.entries(raw).filter(([k]) => k >= cutoffKey));
             setDailyTasks(pruned);
+            const lr = dtSnap.data().lastRollover || "";
+            setLastRollover(lr);
+            lastRolloverRef.current = lr;
           }
         } catch (err) {
           console.error("Failed to load data from Firestore:", err);
@@ -611,11 +623,11 @@ export default function App() {
     dtTimer.current = setTimeout(() => {
       setSyncing(true);
       setSaveError(false);
-      setDoc(dailyTasksRef(user.uid), { data: dailyTasks })
+      setDoc(dailyTasksRef(user.uid), { data: dailyTasks, lastRollover })
         .catch(err => { console.error("Daily tasks save failed:", err); setSaveError(true); })
         .finally(() => setSyncing(false));
     }, 800);
-  }, [dailyTasks, user]);
+  }, [dailyTasks, lastRollover, user]);
 
   // ── Google sign-in ──
   const signIn = async () => {
@@ -643,7 +655,7 @@ export default function App() {
     let streak = 0;
     const d = new Date();
     for (let i = 0; i < 400; i++) {
-      const key = d.toISOString().slice(0, 10);
+      const key = dateToKey(d);
       const scheduled = isScheduledOn(frequency, key);
       if (scheduled) {
         if (data[key] && data[key][habitId]) {
@@ -710,11 +722,10 @@ export default function App() {
   const openAddIdentity   = useCallback(() => setModal("addIdentity"), []);
 
   // ── Daily task CRUD (stable callbacks — only touch setDailyTasks) ──
-  const addTask = useCallback((dateKey, text) => {
+  const addTask = useCallback((dateKey, text, priority = "M") => {
     setDailyTasks(prev => {
       const existing = prev[dateKey] || [];
-      if (existing.length >= 3) return prev;
-      return { ...prev, [dateKey]: [...existing, { id: uid(), text, done: false }] };
+      return { ...prev, [dateKey]: [...existing, { id: uid(), text, done: false, priority }] };
     });
   }, []);
 
@@ -731,6 +742,56 @@ export default function App() {
       [dateKey]: (prev[dateKey] || []).filter(t => t.id !== taskId),
     }));
   }, []);
+
+  const editTask = useCallback((dateKey, taskId, text) => {
+    setDailyTasks(prev => ({
+      ...prev,
+      [dateKey]: (prev[dateKey] || []).map(t => t.id === taskId ? { ...t, text } : t),
+    }));
+  }, []);
+
+  const setPriority = useCallback((dateKey, taskId, priority) => {
+    setDailyTasks(prev => ({
+      ...prev,
+      [dateKey]: (prev[dateKey] || []).map(t => t.id === taskId ? { ...t, priority } : t),
+    }));
+  }, []);
+
+  // ── Task rollover — keep ref in sync so performRollover stays stable (no stale closure) ──
+  useEffect(() => { lastRolloverRef.current = lastRollover; }, [lastRollover]);
+
+  // Carry uncompleted tasks from yesterday → today (max 3 total).
+  // Uses a ref so this callback never needs to be recreated.
+  const performRollover = useCallback(() => {
+    const today = getTodayKey();
+    if (lastRolloverRef.current === today) return;   // already ran today
+    const d = new Date(); d.setDate(d.getDate() - 1);
+    const yesterday = dateToKey(d);
+    setDailyTasks(prev => {
+      const undone = (prev[yesterday] || []).filter(t => !t.done);
+      if (!undone.length) return prev;
+      const todayTasks = prev[today] || [];
+      const carried = undone.map(t => ({ ...t, id: uid(), done: false }));
+      return { ...prev, [today]: [...todayTasks, ...carried] };
+    });
+    setLastRollover(today);
+    lastRolloverRef.current = today;
+  }, []);
+
+  // Fire rollover at midnight (12 AM) every day; also runs on login/load in case it's overdue.
+  useEffect(() => {
+    if (!user || dataLoading) return;
+    const msToMidnight = () => {
+      const now = new Date();
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) - now;
+    };
+    performRollover(); // idempotent — skips if lastRolloverRef already equals today
+    let t = setTimeout(function tick() {
+      performRollover();
+      t = setTimeout(tick, msToMidnight());
+    }, msToMidnight());
+    return () => clearTimeout(t);
+  }, [user, dataLoading, performRollover]);
 
   // ── Online / offline detection ──
   useEffect(() => {
@@ -1066,6 +1127,8 @@ export default function App() {
             addTask={addTask}
             toggleTask={toggleTask}
             deleteTask={deleteTask}
+            editTask={editTask}
+            setPriority={setPriority}
           />
         )}
 
@@ -1395,28 +1458,31 @@ function formatNavDate(dateKey) {
   const today = getTodayKey();
   if (dateKey === today) return "Today";
   const yest = new Date(); yest.setDate(yest.getDate()-1);
-  if (dateKey === yest.toISOString().slice(0,10)) return "Yesterday";
+  if (dateKey === dateToKey(yest)) return "Yesterday";
+  const tom = new Date(); tom.setDate(tom.getDate()+1);
+  if (dateKey === dateToKey(tom)) return "Tomorrow";
   return date.toLocaleDateString(navigator.language||undefined,{weekday:"short",day:"numeric",month:"short"});
 }
 
 function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
   // Recomputed daily (keyed on todayKey) so it stays accurate if the app is kept open overnight
   const minNavDate = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 90);
-    return d.toISOString().slice(0,10);
+    const d = new Date(); d.setDate(d.getDate() - 90); return dateToKey(d);
+  }, [todayKey]);
+  const maxNavDate = useMemo(() => {
+    const d = new Date(); d.setDate(d.getDate() + 30); return dateToKey(d);
   }, [todayKey]);
 
   const isToday = selectedDate === todayKey;
-  const canNext = selectedDate < todayKey;
   const canPrev = selectedDate > minNavDate;
+  const canNext = selectedDate < maxNavDate;
 
   const go = (delta) => {
     const [y,mo,d] = selectedDate.split("-").map(Number);
     const date = new Date(y, mo-1, d);
     date.setDate(date.getDate() + delta);
-    const next = date.toISOString().slice(0,10);
-    if (next <= todayKey && next >= minNavDate) setSelectedDate(next);
+    const next = dateToKey(date);
+    if (next >= minNavDate && next <= maxNavDate) setSelectedDate(next);
   };
 
   return (
@@ -1439,7 +1505,7 @@ function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
             borderRadius:20, padding:"8px 12px", cursor:"pointer",
             letterSpacing:"0.04em", textTransform:"uppercase",
             WebkitTapHighlightColor:"transparent", minHeight:36, lineHeight:1,
-          }}>← Back to Today</button>
+          }}>← Today</button>
         )}
       </div>
 
@@ -1455,27 +1521,59 @@ function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
 }
 
 // ─── TOP 3 TASKS CARD ─────────────────────────────────────────────────────────
-const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd, onToggle, onDelete }) {
+const PRIORITY_ORDER = { H: 0, M: 1, L: 2 };
+const PRIORITY_STYLE = {
+  H: { bg: "#FEE2E2", color: "#B91C1C", label: "H" },
+  M: { bg: "#FEF9C3", color: "#92400E", label: "M" },
+  L: { bg: "#DCFCE7", color: "#166534", label: "L" },
+};
+
+const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd, onToggle, onDelete, onEdit, onPriority }) {
   const [inputVisible, setInputVisible] = useState(false);
   const [inputVal,     setInputVal]     = useState("");
+  const [inputPri,     setInputPri]     = useState("M");
+  const [editingId,    setEditingId]    = useState(null);
+  const [editVal,      setEditVal]      = useState("");
+  const [expanded,     setExpanded]     = useState(false);
   const inputRef = useRef(null);
-  const MAX = 3;
+  const editRef  = useRef(null);
 
   useEffect(() => {
     if (inputVisible && inputRef.current) inputRef.current.focus();
   }, [inputVisible]);
 
+  useEffect(() => {
+    if (editingId && editRef.current) editRef.current.focus();
+  }, [editingId]);
+
   const handleAdd = () => {
     const t = inputVal.trim();
     if (!t) return;
-    onAdd(dateKey, t);
-    setInputVal("");
-    // Auto-close input once the 3rd slot is about to be filled
-    if (tasks.length + 1 >= MAX) setInputVisible(false);
+    onAdd(dateKey, t, inputPri);
+    setInputVal(""); setInputPri("M"); setInputVisible(false);
   };
 
+  const startEdit = (task) => {
+    setEditingId(task.id);
+    setEditVal(task.text);
+  };
+
+  const commitEdit = (taskId) => {
+    const t = editVal.trim();
+    if (t) onEdit(dateKey, taskId, t);
+    setEditingId(null); setEditVal("");
+  };
+
+  // Sort by priority H→M→L, show top 3 or all when expanded
+  const sorted  = [...tasks].sort((a, b) =>
+    (PRIORITY_ORDER[a.priority || "M"] ?? 1) - (PRIORITY_ORDER[b.priority || "M"] ?? 1)
+  );
+  const visible = expanded ? sorted : sorted.slice(0, 3);
+  const total   = tasks.length;
   const doneCnt = tasks.filter(t => t.done).length;
-  const allDone = tasks.length > 0 && doneCnt === tasks.length;
+  const allDone = total > 0 && doneCnt === total;
+
+  const priStyle = (p) => PRIORITY_STYLE[p] || PRIORITY_STYLE.M;
 
   return (
     <div style={{ borderRadius:16, background:T.surface, border:`1.5px solid ${T.border}`, overflow:"hidden" }}>
@@ -1483,70 +1581,163 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
       <div style={{ display:"flex", alignItems:"center", gap:8, padding:"12px 14px 10px", borderBottom:`1px solid ${T.surf2}` }}>
         <span style={{ fontSize:16 }} aria-hidden="true">🎯</span>
         <span style={{ flex:1, fontSize:13, fontWeight:700, color:T.text, fontFamily:"'Space Grotesk','Inter',sans-serif", letterSpacing:".3px" }}>
-          Top 3 tasks today
+          Top 3 tasks
         </span>
-        <span aria-label={`${doneCnt} of ${MAX} tasks done`} style={{
+        <span aria-label={`${doneCnt} of ${total} tasks done`} style={{
           fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20,
           background: allDone ? T.primary+"18" : T.gold+"20",
           color:      allDone ? T.primary       : "#92400E",
         }}>
-          {doneCnt} / {MAX}
+          {doneCnt} / {total}
         </span>
       </div>
 
-      {/* Task rows */}
-      {tasks.map(task => (
-        <div key={task.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", borderBottom:`1px solid ${T.surf2}` }}>
-          <button
-            onClick={() => onToggle(dateKey, task.id)}
-            aria-pressed={task.done}
-            aria-label={task.done ? `Uncheck: ${task.text}` : `Check: ${task.text}`}
-            style={{
-              width:22, height:22, borderRadius:"50%", flexShrink:0,
-              border:`2px solid ${task.done ? T.primary : T.border2}`,
-              background: task.done ? T.primary : "transparent",
-              display:"flex", alignItems:"center", justifyContent:"center",
-              cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"all 0.15s",
-            }}
-          >
-            {task.done && <span style={{ fontSize:11, color:"#fff", fontWeight:900, lineHeight:1 }} aria-hidden="true">✓</span>}
-          </button>
-          <span style={{ flex:1, fontSize:13, lineHeight:1.4,
-            color:           task.done ? T.muted  : T.text,
-            textDecoration:  task.done ? "line-through" : "none",
-            textDecorationColor: T.muted,
-          }}>
-            {task.text}
-          </span>
-          {isToday && (
+      {/* Top 3 task rows */}
+      {visible.map(task => {
+        const ps = priStyle(task.priority || "M");
+        const isEditing = editingId === task.id;
+        return (
+          <div key={task.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 14px", borderBottom:`1px solid ${T.surf2}` }}>
+            {/* Check circle */}
             <button
-              onClick={() => onDelete(dateKey, task.id)}
-              aria-label={`Delete task: ${task.text}`}
-              style={{ background:"transparent", border:"none", color:T.border2, fontSize:15, cursor:"pointer", padding:"4px 6px", lineHeight:1, WebkitTapHighlightColor:"transparent" }}
+              onClick={() => onToggle(dateKey, task.id)}
+              aria-pressed={task.done}
+              aria-label={task.done ? `Uncheck: ${task.text}` : `Check: ${task.text}`}
+              style={{
+                width:22, height:22, borderRadius:"50%", flexShrink:0,
+                border:`2px solid ${task.done ? T.primary : T.border2}`,
+                background: task.done ? T.primary : "transparent",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"all 0.15s",
+              }}
             >
-              <span aria-hidden="true">✕</span>
+              {task.done && <span style={{ fontSize:11, color:"#fff", fontWeight:900, lineHeight:1 }} aria-hidden="true">✓</span>}
             </button>
-          )}
-        </div>
-      ))}
+
+            {/* Task text / edit input */}
+            {isEditing ? (
+              <input
+                ref={editRef}
+                value={editVal}
+                onChange={e => setEditVal(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter")  commitEdit(task.id);
+                  if (e.key === "Escape") { setEditingId(null); setEditVal(""); }
+                }}
+                onBlur={() => commitEdit(task.id)}
+                maxLength={80}
+                aria-label="Edit task"
+                style={{ flex:1, border:`1px solid ${T.accent}`, borderRadius:7, padding:"5px 8px", fontSize:13, background:"#fff", color:T.text, outline:"none", fontFamily:"inherit" }}
+              />
+            ) : (
+              <span
+                onClick={() => isToday && startEdit(task)}
+                title={isToday ? "Click to edit" : undefined}
+                style={{
+                  flex:1, fontSize:13, lineHeight:1.4,
+                  color:          task.done ? T.muted : T.text,
+                  textDecoration: task.done ? "line-through" : "none",
+                  textDecorationColor: T.muted,
+                  cursor: isToday ? "text" : "default",
+                }}
+              >
+                {task.text}
+              </span>
+            )}
+
+            {/* Priority pills */}
+            {isToday ? (
+              <div style={{ display:"flex", gap:3, flexShrink:0 }}>
+                {["H","M","L"].map(p => {
+                  const active = (task.priority || "M") === p;
+                  const ps2 = PRIORITY_STYLE[p];
+                  return (
+                    <button key={p}
+                      onClick={() => onPriority(dateKey, task.id, p)}
+                      aria-pressed={active}
+                      aria-label={`Set priority ${p}`}
+                      style={{
+                        fontSize:9, fontWeight:800, padding:"2px 6px", borderRadius:10,
+                        border: active ? "none" : `1.5px solid ${T.border}`,
+                        background: active ? ps2.bg : "transparent",
+                        color: active ? ps2.color : T.muted,
+                        cursor:"pointer", WebkitTapHighlightColor:"transparent", letterSpacing:".3px",
+                        transition:"all 0.12s",
+                      }}
+                    >{p}</button>
+                  );
+                })}
+              </div>
+            ) : (
+              <span style={{
+                flexShrink:0, fontSize:10, fontWeight:800,
+                padding:"2px 7px", borderRadius:12,
+                background: ps.bg, color: ps.color, letterSpacing:".3px",
+              }}>
+                {ps.label}
+              </span>
+            )}
+
+            {/* Delete */}
+            {isToday && !isEditing && (
+              <button
+                onClick={() => onDelete(dateKey, task.id)}
+                aria-label={`Delete task: ${task.text}`}
+                style={{ background:"transparent", border:"none", color:T.border2, fontSize:15, cursor:"pointer", padding:"4px 4px", lineHeight:1, WebkitTapHighlightColor:"transparent", flexShrink:0 }}
+              >
+                <span aria-hidden="true">✕</span>
+              </button>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Expand / collapse queued tasks */}
+      {total > 3 && (
+        <button
+          onClick={() => setExpanded(e => !e)}
+          style={{
+            display:"flex", alignItems:"center", justifyContent:"center", gap:5,
+            width:"100%", padding:"7px 14px", background:"transparent", border:"none",
+            borderBottom:`1px solid ${T.surf2}`, cursor:"pointer",
+            fontSize:11, fontWeight:600, color:T.accent,
+            WebkitTapHighlightColor:"transparent",
+          }}
+        >
+          <span aria-hidden="true" style={{ fontSize:10, transition:"transform 0.2s", display:"inline-block", transform: expanded ? "rotate(180deg)" : "none" }}>▼</span>
+          {expanded ? "Show top 3 only" : `+${total - 3} more task${total - 3 > 1 ? "s" : ""} — tap to expand`}
+        </button>
+      )}
 
       {/* Add row / inline input */}
-      {isToday && tasks.length < MAX && (
+      {isToday && (
         inputVisible ? (
-          <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 12px", background:T.bg }}>
+          <div style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 12px", background:T.bg, flexWrap:"wrap" }}>
             <input
               ref={inputRef}
               value={inputVal}
               onChange={e => setInputVal(e.target.value)}
               onKeyDown={e => {
-                if (e.key === "Enter") handleAdd();
-                if (e.key === "Escape") { setInputVisible(false); setInputVal(""); }
+                if (e.key === "Enter")  handleAdd();
+                if (e.key === "Escape") { setInputVisible(false); setInputVal(""); setInputPri("M"); }
               }}
-              placeholder="What needs to get done today?"
+              placeholder="What needs to get done?"
               maxLength={80}
               aria-label="New task text"
-              style={{ flex:1, border:`1px solid ${T.accent}`, borderRadius:8, padding:"7px 10px", fontSize:13, background:"#fff", color:T.text, outline:"none", fontFamily:"inherit" }}
+              style={{ flex:1, minWidth:0, border:`1px solid ${T.accent}`, borderRadius:8, padding:"7px 10px", fontSize:13, background:"#fff", color:T.text, outline:"none", fontFamily:"inherit" }}
             />
+            {/* Priority picker for new task */}
+            {["H","M","L"].map(p => {
+              const ps2 = PRIORITY_STYLE[p];
+              return (
+                <button key={p} onClick={() => setInputPri(p)} aria-pressed={inputPri === p}
+                  style={{
+                    fontSize:10, fontWeight:800, padding:"5px 9px", borderRadius:12, border: inputPri === p ? `2px solid ${ps2.color}` : "2px solid transparent",
+                    background: ps2.bg, color: ps2.color, cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"border 0.1s",
+                  }}
+                >{p}</button>
+              );
+            })}
             <button
               onClick={handleAdd}
               style={{ background:T.primary, color:"#fff", border:"none", borderRadius:8, padding:"7px 14px", fontSize:12, fontWeight:700, cursor:"pointer", flexShrink:0, WebkitTapHighlightColor:"transparent" }}
@@ -1557,7 +1748,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
         ) : (
           <button
             onClick={() => setInputVisible(true)}
-            aria-label="Add a task for today"
+            aria-label="Add a task"
             style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", width:"100%", background:"transparent", border:"none", cursor:"pointer", WebkitTapHighlightColor:"transparent" }}
           >
             <div aria-hidden="true" style={{ width:22, height:22, borderRadius:"50%", border:`2px dashed ${T.accent}`, display:"flex", alignItems:"center", justifyContent:"center", color:T.accent, fontSize:16, lineHeight:1, flexShrink:0 }}>+</div>
@@ -1566,10 +1757,10 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
         )
       )}
 
-      {/* Locked / all-done message */}
-      {isToday && tasks.length >= MAX && (
-        <div style={{ padding:"8px 14px 10px", fontSize:11, color:T.muted, textAlign:"center" }}>
-          {allDone ? "All done — great work! 🎉" : "You're locked in — 3 tasks set 🔒"}
+      {/* All-done celebration */}
+      {allDone && !inputVisible && (
+        <div style={{ padding:"8px 14px 10px", fontSize:11, color:T.primary, textAlign:"center", fontWeight:600 }}>
+          All done — great work! 🎉
         </div>
       )}
     </div>
@@ -1577,7 +1768,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
 });
 
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
-const TodayView = memo(function TodayView({ identities, allHabits, todayData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask }) {
+const TodayView = memo(function TodayView({ identities, allHabits, todayData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask, editTask, setPriority }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
 
@@ -1644,10 +1835,12 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, to
       <TopTasksCard
         tasks={dailyTasks[selectedDate] || []}
         dateKey={selectedDate}
-        isToday={selectedDate === todayKey}
+        isToday={selectedDate >= todayKey}
         onAdd={addTask}
         onToggle={toggleTask}
         onDelete={deleteTask}
+        onEdit={editTask}
+        onPriority={setPriority}
       />
 
       {/* Daily quote banner */}
@@ -1850,7 +2043,7 @@ const WeekView = memo(function WeekView({ data, todayKey, identities }) {
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(mon);
       d.setDate(mon.getDate() + i);
-      return d.toISOString().slice(0, 10);
+      return dateToKey(d);
     });
   }, [weekOffset]);
 
