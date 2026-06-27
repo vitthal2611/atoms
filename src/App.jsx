@@ -511,7 +511,6 @@ export default function App() {
   const [isOffline,    setIsOffline]   = useState(() => !navigator.onLine);
   const [undoDelete,   setUndoDelete]  = useState(null);
   const [dailyTasks,   setDailyTasks]  = useState({});       // { [dateKey]: [{id, text, done}] }
-  const [lastRollover, setLastRollover] = useState("");       // dateKey of last task-rollover run
 
   // Modal states
   const [modal,    setModal]    = useState(null);
@@ -547,7 +546,6 @@ export default function App() {
   const undoTimerRef        = useRef(null);
   const dtTimer             = useRef(null);
   const isFirstDt           = useRef(true);
-  const lastRolloverRef     = useRef("");     // mirrors lastRollover state for stable callbacks
 
   // ── Auth listener ──
   useEffect(() => {
@@ -579,9 +577,6 @@ export default function App() {
             const raw = dtSnap.data().data || {};
             const pruned = Object.fromEntries(Object.entries(raw).filter(([k]) => k >= cutoffKey));
             setDailyTasks(pruned);
-            const lr = dtSnap.data().lastRollover || "";
-            setLastRollover(lr);
-            lastRolloverRef.current = lr;
           }
         } catch (err) {
           console.error("Failed to load data from Firestore:", err);
@@ -623,11 +618,11 @@ export default function App() {
     dtTimer.current = setTimeout(() => {
       setSyncing(true);
       setSaveError(false);
-      setDoc(dailyTasksRef(user.uid), { data: dailyTasks, lastRollover })
+      setDoc(dailyTasksRef(user.uid), { data: dailyTasks })
         .catch(err => { console.error("Daily tasks save failed:", err); setSaveError(true); })
         .finally(() => setSyncing(false));
     }, 800);
-  }, [dailyTasks, lastRollover, user]);
+  }, [dailyTasks, user]);
 
   // ── Google sign-in ──
   const signIn = async () => {
@@ -757,25 +752,29 @@ export default function App() {
     }));
   }, []);
 
-  // ── Task rollover — keep ref in sync so performRollover stays stable (no stale closure) ──
-  useEffect(() => { lastRolloverRef.current = lastRollover; }, [lastRollover]);
-
-  // Carry uncompleted tasks from yesterday → today (max 3 total).
-  // Uses a ref so this callback never needs to be recreated.
+  // ── Task rollover — runs on every refresh/mount and at midnight.
+  // Idempotent via `carriedFrom`: each carried task records the source ID,
+  // so the same task is never duplicated even across multiple refreshes.
   const performRollover = useCallback(() => {
     const today = getTodayKey();
-    if (lastRolloverRef.current === today) return;   // already ran today
     const d = new Date(); d.setDate(d.getDate() - 1);
     const yesterday = dateToKey(d);
     setDailyTasks(prev => {
-      const undone = (prev[yesterday] || []).filter(t => !t.done);
+      const undone = (prev[yesterday] || []).filter(t => !t.done && !t.carried);
       if (!undone.length) return prev;
       const todayTasks = prev[today] || [];
-      const carried = undone.map(t => ({ ...t, id: uid(), done: false }));
-      return { ...prev, [today]: [...todayTasks, ...carried] };
+      // IDs already carried from yesterday → today
+      const alreadyCarried = new Set(todayTasks.map(t => t.carriedFrom).filter(Boolean));
+      const toCarry = undone.filter(t => !alreadyCarried.has(t.id));
+      if (!toCarry.length) return prev;
+      const carriedIds = new Set(toCarry.map(t => t.id));
+      // Mark source tasks in yesterday as carried so they hide from that day's view
+      const updatedYesterday = (prev[yesterday] || []).map(t =>
+        carriedIds.has(t.id) ? { ...t, carried: true } : t
+      );
+      const newToday = [...todayTasks, ...toCarry.map(t => ({ ...t, id: uid(), done: false, carriedFrom: t.id }))];
+      return { ...prev, [yesterday]: updatedYesterday, [today]: newToday };
     });
-    setLastRollover(today);
-    lastRolloverRef.current = today;
   }, []);
 
   // Fire rollover at midnight (12 AM) every day; also runs on login/load in case it's overdue.
@@ -785,7 +784,7 @@ export default function App() {
       const now = new Date();
       return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) - now;
     };
-    performRollover(); // idempotent — skips if lastRolloverRef already equals today
+    performRollover(); // safe on every mount — carriedFrom dedup prevents duplicates
     let t = setTimeout(function tick() {
       performRollover();
       t = setTimeout(tick, msToMidnight());
@@ -1542,6 +1541,16 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
     if (inputVisible && inputRef.current) inputRef.current.focus();
   }, [inputVisible]);
 
+  // Reset expand + input state when navigating to a different date
+  useEffect(() => {
+    setExpanded(false);
+    setInputVisible(false);
+    setInputVal("");
+    setInputPri("M");
+    setEditingId(null);
+    setEditVal("");
+  }, [dateKey]);
+
   useEffect(() => {
     if (editingId && editRef.current) editRef.current.focus();
   }, [editingId]);
@@ -1564,13 +1573,15 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
     setEditingId(null); setEditVal("");
   };
 
+  // Hide tasks that were carried forward to the next day (shown there instead)
   // Sort by priority H→M→L, show top 3 or all when expanded
-  const sorted  = [...tasks].sort((a, b) =>
+  const activeTasks = tasks.filter(t => !t.carried);
+  const sorted  = [...activeTasks].sort((a, b) =>
     (PRIORITY_ORDER[a.priority || "M"] ?? 1) - (PRIORITY_ORDER[b.priority || "M"] ?? 1)
   );
   const visible = expanded ? sorted : sorted.slice(0, 3);
-  const total   = tasks.length;
-  const doneCnt = tasks.filter(t => t.done).length;
+  const total   = activeTasks.length;
+  const doneCnt = activeTasks.filter(t => t.done).length;
   const allDone = total > 0 && doneCnt === total;
 
   const priStyle = (p) => PRIORITY_STYLE[p] || PRIORITY_STYLE.M;
