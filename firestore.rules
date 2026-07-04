@@ -1,0 +1,18 @@
+rules_version = '2';
+
+// Data model: users/{uid}/atomicHabits/{identities|checkIns|dailyTasks}
+// Every document a user reads or writes must live under their own uid —
+// no cross-user access, and no access at all while signed out.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{uid}/atomicHabits/{docId} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Default-deny everything else.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

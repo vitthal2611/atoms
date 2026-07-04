@@ -10,8 +10,8 @@ npm run build
 echo "🔐 Logging in to Firebase (browser will open)..."
 npx firebase-tools login
 
-echo "🚀 Deploying to Firebase Hosting..."
-npx firebase-tools deploy --only hosting
+echo "🚀 Deploying Firestore rules + Hosting..."
+npx firebase-tools deploy --only firestore:rules,hosting
 
 echo ""
 echo "✅ Done! Your app is live at:"
