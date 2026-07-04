@@ -1349,14 +1349,25 @@ const HabitCard = memo(function HabitCard({ habit, identity, checked, streak, to
         {habit.trigger && (
           <div style={{
             margin: "-12px -14px 14px -14px",
-            borderLeft: `4px solid ${T.accent}`,
-            background: checked ? T.accent + "18" : T.accent + "0c",
-            padding: "9px 14px 9px 13px",
+            borderLeft: `4px solid ${identity.color}`,
+            background: checked ? identity.color + "22" : identity.color + "16",
+            boxShadow: checked ? "none" : `inset 0 0 0 1px ${identity.color}20`,
+            padding: "9px 14px 9px 11px",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
             transition: "background 0.25s",
           }}>
+            <span aria-hidden="true" style={{
+              flexShrink: 0, width: 19, height: 19, borderRadius: "50%",
+              background: identity.color, color: "#fff",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 11, lineHeight: 1,
+            }}>⚡</span>
             <div style={{
-              fontSize: 13, fontWeight: 600,
-              color: checked ? T.primary : T.text2,
+              fontSize: 13, fontWeight: 700,
+              color: checked ? identity.color : T.text,
+              letterSpacing: "-0.01em",
               lineHeight: 1.35,
               transition: "color 0.2s",
             }}>
