@@ -1014,14 +1014,25 @@ export default function App() {
         </div>
       )}
 
-      {/* ── Celebration Toast ── */}
+      {/* ── Celebration Toast — dead center of the screen; shifts up a touch if the vote toast is also showing ── */}
       {celebrationHabit && (
         <div style={{
-          ...S.toast,
-          top: saveError
-            ? "calc(env(safe-area-inset-top,0px) + 54px)"
-            : "calc(env(safe-area-inset-top,0px) + 12px)",
-        }} className="toast-in" role="alert" aria-live="assertive">
+          position: "fixed",
+          top: identityVote ? "calc(50% - 48px)" : "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          width: "calc(100% - 48px)",
+          maxWidth: 360,
+          background: T.surface,
+          border: `2px solid ${T.gold}`,
+          borderRadius: 18,
+          padding: "16px 20px",
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+          zIndex: 999,
+          boxShadow: "0 12px 40px #00000030",
+        }} className="toast-in-center" role="alert" aria-live="assertive">
           <span style={{fontSize:28}} aria-hidden="true">{celebrationHabit.milestone.emoji}</span>
           <div>
             <div style={{fontWeight:700,fontSize:14,color:T.text}}>{celebrationHabit.milestone.label}!</div>
@@ -1030,13 +1041,25 @@ export default function App() {
         </div>
       )}
 
-      {/* ── Identity Vote Toast — fires on every completion, stacks below the milestone toast if both fire ── */}
+      {/* ── Identity Vote Toast — dead center of the screen; shifts down a touch if the milestone toast is also showing ── */}
       {identityVote && (
         <div style={{
-          ...S.toast,
-          top: `calc(env(safe-area-inset-top,0px) + ${12 + (saveError ? 42 : 0) + (celebrationHabit ? 88 : 0)}px)`,
+          position: "fixed",
+          top: celebrationHabit ? "calc(50% + 48px)" : "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          width: "calc(100% - 48px)",
+          maxWidth: 360,
+          background: T.surface,
           border: `2px solid ${identityVote.color}`,
-        }} className="toast-in" role="status" aria-live="polite">
+          borderRadius: 18,
+          padding: "16px 20px",
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+          zIndex: 999,
+          boxShadow: "0 12px 40px #00000030",
+        }} className="toast-in-center" role="status" aria-live="polite">
           <span style={{fontSize:24}} aria-hidden="true">{identityVote.icon}</span>
           <div>
             <div style={{fontWeight:700,fontSize:14,color:T.text}}>Vote cast <span aria-hidden="true">🗳️</span></div>
@@ -2366,10 +2389,14 @@ html, body, #root { height: 100%; }
 .card-leaving { animation: fadeOut 0.3s ease forwards; }
 .sheet-in { animation: slideUp 0.28s cubic-bezier(0.32,0.72,0,1) both; }
 .toast-in { animation: fadeSlideDown 0.3s cubic-bezier(0.32,0.72,0,1) both; }
+.toast-in-up { animation: fadeSlideUp 0.3s cubic-bezier(0.32,0.72,0,1) both; }
+.toast-in-center { animation: fadeScaleIn 0.25s cubic-bezier(0.34,1.56,0.64,1) both; }
 .pop { animation: pop 0.35s cubic-bezier(0.34,1.56,0.64,1) both; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pop { 0%,100% { transform: scale(1); } 50% { transform: scale(1.18); } }
 @keyframes fadeOut { to { opacity: 0; transform: scale(0.95); } }
 @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 @keyframes fadeSlideDown { from { transform: translateX(-50%) translateY(-10px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
+@keyframes fadeSlideUp { from { transform: translateX(-50%) translateY(10px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
+@keyframes fadeScaleIn { from { transform: translate(-50%, -50%) scale(0.9); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
 `;
