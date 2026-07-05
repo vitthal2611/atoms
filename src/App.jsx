@@ -504,6 +504,7 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
   const [justChecked,  setJustChecked]  = useState(null);
   const [celebrationHabit, setCelebrationHabit] = useState(null);
+  const [identityVote, setIdentityVote] = useState(null); // { label, color, icon } — shown after each non-milestone completion
   const [syncing,      setSyncing]     = useState(false);
   const [saveError,    setSaveError]   = useState(false);
   const [signInError,  setSignInError] = useState(null);
@@ -543,6 +544,7 @@ export default function App() {
   // ── Timers stored in refs so they can be cleared on re-fire or unmount ──
   const celebrationTimerRef = useRef(null);
   const justCheckedTimerRef = useRef(null);
+  const identityVoteTimerRef = useRef(null);
   const undoTimerRef        = useRef(null);
   const dtTimer             = useRef(null);
   const isFirstDt           = useRef(true);
@@ -669,7 +671,7 @@ export default function App() {
   useEffect(() => { streakCacheRef.current = {}; }, [data]);
 
   // ── Toggle — must be before early returns ──
-  const toggle = useCallback((habitId, frequency) => {
+  const toggle = useCallback((habitId, frequency, identity) => {
     let wasChecked;
     setData(prev=>{
       const day=prev[selectedDate]||{};
@@ -686,12 +688,20 @@ export default function App() {
       setCelebrationHabit({habitId,milestone});
       celebrationTimerRef.current = setTimeout(()=>setCelebrationHabit(null),3500);
     }
+    if (!wasChecked && identity) {
+      // Every check-in is a vote for the identity — surface that every time,
+      // even alongside a milestone toast (they're stacked, not exclusive).
+      clearTimeout(identityVoteTimerRef.current);
+      setIdentityVote({ label: identity.label, color: identity.color, icon: identity.icon });
+      identityVoteTimerRef.current = setTimeout(()=>setIdentityVote(null), 1800);
+    }
   }, [selectedDate, getStreakForHabit]);
 
   // Cleanup all timers on unmount
   useEffect(() => () => {
     clearTimeout(celebrationTimerRef.current);
     clearTimeout(justCheckedTimerRef.current);
+    clearTimeout(identityVoteTimerRef.current);
     clearTimeout(undoTimerRef.current);
   }, []);
 
@@ -727,7 +737,14 @@ export default function App() {
   const toggleTask = useCallback((dateKey, taskId) => {
     setDailyTasks(prev => ({
       ...prev,
-      [dateKey]: (prev[dateKey] || []).map(t => t.id === taskId ? { ...t, done: !t.done } : t),
+      [dateKey]: (prev[dateKey] || []).map(t => {
+        if (t.id !== taskId) return t;
+        const nowDone = !t.done;
+        // Checking a task off demotes it to Low priority so it settles to the
+        // bottom of the sort. Un-checking leaves priority as-is (we don't
+        // remember what it was before, so there's nothing sensible to restore).
+        return { ...t, done: nowDone, priority: nowDone ? "L" : t.priority };
+      }),
     }));
   }, []);
 
@@ -1009,6 +1026,21 @@ export default function App() {
           <div>
             <div style={{fontWeight:700,fontSize:14,color:T.text}}>{celebrationHabit.milestone.label}!</div>
             <div style={{fontSize:12,color:T.muted}}>{celebrationHabit.milestone.days}-day streak achieved 🎉</div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Identity Vote Toast — fires on every completion, stacks below the milestone toast if both fire ── */}
+      {identityVote && (
+        <div style={{
+          ...S.toast,
+          top: `calc(env(safe-area-inset-top,0px) + ${12 + (saveError ? 42 : 0) + (celebrationHabit ? 88 : 0)}px)`,
+          border: `2px solid ${identityVote.color}`,
+        }} className="toast-in" role="status" aria-live="polite">
+          <span style={{fontSize:24}} aria-hidden="true">{identityVote.icon}</span>
+          <div>
+            <div style={{fontWeight:700,fontSize:14,color:T.text}}>Vote cast <span aria-hidden="true">🗳️</span></div>
+            <div style={{fontSize:12,color:identityVote.color,fontWeight:600}}>for becoming {shortLabel(identityVote.label)}</div>
           </div>
         </div>
       )}
@@ -1334,7 +1366,7 @@ const HabitCard = memo(function HabitCard({ habit, identity, checked, streak, to
       {/* ── Tap target ── */}
       <button
         className="habit-toggle"
-        onClick={() => toggle(habit.id, habit.frequency)}
+        onClick={() => toggle(habit.id, habit.frequency, identity)}
         aria-pressed={checked}
         aria-label={checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
         style={{
@@ -1957,7 +1989,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, to
                 return (
                   <button
                     key={habit.id}
-                    onClick={() => toggle(habit.id, habit.frequency)}
+                    onClick={() => toggle(habit.id, habit.frequency, identity)}
                     aria-pressed={true}
                     aria-label={`Undo: ${habit.label}`}
                     style={{
