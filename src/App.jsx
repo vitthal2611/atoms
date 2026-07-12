@@ -1586,16 +1586,21 @@ function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
 // Eisenhower matrix quadrants. `quadrant` on a task is one of these four keys.
 // Colors are drawn from the app's Ocean Depth palette (T), not arbitrary hues.
 const QUADRANTS = [
-  { key: "do",        label: "Do first",  sub: "Urgent and important",         accent: T.red,     dark: "#791F1F", bg: "#FEE2E2" },
-  { key: "schedule",  label: "Schedule",  sub: "Important, not urgent",        accent: T.primary, dark: "#0C447C", bg: "#DBEAFE" },
-  { key: "delegate",  label: "Delegate",  sub: "Urgent, not important",        accent: T.gold,    dark: "#633806", bg: "#FEF3C7" },
-  { key: "eliminate", label: "Eliminate", sub: "Neither urgent nor important", accent: T.border2, dark: T.muted,   bg: T.surf2   },
+  { key: "do",        short: "Do",   label: "Do first",  sub: "Urgent and important",         accent: T.red,     dark: "#791F1F", bg: "#FEE2E2" },
+  { key: "schedule",  short: "Sch",  label: "Schedule",  sub: "Important, not urgent",        accent: T.primary, dark: "#0C447C", bg: "#DBEAFE" },
+  { key: "delegate",  short: "Del",  label: "Delegate",  sub: "Urgent, not important",        accent: T.gold,    dark: "#633806", bg: "#FEF3C7" },
+  // Slate, not blue — kept visually distinct from "schedule" so the two
+  // don't get confused at a glance (both used to sit in the same blue family).
+  { key: "eliminate", short: "Elim", label: "Eliminate", sub: "Neither urgent nor important", accent: "#64748B", dark: "#334155", bg: "#E2E8F0" },
 ];
+const QUADRANT_KEYS = new Set(QUADRANTS.map(q => q.key));
 // Back-compat: tasks created before the matrix redesign have a legacy
 // `priority: "H"|"M"|"L"` field instead of `quadrant`. Map them over so old
 // data still lands somewhere sensible instead of collapsing into one bucket.
+// Also guards against an unrecognized/corrupted `quadrant` value silently
+// making a task disappear from all four buckets.
 function taskQuadrant(t) {
-  if (t.quadrant) return t.quadrant;
+  if (t.quadrant && QUADRANT_KEYS.has(t.quadrant)) return t.quadrant;
   if (t.priority === "H") return "do";
   if (t.priority === "L") return "eliminate";
   return "schedule";
@@ -1668,8 +1673,8 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
         </span>
       </div>
 
-      {/* 2x2 quadrant grid */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, padding:10 }}>
+      {/* 2x2 quadrant grid — alignItems:start so a tall quadrant doesn't stretch its shorter row-mate */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, padding:10, alignItems:"start" }}>
         {QUADRANTS.map(q => {
           const qTasks = activeTasks.filter(t => taskQuadrant(t) === q.key);
           return (
@@ -1745,9 +1750,9 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
                       )}
                     </div>
 
-                    {/* Reassign quadrant — small dots, today only */}
+                    {/* Reassign quadrant — 24px tap targets (visual dot is smaller, centered inside) */}
                     {isToday && !isEditing && (
-                      <div style={{ display:"flex", gap:4, paddingLeft:22 }}>
+                      <div style={{ display:"flex", gap:2, paddingLeft:14 }}>
                         {QUADRANTS.map(opt => {
                           const active = taskQuadrant(task) === opt.key;
                           return (
@@ -1758,12 +1763,18 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
                               aria-label={`Move to ${opt.label}`}
                               title={opt.label}
                               style={{
-                                width:9, height:9, borderRadius:"50%", padding:0, cursor:"pointer",
-                                border: active ? `1.5px solid ${opt.dark}` : `1.5px solid ${T.border}`,
-                                background: opt.accent, opacity: active ? 1 : 0.35,
-                                WebkitTapHighlightColor:"transparent", transition:"opacity 0.12s",
+                                width:24, height:24, padding:0, border:"none", background:"transparent",
+                                cursor:"pointer", WebkitTapHighlightColor:"transparent",
+                                display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
                               }}
-                            />
+                            >
+                              <span aria-hidden="true" style={{
+                                width: active ? 12 : 9, height: active ? 12 : 9, borderRadius:"50%",
+                                border: active ? `1.5px solid ${opt.dark}` : `1.5px solid ${T.border}`,
+                                background: opt.accent, opacity: active ? 1 : 0.4,
+                                display:"block", transition:"all 0.12s",
+                              }} />
+                            </button>
                           );
                         })}
                       </div>
@@ -1779,35 +1790,42 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
       {/* Add row / inline input */}
       {isToday && (
         inputVisible ? (
-          <div style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 12px", background:T.bg, flexWrap:"wrap", borderTop:`1px solid ${T.surf2}` }}>
-            <input
-              ref={inputRef}
-              value={inputVal}
-              onChange={e => setInputVal(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === "Enter")  handleAdd();
-                if (e.key === "Escape") { setInputVisible(false); setInputVal(""); setInputQuad("schedule"); }
-              }}
-              placeholder="What needs to get done?"
-              maxLength={80}
-              aria-label="New task text"
-              style={{ flex:1, minWidth:120, border:`1px solid ${T.accent}`, borderRadius:8, padding:"7px 10px", fontSize:13, background:"#fff", color:T.text, outline:"none", fontFamily:"inherit" }}
-            />
-            {/* Quadrant picker for new task */}
-            {QUADRANTS.map(q => (
-              <button key={q.key} onClick={() => setInputQuad(q.key)} aria-pressed={inputQuad === q.key}
-                style={{
-                  fontSize:10, fontWeight:700, padding:"5px 8px", borderRadius:10, border: inputQuad === q.key ? `2px solid ${q.dark}` : "2px solid transparent",
-                  background: q.bg, color: q.dark, cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"border 0.1s",
+          <div style={{ display:"flex", flexDirection:"column", gap:6, padding:"8px 12px", background:T.bg, borderTop:`1px solid ${T.surf2}` }}>
+            {/* Row 1: text + Add — never competes with the quadrant picker for width */}
+            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+              <input
+                ref={inputRef}
+                value={inputVal}
+                onChange={e => setInputVal(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter")  handleAdd();
+                  if (e.key === "Escape") { setInputVisible(false); setInputVal(""); setInputQuad("schedule"); }
                 }}
-              >{q.label}</button>
-            ))}
-            <button
-              onClick={handleAdd}
-              style={{ background:T.primary, color:"#fff", border:"none", borderRadius:8, padding:"7px 14px", fontSize:12, fontWeight:700, cursor:"pointer", flexShrink:0, WebkitTapHighlightColor:"transparent" }}
-            >
-              Add
-            </button>
+                placeholder="What needs to get done?"
+                maxLength={80}
+                aria-label="New task text"
+                style={{ flex:1, minWidth:0, border:`1px solid ${T.accent}`, borderRadius:8, padding:"7px 10px", fontSize:13, background:"#fff", color:T.text, outline:"none", fontFamily:"inherit" }}
+              />
+              <button
+                onClick={handleAdd}
+                style={{ background:T.primary, color:"#fff", border:"none", borderRadius:8, padding:"7px 14px", fontSize:12, fontWeight:700, cursor:"pointer", flexShrink:0, WebkitTapHighlightColor:"transparent" }}
+              >
+                Add
+              </button>
+            </div>
+            {/* Row 2: quadrant picker — equal-width flex items, short labels so nothing wraps */}
+            <div style={{ display:"flex", gap:4 }}>
+              {QUADRANTS.map(q => (
+                <button key={q.key} onClick={() => setInputQuad(q.key)} aria-pressed={inputQuad === q.key}
+                  aria-label={q.label} title={q.label}
+                  style={{
+                    flex:1, fontSize:10, fontWeight:700, padding:"6px 2px", borderRadius:9,
+                    border: inputQuad === q.key ? `2px solid ${q.dark}` : "2px solid transparent",
+                    background: q.bg, color: q.dark, cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"border 0.1s",
+                  }}
+                >{q.short}</button>
+              ))}
+            </div>
           </div>
         ) : (
           <button
