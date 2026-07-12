@@ -1594,6 +1594,7 @@ const QUADRANTS = [
   { key: "eliminate", short: "Elim", label: "Eliminate", sub: "Neither urgent nor important", accent: "#64748B", dark: "#334155", bg: "#E2E8F0" },
 ];
 const QUADRANT_KEYS = new Set(QUADRANTS.map(q => q.key));
+const quadrantOf = (key) => QUADRANTS.find(q => q.key === key) || QUADRANTS[1];
 // Back-compat: tasks created before the matrix redesign have a legacy
 // `priority: "H"|"M"|"L"` field instead of `quadrant`. Map them over so old
 // data still lands somewhere sensible instead of collapsing into one bucket.
@@ -1612,6 +1613,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
   const [inputQuad,    setInputQuad]    = useState("schedule");
   const [editingId,    setEditingId]    = useState(null);
   const [editVal,      setEditVal]      = useState("");
+  const [completedOpen, setCompletedOpen] = useState(false);
   const inputRef = useRef(null);
   const editRef  = useRef(null);
 
@@ -1626,6 +1628,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
     setInputQuad("schedule");
     setEditingId(null);
     setEditVal("");
+    setCompletedOpen(false);
   }, [dateKey]);
 
   useEffect(() => {
@@ -1676,7 +1679,9 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
       {/* 2x2 quadrant grid — alignItems:start so a tall quadrant doesn't stretch its shorter row-mate */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, padding:10, alignItems:"start" }}>
         {QUADRANTS.map(q => {
-          const qTasks = activeTasks.filter(t => taskQuadrant(t) === q.key);
+          // Done tasks move out of the quadrant into the Completed strip below,
+          // so the grid only ever shows what's still open.
+          const qTasks = activeTasks.filter(t => taskQuadrant(t) === q.key && !t.done);
           return (
             <div key={q.key} style={{ background:T.bg, borderRadius:12, borderLeft:`3px solid ${q.accent}`, padding:"10px 10px 8px" }}>
               <div style={{ fontSize:11, fontWeight:700, color:q.dark, marginBottom:1 }}>{q.label}</div>
@@ -1786,6 +1791,57 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
           );
         })}
       </div>
+
+      {/* Completed strip — collapsed by default, tap a row to send it back to its quadrant */}
+      {(() => {
+        const completedTasks = activeTasks.filter(t => t.done);
+        if (completedTasks.length === 0) return null;
+        return (
+          <div style={{ borderTop:`1px solid ${T.surf2}`, padding:"8px 10px" }}>
+            <button
+              onClick={() => setCompletedOpen(o => !o)}
+              aria-expanded={completedOpen}
+              style={{
+                display:"flex", alignItems:"center", gap:8, width:"100%",
+                background:T.primary+"0e", border:"none", borderRadius:10, padding:"7px 10px",
+                cursor:"pointer", WebkitTapHighlightColor:"transparent",
+              }}
+            >
+              <div aria-hidden="true" style={{ width:18, height:18, borderRadius:"50%", background:T.primary, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <span style={{ fontSize:10, color:"#fff", fontWeight:900, lineHeight:1 }}>✓</span>
+              </div>
+              <span style={{ flex:1, textAlign:"left", fontSize:12, fontWeight:500, color:T.primary }}>
+                {completedTasks.length} completed
+              </span>
+              <span aria-hidden="true" style={{ fontSize:10, color:T.primary, transition:"transform 0.2s", display:"inline-block", transform: completedOpen ? "rotate(180deg)" : "none" }}>▼</span>
+            </button>
+
+            {completedOpen && (
+              <div style={{ display:"flex", flexDirection:"column", gap:6, padding:"8px 4px 2px" }}>
+                {completedTasks.map(task => {
+                  const q = quadrantOf(taskQuadrant(task));
+                  return (
+                    <button
+                      key={task.id}
+                      onClick={() => onToggle(dateKey, task.id)}
+                      aria-label={`Uncheck: ${task.text}`}
+                      style={{
+                        display:"flex", alignItems:"center", gap:8, background:"transparent", border:"none",
+                        padding:"2px 0", cursor:"pointer", WebkitTapHighlightColor:"transparent", textAlign:"left",
+                      }}
+                    >
+                      <span aria-hidden="true" style={{ width:10, height:10, borderRadius:"50%", background:q.accent, flexShrink:0 }} />
+                      <span style={{ fontSize:12, color:T.muted, textDecoration:"line-through", textDecorationColor:T.muted, lineHeight:1.3 }}>
+                        {task.text}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Add row / inline input */}
       {isToday && (
