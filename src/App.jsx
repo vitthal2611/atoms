@@ -7,7 +7,7 @@ import { getMessaging, getToken as getFcmToken, isSupported as isMessagingSuppor
 // Generate in Firebase Console → Project Settings → Cloud Messaging →
 // Web Push certificates. Required for closed-app push; local reminders
 // still work without it, just less reliably on mobile.
-const VAPID_KEY = "PASTE_YOUR_VAPID_KEY_HERE";
+const VAPID_KEY = "4oTFQuXzR4Rl4HkbPR-lihi2QOlWsix2wzLP829_KbM";
 
 // ─── FIREBASE ────────────────────────────────────────────────────────────────
 // Config is read from .env (VITE_ prefix exposes vars to the browser bundle).
