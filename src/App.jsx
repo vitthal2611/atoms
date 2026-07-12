@@ -21,6 +21,9 @@ const _auth  = getAuth(_fbApp);
 function identitiesRef(uid) { return doc(_db, "users", uid, "atomicHabits", "identities"); }
 function checkInsRef(uid)    { return doc(_db, "users", uid, "atomicHabits", "checkIns"); }
 function dailyTasksRef(uid)  { return doc(_db, "users", uid, "atomicHabits", "dailyTasks"); }
+function settingsRef(uid)    { return doc(_db, "users", uid, "atomicHabits", "settings"); }
+
+const DEFAULT_SETTINGS = { reminderEnabled: false, reminderTime: "09:00" };
 
 // Detect missing env vars early — surfaces a helpful screen instead of cryptic Firebase errors
 const _envMissing = Object.entries(_fbConfig).filter(([, v]) => !v).map(([k]) => k);
@@ -512,6 +515,10 @@ export default function App() {
   const [isOffline,    setIsOffline]   = useState(() => !navigator.onLine);
   const [undoDelete,   setUndoDelete]  = useState(null);
   const [dailyTasks,   setDailyTasks]  = useState({});       // { [dateKey]: [{id, text, done}] }
+  const [settings,     setSettings]    = useState(DEFAULT_SETTINGS);
+  const [notifPermission, setNotifPermission] = useState(() =>
+    typeof Notification !== "undefined" ? Notification.permission : "unsupported"
+  );
 
   // Modal states
   const [modal,    setModal]    = useState(null);
@@ -548,6 +555,9 @@ export default function App() {
   const undoTimerRef        = useRef(null);
   const dtTimer             = useRef(null);
   const isFirstDt           = useRef(true);
+  const settingsTimer       = useRef(null);
+  const isFirstSettings     = useRef(true);
+  const reminderTimerRef    = useRef(null);
 
   // ── Auth listener ──
   useEffect(() => {
@@ -555,15 +565,17 @@ export default function App() {
       isFirstId.current = true;
       isFirstCi.current = true;
       isFirstDt.current = true;
+      isFirstSettings.current = true;
       streakCacheRef.current = {};
       setUser(u);
       if (u) {
         setDataLoading(true);
         try {
-          const [idSnap, ciSnap, dtSnap] = await Promise.all([
+          const [idSnap, ciSnap, dtSnap, settingsSnap] = await Promise.all([
             getDoc(identitiesRef(u.uid)),
             getDoc(checkInsRef(u.uid)),
             getDoc(dailyTasksRef(u.uid)),
+            getDoc(settingsRef(u.uid)),
           ]);
           if (idSnap.exists()) setIdentities(idSnap.data().data);
           // Prune entries older than 366 days to prevent Firestore 1MB doc limit
@@ -579,6 +591,9 @@ export default function App() {
             const raw = dtSnap.data().data || {};
             const pruned = Object.fromEntries(Object.entries(raw).filter(([k]) => k >= cutoffKey));
             setDailyTasks(pruned);
+          }
+          if (settingsSnap.exists()) {
+            setSettings({ ...DEFAULT_SETTINGS, ...settingsSnap.data().data });
           }
         } catch (err) {
           console.error("Failed to load data from Firestore:", err);
@@ -625,6 +640,78 @@ export default function App() {
         .finally(() => setSyncing(false));
     }, 800);
   }, [dailyTasks, user]);
+
+  useEffect(() => {
+    if (!user || isFirstSettings.current) { isFirstSettings.current = false; return; }
+    clearTimeout(settingsTimer.current);
+    settingsTimer.current = setTimeout(() => {
+      setSyncing(true);
+      setSaveError(false);
+      setDoc(settingsRef(user.uid), { data: settings })
+        .catch(err => { console.error("Settings save failed:", err); setSaveError(true); })
+        .finally(() => setSyncing(false));
+    }, 800);
+  }, [settings, user]);
+
+  // ── Daily reminder notification ──────────────────────────────────────────
+  // Client-side scheduling only: fires while the app has been opened that
+  // browser session (setTimeout survives background tabs on most platforms,
+  // but NOT a fully closed browser). True closed-browser push would need
+  // Firebase Cloud Messaging + a server-side scheduled trigger — a bigger,
+  // separate lift. This is the deployable-today version.
+  const identitiesLiveRef = useRef(identities);
+  const dataLiveRef       = useRef(data);
+  useEffect(() => { identitiesLiveRef.current = identities; }, [identities]);
+  useEffect(() => { dataLiveRef.current = data; }, [data]);
+
+  const requestNotifPermission = useCallback(async () => {
+    if (typeof Notification === "undefined") return "unsupported";
+    const perm = await Notification.requestPermission();
+    setNotifPermission(perm);
+    return perm;
+  }, []);
+
+  const setReminderEnabled = useCallback((enabled) => {
+    setSettings(s => ({ ...s, reminderEnabled: enabled }));
+  }, []);
+  const setReminderTime = useCallback((time) => {
+    setSettings(s => ({ ...s, reminderTime: time }));
+  }, []);
+
+  const fireReminder = useCallback(() => {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    const key = getTodayKey();
+    const pending = identitiesLiveRef.current
+      .flatMap(i => i.habits)
+      .filter(h => isScheduledOn(h.frequency, key) && !(dataLiveRef.current[key] || {})[h.id])
+      .length;
+    const body = pending > 0
+      ? `${pending} habit${pending === 1 ? "" : "s"} waiting — every check-in is a vote for who you're becoming.`
+      : "Nothing left today — nice work. See you tomorrow.";
+    const payload = { body, icon: "/icon-192.png", badge: "/icon-192.png", tag: "daily-reminder" };
+    navigator.serviceWorker?.getRegistration()
+      .then(reg => { if (reg) reg.showNotification("Atomic Habits", payload); else new Notification("Atomic Habits", payload); })
+      .catch(() => new Notification("Atomic Habits", payload));
+  }, []);
+
+  useEffect(() => {
+    clearTimeout(reminderTimerRef.current);
+    if (!settings.reminderEnabled || notifPermission !== "granted" || !settings.reminderTime) return;
+
+    const scheduleNext = () => {
+      const [h, m] = settings.reminderTime.split(":").map(Number);
+      const now = new Date();
+      const next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
+      if (next <= now) next.setDate(next.getDate() + 1);
+      reminderTimerRef.current = setTimeout(() => {
+        fireReminder();
+        scheduleNext(); // re-arm for the following day, while the tab stays open
+      }, next - now);
+    };
+    scheduleNext();
+
+    return () => clearTimeout(reminderTimerRef.current);
+  }, [settings.reminderEnabled, settings.reminderTime, notifPermission, fireReminder]);
 
   // ── Google sign-in ──
   const signIn = async () => {
@@ -703,6 +790,7 @@ export default function App() {
     clearTimeout(justCheckedTimerRef.current);
     clearTimeout(identityVoteTimerRef.current);
     clearTimeout(undoTimerRef.current);
+    clearTimeout(reminderTimerRef.current);
   }, []);
 
   // ── Midnight key refresh — keeps todayKey accurate if app runs overnight ──
@@ -1216,6 +1304,11 @@ export default function App() {
             onAddIdentity={openAddIdentity}
             onEditIdentity={openEditIdentity}
             onDeleteIdentity={openDeleteIdentity}
+            settings={settings}
+            notifPermission={notifPermission}
+            onRequestNotifPermission={requestNotifPermission}
+            onSetReminderEnabled={setReminderEnabled}
+            onSetReminderTime={setReminderTime}
           />
         )}
       </main>
@@ -1271,10 +1364,90 @@ export default function App() {
   );
 }
 
+// ─── REMINDER CARD ────────────────────────────────────────────────────────────
+function ReminderCard({ settings, notifPermission, onRequestPermission, onSetEnabled, onSetTime }) {
+  const enabled     = settings?.reminderEnabled ?? false;
+  const time        = settings?.reminderTime ?? "09:00";
+  const unsupported = notifPermission === "unsupported";
+  const denied      = notifPermission === "denied";
+  const locked      = unsupported || denied;
+
+  const handleToggle = async () => {
+    if (locked) return;
+    if (!enabled) {
+      if (notifPermission !== "granted") {
+        const perm = await onRequestPermission();
+        if (perm !== "granted") return; // user declined — don't flip the switch
+      }
+      onSetEnabled(true);
+    } else {
+      onSetEnabled(false);
+    }
+  };
+
+  return (
+    <div style={{...S.card, padding:"14px 16px"}}>
+      <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+        <span style={{ fontSize:20 }} aria-hidden="true">🔔</span>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{...S.cardLabel, marginBottom:2}}>Daily Reminder</div>
+          <div style={{ fontSize:12, color:T.muted, lineHeight:1.4 }}>
+            {unsupported
+              ? "Notifications aren't supported in this browser."
+              : denied
+              ? "Blocked — enable notifications for this site in your browser settings."
+              : "A daily nudge to check in. Only fires while the app has been opened that day."}
+          </div>
+        </div>
+        <button
+          onClick={handleToggle}
+          disabled={locked}
+          aria-pressed={enabled}
+          aria-label={enabled ? "Disable daily reminder" : "Enable daily reminder"}
+          style={{
+            width:44, height:26, borderRadius:20, border:"none", flexShrink:0,
+            background: enabled ? T.primary : T.border,
+            position:"relative", cursor: locked ? "not-allowed" : "pointer",
+            opacity: locked ? 0.5 : 1,
+            WebkitTapHighlightColor:"transparent", transition:"background 0.2s",
+          }}
+        >
+          <span aria-hidden="true" style={{
+            position:"absolute", top:3, left: enabled ? 21 : 3,
+            width:20, height:20, borderRadius:"50%", background:"#fff",
+            boxShadow:"0 1px 3px #00000030", transition:"left 0.2s",
+          }}/>
+        </button>
+      </div>
+
+      {enabled && !locked && (
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginTop:12, paddingTop:12, borderTop:`1px solid ${T.surf2}` }}>
+          <label htmlFor="reminder-time" style={{ fontSize:12, color:T.text2, fontWeight:600 }}>Remind me at</label>
+          <input
+            id="reminder-time"
+            type="time"
+            value={time}
+            onChange={e => onSetTime(e.target.value)}
+            style={{ ...S.input, width:"auto", padding:"8px 10px", fontSize:14 }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── MANAGE VIEW ──────────────────────────────────────────────────────────────
-const ManageView = memo(function ManageView({ identities, onAddHabit, onEditHabit, onDeleteHabit, onAddIdentity, onEditIdentity, onDeleteIdentity }) {
+const ManageView = memo(function ManageView({ identities, onAddHabit, onEditHabit, onDeleteHabit, onAddIdentity, onEditIdentity, onDeleteIdentity, settings, notifPermission, onRequestNotifPermission, onSetReminderEnabled, onSetReminderTime }) {
   return (
     <div style={S.content}>
+      <ReminderCard
+        settings={settings}
+        notifPermission={notifPermission}
+        onRequestPermission={onRequestNotifPermission}
+        onSetEnabled={onSetReminderEnabled}
+        onSetTime={onSetReminderTime}
+      />
+
       <div style={{...S.card,padding:"14px 16px",background:`linear-gradient(135deg,rgba(2,132,199,0.07),rgba(245,158,11,0.04))`}}>
         <div style={{...S.cardLabel,color:T.primary,marginBottom:4}}>
           <span aria-hidden="true">🗂</span> Manage Your System
