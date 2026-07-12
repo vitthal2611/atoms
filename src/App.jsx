@@ -1835,6 +1835,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
 const TodayView = memo(function TodayView({ identities, allHabits, todayData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask, editTask, setQuadrant }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
+  const [dayTab, setDayTab] = useState("habits"); // "habits" | "matrix"
 
   // Build enriched habit list with identity ref, time slot, and sort key
   const enrichedHabits  = useMemo(() =>
@@ -1858,6 +1859,11 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, to
   }, [enrichedHabits, selectedDate]);
 
   const quote = useMemo(() => getDailyQuote(), []);
+
+  const pendingTaskCount = useMemo(() =>
+    (dailyTasks[selectedDate] || []).filter(t => !t.carried && !t.done).length,
+    [dailyTasks, selectedDate]
+  );
 
   // Memoized identity legend scores — avoids recomputing isScheduledOn for all habits on every render
   const identityScores = useMemo(() =>
@@ -1895,18 +1901,59 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, to
       {/* Day Navigator */}
       <DayNavigator selectedDate={selectedDate} setSelectedDate={setSelectedDate} todayKey={todayKey} />
 
-      {/* Task matrix */}
-      <TopTasksCard
-        tasks={dailyTasks[selectedDate] || []}
-        dateKey={selectedDate}
-        isToday={selectedDate >= todayKey}
-        onAdd={addTask}
-        onToggle={toggleTask}
-        onDelete={deleteTask}
-        onEdit={editTask}
-        onQuadrant={setQuadrant}
-      />
+      {/* Habits / Matrix segmented tabs */}
+      <div style={{ display:"flex", background:T.surf2, borderRadius:12, padding:3 }} role="tablist" aria-label="Today sections">
+        {[
+          { id:"habits", icon:"🔥", label:"Habits" },
+          { id:"matrix", icon:"🎯", label:"Matrix" },
+        ].map(t => {
+          const active = dayTab === t.id;
+          return (
+            <button
+              key={t.id}
+              role="tab"
+              aria-selected={active}
+              onClick={() => setDayTab(t.id)}
+              style={{
+                flex:1, position:"relative", display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+                padding:"8px 0", borderRadius:9, border:"none", cursor:"pointer",
+                background: active ? T.surface : "transparent",
+                color: active ? T.primary : T.muted,
+                fontSize:13, fontWeight:500, fontFamily:"inherit",
+                WebkitTapHighlightColor:"transparent", transition:"background 0.15s",
+              }}
+            >
+              <span aria-hidden="true" style={{ fontSize:13 }}>{t.icon}</span>
+              {t.label}
+              {t.id === "matrix" && pendingTaskCount > 0 && (
+                <span aria-label={`${pendingTaskCount} pending tasks`} style={{
+                  fontSize:9, fontWeight:700, color:"#412402", background:T.gold,
+                  borderRadius:8, padding:"1px 5px", lineHeight:1.4,
+                }}>
+                  {pendingTaskCount}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
 
+      {/* Task matrix */}
+      {dayTab === "matrix" && (
+        <TopTasksCard
+          tasks={dailyTasks[selectedDate] || []}
+          dateKey={selectedDate}
+          isToday={selectedDate >= todayKey}
+          onAdd={addTask}
+          onToggle={toggleTask}
+          onDelete={deleteTask}
+          onEdit={editTask}
+          onQuadrant={setQuadrant}
+        />
+      )}
+
+      {dayTab === "habits" && (
+      <>
       {/* Daily quote banner */}
       <div style={{ background:`linear-gradient(135deg,rgba(2,132,199,0.09),rgba(245,158,11,0.07))`, border:`1px solid rgba(2,132,199,0.2)`, borderRadius:16, padding:"14px 16px" }}>
         <div style={{ fontSize:10,fontWeight:800,letterSpacing:"0.12em",color:T.primary,marginBottom:6,textTransform:"uppercase" }}>
@@ -2090,6 +2137,8 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, to
         <span style={S.footerQuote}>"Habits are the compound interest of self-improvement."</span>
         <span style={S.footerAuthor}>— James Clear, Atomic Habits</span>
       </div>
+      </>
+      )}
     </div>
   );
 });
