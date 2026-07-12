@@ -1614,6 +1614,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
   const [editingId,    setEditingId]    = useState(null);
   const [editVal,      setEditVal]      = useState("");
   const [completedOpen, setCompletedOpen] = useState(false);
+  const [sheetTask,    setSheetTask]    = useState(null); // task with its action sheet open
   const inputRef = useRef(null);
   const editRef  = useRef(null);
 
@@ -1629,6 +1630,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
     setEditingId(null);
     setEditVal("");
     setCompletedOpen(false);
+    setSheetTask(null);
   }, [dateKey]);
 
   useEffect(() => {
@@ -1694,8 +1696,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
               {qTasks.map(task => {
                 const isEditing = editingId === task.id;
                 return (
-                  <div key={task.id} style={{ display:"flex", flexDirection:"column", gap:4, padding:"5px 0" }}>
-                    <div style={{ display:"flex", alignItems:"flex-start", gap:6 }}>
+                  <div key={task.id} style={{ display:"flex", alignItems:"flex-start", gap:6, padding:"5px 0" }}>
                       {/* Check circle */}
                       <button
                         onClick={() => onToggle(dateKey, task.id)}
@@ -1729,61 +1730,19 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
                         />
                       ) : (
                         <span
-                          onClick={() => isToday && startEdit(task)}
-                          title={isToday ? "Click to edit" : undefined}
+                          onClick={() => isToday && setSheetTask(task)}
+                          title={isToday ? "Tap for options" : undefined}
                           style={{
                             flex:1, fontSize:12.5, lineHeight:1.35,
                             color:          task.done ? T.muted : T.text,
                             textDecoration: task.done ? "line-through" : "none",
                             textDecorationColor: T.muted,
-                            cursor: isToday ? "text" : "default",
+                            cursor: isToday ? "pointer" : "default",
                           }}
                         >
                           {task.text}
                         </span>
                       )}
-
-                      {/* Delete */}
-                      {isToday && !isEditing && (
-                        <button
-                          onClick={() => onDelete(dateKey, task.id)}
-                          aria-label={`Delete task: ${task.text}`}
-                          style={{ background:"transparent", border:"none", color:T.border2, fontSize:13, cursor:"pointer", padding:"2px", lineHeight:1, WebkitTapHighlightColor:"transparent", flexShrink:0 }}
-                        >
-                          <span aria-hidden="true">✕</span>
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Reassign quadrant — 24px tap targets (visual dot is smaller, centered inside) */}
-                    {isToday && !isEditing && (
-                      <div style={{ display:"flex", gap:2, paddingLeft:14 }}>
-                        {QUADRANTS.map(opt => {
-                          const active = taskQuadrant(task) === opt.key;
-                          return (
-                            <button
-                              key={opt.key}
-                              onClick={() => onQuadrant(dateKey, task.id, opt.key)}
-                              aria-pressed={active}
-                              aria-label={`Move to ${opt.label}`}
-                              title={opt.label}
-                              style={{
-                                width:24, height:24, padding:0, border:"none", background:"transparent",
-                                cursor:"pointer", WebkitTapHighlightColor:"transparent",
-                                display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
-                              }}
-                            >
-                              <span aria-hidden="true" style={{
-                                width: active ? 12 : 9, height: active ? 12 : 9, borderRadius:"50%",
-                                border: active ? `1.5px solid ${opt.dark}` : `1.5px solid ${T.border}`,
-                                background: opt.accent, opacity: active ? 1 : 0.4,
-                                display:"block", transition:"all 0.12s",
-                              }} />
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
                   </div>
                 );
               })}
@@ -1900,6 +1859,41 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
         <div style={{ padding:"8px 14px 10px", fontSize:11, color:T.primary, textAlign:"center", fontWeight:600 }}>
           All done — great work! 🎉
         </div>
+      )}
+
+      {/* Task action sheet — tap a task to move it, edit it, or delete it */}
+      {sheetTask && (
+        <Modal title={sheetTask.text} onClose={() => setSheetTask(null)}>
+          <div style={{ padding:"4px 20px 20px" }}>
+            <div style={S.fieldLabel}>Move to</div>
+            <div style={{ display:"flex", flexDirection:"column", gap:2, marginBottom:16 }}>
+              {QUADRANTS.filter(q => q.key !== taskQuadrant(sheetTask)).map(q => (
+                <button
+                  key={q.key}
+                  onClick={() => { onQuadrant(dateKey, sheetTask.id, q.key); setSheetTask(null); }}
+                  style={{ display:"flex", alignItems:"center", gap:10, padding:"11px 4px", background:"transparent", border:"none", cursor:"pointer", width:"100%", textAlign:"left", WebkitTapHighlightColor:"transparent" }}
+                >
+                  <span aria-hidden="true" style={{ width:12, height:12, borderRadius:"50%", background:q.accent, flexShrink:0 }} />
+                  <span style={{ fontSize:14, color:T.text }}>{q.label}</span>
+                </button>
+              ))}
+            </div>
+            <div style={{ display:"flex", gap:20, borderTop:`1px solid ${T.surf2}`, paddingTop:14 }}>
+              <button
+                onClick={() => { startEdit(sheetTask); setSheetTask(null); }}
+                style={{ background:"transparent", border:"none", color:T.primary, fontSize:13, fontWeight:600, cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent" }}
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => { onDelete(dateKey, sheetTask.id); setSheetTask(null); }}
+                style={{ background:"transparent", border:"none", color:T.red, fontSize:13, fontWeight:600, cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent" }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );
