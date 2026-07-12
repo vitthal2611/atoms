@@ -1399,10 +1399,8 @@ const HabitCard = memo(function HabitCard({ habit, identity, checked, streak, to
   return (
     <div style={{
       borderRadius: 12, marginBottom: 8,
-      background: checked ? T.surf2 : T.surface,
-      border: `1px solid ${T.border}`,
-      borderLeftWidth: 3,
-      borderLeftColor: identity.color,
+      background: checked ? identity.color + "2e" : identity.color + "14",
+      border: `1px solid ${identity.color}55`,
       transition: "all 0.2s ease",
       position: "relative",
     }}>
@@ -1452,8 +1450,8 @@ const HabitCard = memo(function HabitCard({ habit, identity, checked, streak, to
         <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%" }}>
           <div aria-hidden="true" style={{
             width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
-            border: `2px solid ${checked ? T.primary : T.border2}`,
-            background: checked ? T.primary : "transparent",
+            border: `2px solid ${identity.color}`,
+            background: checked ? identity.color : "transparent",
             display: "flex", alignItems: "center", justifyContent: "center",
             transition: "all 0.2s",
           }}>
@@ -1462,14 +1460,17 @@ const HabitCard = memo(function HabitCard({ habit, identity, checked, streak, to
 
           <div style={{
             flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, lineHeight: 1.25,
-            color: checked ? T.primary : T.text,
+            color: T.text,
             transition: "color 0.2s",
           }}>
             {habit.label}
           </div>
 
           {streak >= 2 && (
-            <span style={{ fontSize: 10, fontWeight: 700, color: T.gold, flexShrink: 0, whiteSpace: "nowrap" }} aria-label={`${streak} day streak`}>
+            <span style={{
+              fontSize: 10, fontWeight: 700, color: T.gold, flexShrink: 0, whiteSpace: "nowrap",
+              background: T.surface, padding: "2px 7px", borderRadius: 20,
+            }} aria-label={`${streak} day streak`}>
               <span aria-hidden="true">🔥</span> {streak}d
             </span>
           )}
