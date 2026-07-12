@@ -1374,7 +1374,6 @@ function getSlotId(timeStr) {
 
 // ─── HABIT CARD ───────────────────────────────────────────────────────────────
 const HabitCard = memo(function HabitCard({ habit, identity, checked, streak, toggle, openEditHabit, weekTrail }) {
-  const milestone = getMilestone(streak);
   const next = getNextMilestone(streak);
   const [expanded, setExpanded] = useState(false);
 
@@ -1387,41 +1386,35 @@ const HabitCard = memo(function HabitCard({ habit, identity, checked, streak, to
   ].filter(l => l.value);
   const hasFourLaws = !!habit.trigger || fourLaws.length > 0;
 
+  // Meta line under the label: time · location · frequency (if not every day) · next badge countdown
+  const freq = habit.frequency;
+  const isEveryDay = freq && freq.cadence === "weekly" && (freq.days || []).length === 7;
+  const metaParts = [
+    habit.time && to24h(habit.time),
+    habit.location,
+    freq && !isEveryDay && getFreqLabel(freq),
+    next && streak > 0 && `${next.days - streak}d to ${next.label}`,
+  ].filter(Boolean);
+
   return (
     <div style={{
-      borderRadius: 16, marginBottom: 8,
+      borderRadius: 12, marginBottom: 8,
       background: checked ? T.surf2 : T.surface,
-      border: `1.5px solid ${checked ? T.primary : T.border}`,
-      transition: "all 0.25s ease",
-      boxShadow: checked ? `0 4px 16px ${T.primary}22` : "0 1px 3px #0000000a",
-      overflow: "hidden",
+      border: `1px solid ${T.border}`,
+      borderLeftWidth: 3,
+      borderLeftColor: identity.color,
+      transition: "all 0.2s ease",
       position: "relative",
     }}>
-
-      {/* ── Identity ribbon — folded corner tag, top-left. In normal flow (not
-          absolutely positioned) so it pushes the trigger banner and everything
-          else below it down naturally instead of overlapping — long identity
-          names (e.g. "AI Solution Architect") were sitting on top of the
-          trigger text before. Truncates instead of growing unbounded. ── */}
-      <div style={{
-        display: "inline-flex", alignItems: "center", gap: 4, maxWidth: "75%",
-        background: identity.color, color: "#fff",
-        fontSize: 9, fontWeight: 700, lineHeight: 1,
-        padding: "5px 12px 5px 10px",
-        borderRadius: "15px 0 10px 0",
-      }}>
-        <span aria-hidden="true" style={{ flexShrink: 0 }}>{identity.icon}</span>
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortLabel(identity.label)}</span>
-      </div>
 
       {/* ── Edit button ── */}
       <button
         onClick={e => { e.stopPropagation(); openEditHabit(identity.id, habit); }}
         aria-label={`Edit habit: ${habit.label}`}
         style={{
-          position: "absolute", top: 10, right: 10,
+          position: "absolute", top: 8, right: 8,
           background: "transparent", border: "none",
-          fontSize: 14, color: T.border2,
+          fontSize: 12, color: T.border2,
           cursor: "pointer", padding: "4px 6px", lineHeight: 1,
           WebkitTapHighlightColor: "transparent",
           zIndex: 1,
@@ -1438,128 +1431,61 @@ const HabitCard = memo(function HabitCard({ habit, identity, checked, streak, to
         aria-label={checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
         style={{
           display: "flex", flexDirection: "column",
-          width: "100%", padding: "12px 14px 14px",
+          width: "100%", padding: "10px 26px 10px 12px",
           background: "transparent", border: "none",
           cursor: "pointer", textAlign: "left",
           WebkitTapHighlightColor: "transparent",
         }}
       >
-        {/* ── Trigger cue banner ── */}
-        {habit.trigger && (
+        {/* Identity · trigger — one small muted line, truncates instead of wrapping */}
+        {(habit.trigger || identity.label) && (
           <div style={{
-            margin: "-12px -14px 14px -14px",
-            borderLeft: `4px solid ${identity.color}`,
-            background: checked ? identity.color + "22" : identity.color + "16",
-            boxShadow: checked ? "none" : `inset 0 0 0 1px ${identity.color}20`,
-            padding: "9px 14px 9px 11px",
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            transition: "background 0.25s",
+            fontSize: 10, color: T.muted, marginBottom: 4,
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
           }}>
-            <span aria-hidden="true" style={{
-              flexShrink: 0, width: 19, height: 19, borderRadius: "50%",
-              background: identity.color, color: "#fff",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 11, lineHeight: 1,
-            }}>⚡</span>
-            <div style={{
-              fontSize: 13, fontWeight: 700,
-              color: checked ? identity.color : T.text,
-              letterSpacing: "-0.01em",
-              lineHeight: 1.35,
-              transition: "color 0.2s",
-            }}>
-              {habit.trigger}
-            </div>
+            <span aria-hidden="true">{identity.icon}</span> {shortLabel(identity.label)}
+            {habit.trigger && <> · {habit.trigger}</>}
           </div>
         )}
 
-        {/* ── Circle + label + time + milestone ── */}
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, width: "100%", paddingRight: 28 }}>
-
-          {/* Check circle */}
+        {/* Circle + label + streak, single compact row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%" }}>
           <div aria-hidden="true" style={{
-            width: 44, height: 44, borderRadius: "50%", flexShrink: 0, marginTop: 1,
-            border: `2.5px solid ${checked ? T.primary : T.border2}`,
-            background: checked ? T.primary : T.surface,
+            width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
+            border: `2px solid ${checked ? T.primary : T.border2}`,
+            background: checked ? T.primary : "transparent",
             display: "flex", alignItems: "center", justifyContent: "center",
             transition: "all 0.2s",
-            boxShadow: checked ? `0 0 0 4px ${T.primary}22` : "none",
           }}>
-            {checked
-              ? <span style={{ fontSize: 20, color: "#fff", fontWeight: 900, lineHeight: 1 }} className="check-pop">✓</span>
-              : <span style={{ fontSize: 18, color: T.border2, lineHeight: 1 }}>○</span>
-            }
+            {checked && <span style={{ fontSize: 11, color: "#fff", fontWeight: 900, lineHeight: 1 }} className="check-pop">✓</span>}
           </div>
 
-          {/* Label column */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{
-              fontSize: 16, fontWeight: 700, lineHeight: 1.1,
-              color: checked ? T.primary : T.text,
-              transition: "color 0.2s",
-            }}>
-              {habit.label}
-            </div>
-
-            {(habit.time || habit.location) && (
-              <div style={{
-                marginTop: 4, fontSize: 12, color: T.muted,
-                display: "flex", gap: 12, flexWrap: "wrap", lineHeight: 1.4,
-              }}>
-                {habit.time     && <span><span aria-hidden="true">🕐</span> {to24h(habit.time)}</span>}
-                {habit.location && <span><span aria-hidden="true">📍</span> {habit.location}</span>}
-              </div>
-            )}
-
-            {/* Frequency chip — only show if not "every day" */}
-            {(() => {
-              const freq = habit.frequency;
-              if (!freq) return null;
-              const isEveryDay = freq.cadence === "weekly" && (freq.days||[]).length === 7;
-              if (isEveryDay) return null;
-              const { bg, color } = getFreqColor(freq);
-              return (
-                <span style={{
-                  display:"inline-flex", alignItems:"center", gap:3,
-                  fontSize:10, fontWeight:700, color, background:bg,
-                  padding:"2px 7px", borderRadius:20, marginTop:5,
-                }}>
-                  <span aria-hidden="true">🔁</span> {getFreqLabel(freq)}
-                </span>
-              );
-            })()}
-
-            {next && streak > 0 && (
-              <div style={{ marginTop: 8, marginRight: 4 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", marginBottom: 4 }}>
-                  <span style={{ fontSize: 10, color: T.muted, fontWeight: 500 }}><span aria-hidden="true">→ {next.emoji}</span> {next.label}</span>
-                  <span style={{ fontSize: 10, color: T.primary, fontWeight: 700 }}>{next.days - streak}d left</span>
-                </div>
-                <div style={{ height: 3, background: T.border, borderRadius: 99, overflow: "hidden" }}>
-                  <div style={{ height:"100%", borderRadius: 99, transition:"width 0.5s", width:`${(streak/next.days)*100}%`, background: T.primary }}/>
-                </div>
-              </div>
-            )}
+          <div style={{
+            flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, lineHeight: 1.25,
+            color: checked ? T.primary : T.text,
+            transition: "color 0.2s",
+          }}>
+            {habit.label}
           </div>
 
-          {/* Streak badge */}
           {streak >= 2 && (
-            <span style={{
-              fontSize: 12, fontWeight: 800, flexShrink: 0, marginTop: 2,
-              color: T.gold, background: T.gold + "20",
-              padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap",
-            }} aria-label={`${streak} day streak`}>
-              <span aria-hidden="true">{milestone ? milestone.emoji : "🔥"}</span> {streak}d
+            <span style={{ fontSize: 10, fontWeight: 700, color: T.gold, flexShrink: 0, whiteSpace: "nowrap" }} aria-label={`${streak} day streak`}>
+              <span aria-hidden="true">🔥</span> {streak}d
             </span>
           )}
         </div>
+
+        {/* Meta line — time, location, frequency, next-badge countdown, all inline */}
+        {metaParts.length > 0 && (
+          <div style={{ fontSize: 10.5, color: T.muted, marginTop: 4, marginLeft: 30, lineHeight: 1.4 }}>
+            {metaParts.join(" · ")}
+          </div>
+        )}
       </button>
 
       {/* ── Four Laws expander — sits outside the toggle button (can't nest buttons) ── */}
       {hasFourLaws && (
-        <div style={{ padding: "0 14px 12px" }}>
+        <div style={{ padding: "0 12px 10px 30px" }}>
           <button
             onClick={() => setExpanded(e => !e)}
             aria-expanded={expanded}
