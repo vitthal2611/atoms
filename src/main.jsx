@@ -39,13 +39,3 @@ createRoot(document.getElementById('root')).render(
     </ErrorBoundary>
   </StrictMode>,
 )
-
-// Register the service worker that backs daily reminder notifications.
-// Safe to skip silently on browsers without support (e.g. older Safari).
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
-      console.error('Service worker registration failed:', err);
-    });
-  });
-}
