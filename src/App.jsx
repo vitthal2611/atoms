@@ -1678,74 +1678,81 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
         </span>
       </div>
 
-      {/* 2x2 quadrant grid — alignItems:start so a tall quadrant doesn't stretch its shorter row-mate */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, padding:10, alignItems:"start" }}>
+      {/* Quadrant sections — stacked full-width instead of a cramped 2x2 grid,
+          so task text and checkboxes can be sized for easy reading/tapping. */}
+      <div style={{ display:"flex", flexDirection:"column", gap:8, padding:10 }}>
         {QUADRANTS.map(q => {
           // Done tasks move out of the quadrant into the Completed strip below,
-          // so the grid only ever shows what's still open.
+          // so the list only ever shows what's still open.
           const qTasks = activeTasks.filter(t => taskQuadrant(t) === q.key && !t.done);
           return (
-            <div key={q.key} style={{ background:T.bg, borderRadius:12, borderLeft:`3px solid ${q.accent}`, padding:"10px 10px 8px" }}>
-              <div style={{ fontSize:11, fontWeight:700, color:q.dark, marginBottom:1 }}>{q.label}</div>
-              <div style={{ fontSize:10, color:T.muted, marginBottom:8, lineHeight:1.3 }}>{q.sub}</div>
+            <div key={q.key} style={{ background:T.bg, borderRadius:12, borderLeft:`4px solid ${q.accent}`, padding:"12px 14px" }}>
+              <div style={{ display:"flex", alignItems:"baseline", gap:6, marginBottom:10 }}>
+                <span style={{ fontSize:13, fontWeight:700, color:q.dark }}>{q.label}</span>
+                <span style={{ fontSize:11, color:T.muted }}>· {q.sub}</span>
+              </div>
 
               {qTasks.length === 0 && (
-                <div style={{ fontSize:11, color:T.muted, fontStyle:"italic", padding:"2px 0 4px" }}>—</div>
+                <div style={{ fontSize:13, color:T.muted, fontStyle:"italic" }}>Nothing here</div>
               )}
 
-              {qTasks.map(task => {
-                const isEditing = editingId === task.id;
-                return (
-                  <div key={task.id} style={{ display:"flex", alignItems:"flex-start", gap:6, padding:"5px 0" }}>
-                      {/* Check circle */}
-                      <button
-                        onClick={() => onToggle(dateKey, task.id)}
-                        aria-pressed={task.done}
-                        aria-label={task.done ? `Uncheck: ${task.text}` : `Check: ${task.text}`}
-                        style={{
-                          width:16, height:16, marginTop:1, borderRadius:"50%", flexShrink:0,
-                          border:`1.5px solid ${task.done ? q.accent : T.border2}`,
-                          background: task.done ? q.accent : "transparent",
-                          display:"flex", alignItems:"center", justifyContent:"center",
-                          cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"all 0.15s",
-                        }}
-                      >
-                        {task.done && <span style={{ fontSize:9, color:"#fff", fontWeight:900, lineHeight:1 }} aria-hidden="true">✓</span>}
-                      </button>
-
-                      {/* Task text / edit input */}
-                      {isEditing ? (
-                        <input
-                          ref={editRef}
-                          value={editVal}
-                          onChange={e => setEditVal(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === "Enter")  commitEdit(task.id);
-                            if (e.key === "Escape") { setEditingId(null); setEditVal(""); }
-                          }}
-                          onBlur={() => commitEdit(task.id)}
-                          maxLength={80}
-                          aria-label="Edit task"
-                          style={{ flex:1, minWidth:0, border:`1px solid ${T.accent}`, borderRadius:6, padding:"3px 6px", fontSize:12, background:"#fff", color:T.text, outline:"none", fontFamily:"inherit" }}
-                        />
-                      ) : (
-                        <span
-                          onClick={() => isToday && setSheetTask(task)}
-                          title={isToday ? "Tap for options" : undefined}
+              {qTasks.length > 0 && (
+                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                  {qTasks.map(task => {
+                    const isEditing = editingId === task.id;
+                    return (
+                      <div key={task.id} style={{ display:"flex", alignItems:"center", gap:12 }}>
+                        {/* Check circle */}
+                        <button
+                          onClick={() => onToggle(dateKey, task.id)}
+                          aria-pressed={task.done}
+                          aria-label={task.done ? `Uncheck: ${task.text}` : `Check: ${task.text}`}
                           style={{
-                            flex:1, fontSize:12.5, lineHeight:1.35,
-                            color:          task.done ? T.muted : T.text,
-                            textDecoration: task.done ? "line-through" : "none",
-                            textDecorationColor: T.muted,
-                            cursor: isToday ? "pointer" : "default",
+                            width:24, height:24, borderRadius:"50%", flexShrink:0,
+                            border:`2px solid ${task.done ? q.accent : T.border}`,
+                            background: task.done ? q.accent : "transparent",
+                            display:"flex", alignItems:"center", justifyContent:"center",
+                            cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"all 0.15s",
                           }}
                         >
-                          {task.text}
-                        </span>
-                      )}
-                  </div>
-                );
-              })}
+                          {task.done && <span style={{ fontSize:13, color:"#fff", fontWeight:900, lineHeight:1 }} aria-hidden="true">✓</span>}
+                        </button>
+
+                        {/* Task text / edit input */}
+                        {isEditing ? (
+                          <input
+                            ref={editRef}
+                            value={editVal}
+                            onChange={e => setEditVal(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === "Enter")  commitEdit(task.id);
+                              if (e.key === "Escape") { setEditingId(null); setEditVal(""); }
+                            }}
+                            onBlur={() => commitEdit(task.id)}
+                            maxLength={80}
+                            aria-label="Edit task"
+                            style={{ flex:1, minWidth:0, border:`1px solid ${T.accent}`, borderRadius:8, padding:"6px 8px", fontSize:15, background:"#fff", color:T.text, outline:"none", fontFamily:"inherit" }}
+                          />
+                        ) : (
+                          <span
+                            onClick={() => isToday && setSheetTask(task)}
+                            title={isToday ? "Tap for options" : undefined}
+                            style={{
+                              flex:1, fontSize:15, lineHeight:1.4,
+                              color:          task.done ? T.muted : T.text,
+                              textDecoration: task.done ? "line-through" : "none",
+                              textDecorationColor: T.muted,
+                              cursor: isToday ? "pointer" : "default",
+                            }}
+                          >
+                            {task.text}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })}
