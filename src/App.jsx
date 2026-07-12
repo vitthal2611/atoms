@@ -686,14 +686,14 @@ export default function App() {
     if(milestone && !wasChecked) {
       clearTimeout(celebrationTimerRef.current);
       setCelebrationHabit({habitId,milestone});
-      celebrationTimerRef.current = setTimeout(()=>setCelebrationHabit(null),3500);
+      celebrationTimerRef.current = setTimeout(()=>setCelebrationHabit(null),1750);
     }
     if (!wasChecked && identity) {
       // Every check-in is a vote for the identity — surface that every time,
       // even alongside a milestone toast (they're stacked, not exclusive).
       clearTimeout(identityVoteTimerRef.current);
       setIdentityVote({ label: identity.label, color: identity.color, icon: identity.icon });
-      identityVoteTimerRef.current = setTimeout(()=>setIdentityVote(null), 1800);
+      identityVoteTimerRef.current = setTimeout(()=>setIdentityVote(null), 1000);
     }
   }, [selectedDate, getStreakForHabit]);
 
@@ -767,6 +767,24 @@ export default function App() {
       ...prev,
       [dateKey]: (prev[dateKey] || []).map(t => t.id === taskId ? { ...t, priority } : t),
     }));
+  }, []);
+
+  // Move a task from one day to another (manual reschedule — "move to tomorrow"
+  // or picking an arbitrary date). Distinct from performRollover's automatic
+  // carry-forward: this is a direct relocation, not a "carried" copy.
+  const moveTask = useCallback((fromDateKey, taskId, toDateKey) => {
+    if (!toDateKey || fromDateKey === toDateKey) return;
+    setDailyTasks(prev => {
+      const fromTasks = prev[fromDateKey] || [];
+      const task = fromTasks.find(t => t.id === taskId);
+      if (!task) return prev;
+      const { carried, carriedFrom, ...clean } = task;
+      return {
+        ...prev,
+        [fromDateKey]: fromTasks.filter(t => t.id !== taskId),
+        [toDateKey]: [...(prev[toDateKey] || []), clean],
+      };
+    });
   }, []);
 
   // ── Task rollover — runs on every refresh/mount and at midnight.
@@ -1183,6 +1201,7 @@ export default function App() {
             deleteTask={deleteTask}
             editTask={editTask}
             setPriority={setPriority}
+            moveTask={moveTask}
           />
         )}
 
@@ -1593,15 +1612,42 @@ const PRIORITY_STYLE = {
   L: { bg: "#DCFCE7", color: "#166534", label: "L" },
 };
 
-const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd, onToggle, onDelete, onEdit, onPriority }) {
+const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd, onToggle, onDelete, onEdit, onPriority, onMove }) {
   const [inputVisible, setInputVisible] = useState(false);
   const [inputVal,     setInputVal]     = useState("");
   const [inputPri,     setInputPri]     = useState("M");
   const [editingId,    setEditingId]    = useState(null);
   const [editVal,      setEditVal]      = useState("");
   const [expanded,     setExpanded]     = useState(false);
+  const [dateTargetId, setDateTargetId] = useState(null); // task awaiting a custom-date pick
   const inputRef = useRef(null);
   const editRef  = useRef(null);
+  const dateInputRef = useRef(null);
+
+  // Tomorrow relative to the day this card is showing — used by the quick "move to tomorrow" action
+  const tomorrowKey = useMemo(() => {
+    const [y, mo, d] = dateKey.split("-").map(Number);
+    const dt = new Date(y, mo - 1, d);
+    dt.setDate(dt.getDate() + 1);
+    return dateToKey(dt);
+  }, [dateKey]);
+
+  const openDatePicker = (taskId) => {
+    setDateTargetId(taskId);
+    requestAnimationFrame(() => {
+      const el = dateInputRef.current;
+      if (!el) return;
+      el.value = dateKey;
+      if (el.showPicker) el.showPicker(); else el.click();
+    });
+  };
+
+  const handleDatePicked = (e) => {
+    const picked = e.target.value;
+    if (picked && dateTargetId) onMove(dateKey, dateTargetId, picked);
+    setDateTargetId(null);
+    e.target.value = "";
+  };
 
   useEffect(() => {
     if (inputVisible && inputRef.current) inputRef.current.focus();
@@ -1654,6 +1700,15 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
 
   return (
     <div style={{ borderRadius:16, background:T.surface, border:`1.5px solid ${T.border}`, overflow:"hidden" }}>
+      {/* Hidden native date input — driven programmatically by the 📅 button per task */}
+      <input
+        ref={dateInputRef}
+        type="date"
+        onChange={handleDatePicked}
+        tabIndex={-1}
+        aria-hidden="true"
+        style={{ position:"absolute", width:1, height:1, opacity:0, pointerEvents:"none" }}
+      />
       {/* Header */}
       <div style={{ display:"flex", alignItems:"center", gap:8, padding:"12px 14px 10px", borderBottom:`1px solid ${T.surf2}` }}>
         <span style={{ fontSize:16 }} aria-hidden="true">🎯</span>
@@ -1755,6 +1810,30 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
               </span>
             )}
 
+            {/* Move to tomorrow */}
+            {isToday && !isEditing && (
+              <button
+                onClick={() => onMove(dateKey, task.id, tomorrowKey)}
+                aria-label={`Move "${task.text}" to tomorrow`}
+                title="Move to tomorrow"
+                style={{ background:"transparent", border:"none", color:T.border2, fontSize:14, cursor:"pointer", padding:"4px 3px", lineHeight:1, WebkitTapHighlightColor:"transparent", flexShrink:0 }}
+              >
+                <span aria-hidden="true">→</span>
+              </button>
+            )}
+
+            {/* Assign a specific date */}
+            {isToday && !isEditing && (
+              <button
+                onClick={() => openDatePicker(task.id)}
+                aria-label={`Assign a date to "${task.text}"`}
+                title="Assign date"
+                style={{ background:"transparent", border:"none", color:T.border2, fontSize:13, cursor:"pointer", padding:"4px 3px", lineHeight:1, WebkitTapHighlightColor:"transparent", flexShrink:0 }}
+              >
+                <span aria-hidden="true">📅</span>
+              </button>
+            )}
+
             {/* Delete */}
             {isToday && !isEditing && (
               <button
@@ -1845,7 +1924,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
 });
 
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
-const TodayView = memo(function TodayView({ identities, allHabits, todayData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask, editTask, setPriority }) {
+const TodayView = memo(function TodayView({ identities, allHabits, todayData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask, editTask, setPriority, moveTask }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
 
@@ -1918,6 +1997,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, to
         onDelete={deleteTask}
         onEdit={editTask}
         onPriority={setPriority}
+        onMove={moveTask}
       />
 
       {/* Daily quote banner */}
