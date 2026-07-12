@@ -367,6 +367,9 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
   const [form, setForm] = useState({
     label:      initial.label      || "",
     trigger:    initial.trigger    || "",
+    attractive: initial.attractive || "",
+    easy:       initial.easy       || "",
+    satisfying: initial.satisfying || "",
     time:       initial.time       || "",
     location:   initial.location   || "",
     identityId: initial.identityId || identities[0]?.id || "",
@@ -381,6 +384,9 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     label:      fId + "-label",
     identityId: fId + "-identity",
     trigger:    fId + "-trigger",
+    attractive: fId + "-attractive",
+    easy:       fId + "-easy",
+    satisfying: fId + "-satisfying",
     time:       fId + "-time",
     location:   fId + "-location",
   };
@@ -397,6 +403,20 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
 
       <label htmlFor={ids.trigger} style={S.fieldLabel}><span aria-hidden="true">⚡</span> Trigger (what cues this habit?)</label>
       <input id={ids.trigger} style={S.input} value={form.trigger} onChange={e=>set("trigger",e.target.value)} placeholder="e.g. After morning coffee" maxLength={120} />
+
+      {/* ── Four Laws — optional, shown on the habit card as an expandable "Four Laws" section ── */}
+      <div style={{ marginTop:18, marginBottom:2, fontSize:11, letterSpacing:"0.08em", color:T.primary, fontWeight:700, textTransform:"uppercase" }}>
+        Four Laws of Behavior Change <span style={{ color:T.muted, fontWeight:500, textTransform:"none", letterSpacing:"normal" }}>(optional)</span>
+      </div>
+
+      <label htmlFor={ids.attractive} style={S.fieldLabel}>Make it attractive</label>
+      <input id={ids.attractive} style={S.input} value={form.attractive} onChange={e=>set("attractive",e.target.value)} placeholder="e.g. Pair with my morning coffee" maxLength={140} />
+
+      <label htmlFor={ids.easy} style={S.fieldLabel}>Make it easy</label>
+      <input id={ids.easy} style={S.input} value={form.easy} onChange={e=>set("easy",e.target.value)} placeholder="e.g. Book stays on the counter" maxLength={140} />
+
+      <label htmlFor={ids.satisfying} style={S.fieldLabel}>Make it satisfying</label>
+      <input id={ids.satisfying} style={S.input} value={form.satisfying} onChange={e=>set("satisfying",e.target.value)} placeholder="e.g. Move a bead on the reading jar" maxLength={140} />
 
       <label htmlFor={ids.time} style={S.fieldLabel}><span aria-hidden="true">🕐</span> Time</label>
       <input id={ids.time} style={S.input} type="time" value={form.time} onChange={e=>set("time",e.target.value)} />
@@ -888,28 +908,28 @@ export default function App() {
   }
 
   // ── CRUD: Habits ──
-  const addHabit = ({ label, trigger, time, location, identityId, frequency }) => {
+  const addHabit = ({ label, trigger, attractive, easy, satisfying, time, location, identityId, frequency }) => {
     setIdentities(prev => prev.map(ident =>
       ident.id !== identityId ? ident :
-      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, time, location, frequency: frequency || DEFAULT_FREQUENCY }] }
+      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, attractive, easy, satisfying, time, location, frequency: frequency || DEFAULT_FREQUENCY }] }
     ));
     setModal(null);
   };
 
-  const updateHabit = ({ label, trigger, time, location, identityId: newIdentityId, frequency }) => {
+  const updateHabit = ({ label, trigger, attractive, easy, satisfying, time, location, identityId: newIdentityId, frequency }) => {
     const { identityId: oldIdentityId, habitId } = modalCtx;
     const freq = frequency || DEFAULT_FREQUENCY;
     if (newIdentityId === oldIdentityId) {
       setIdentities(prev => prev.map(ident =>
         ident.id !== oldIdentityId ? ident :
-        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, time, location, frequency: freq }) }
+        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, attractive, easy, satisfying, time, location, frequency: freq }) }
       ));
     } else {
       setIdentities(prev => {
         const habitData = prev.find(i => i.id === oldIdentityId)?.habits.find(h => h.id === habitId);
         return prev.map(ident => {
           if (ident.id === oldIdentityId) return { ...ident, habits: ident.habits.filter(h => h.id !== habitId) };
-          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, time, location, frequency: freq }] };
+          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, attractive, easy, satisfying, time, location, frequency: freq }] };
           return ident;
         });
       });
@@ -1164,6 +1184,7 @@ export default function App() {
             identities={identities}
             allHabits={allHabits}
             todayData={selectedData}
+            allData={data}
             toggle={toggle}
             justChecked={justChecked}
             getStreakForHabit={getStreakForHabit}
@@ -1352,9 +1373,19 @@ function getSlotId(timeStr) {
 }
 
 // ─── HABIT CARD ───────────────────────────────────────────────────────────────
-const HabitCard = memo(function HabitCard({ habit, identity, checked, streak, toggle, openEditHabit }) {
+const HabitCard = memo(function HabitCard({ habit, identity, checked, streak, toggle, openEditHabit, weekTrail }) {
   const milestone = getMilestone(streak);
   const next = getNextMilestone(streak);
+  const [expanded, setExpanded] = useState(false);
+
+  // Laws 2-4 — law 1 (cue) is already shown above as the trigger banner, so it's
+  // not repeated here. Only laws the user actually filled in get a row.
+  const fourLaws = [
+    { key:"attractive", n:2, label:"Make it attractive", color:"#534AB7", bg:"#EEEDFE", value: habit.attractive },
+    { key:"easy",       n:3, label:"Make it easy",        color:"#0F6E56", bg:"#E1F5EE", value: habit.easy },
+    { key:"satisfying", n:4, label:"Make it satisfying",  color:"#854F0B", bg:"#FAEEDA", value: habit.satisfying },
+  ].filter(l => l.value);
+  const hasFourLaws = !!habit.trigger || fourLaws.length > 0;
 
   return (
     <div style={{
@@ -1509,6 +1540,57 @@ const HabitCard = memo(function HabitCard({ habit, identity, checked, streak, to
           )}
         </div>
       </button>
+
+      {/* ── Four Laws expander — sits outside the toggle button (can't nest buttons) ── */}
+      {hasFourLaws && (
+        <div style={{ padding: "0 14px 12px" }}>
+          <button
+            onClick={() => setExpanded(e => !e)}
+            aria-expanded={expanded}
+            style={{
+              display:"flex", alignItems:"center", gap:4, background:"transparent", border:"none",
+              cursor:"pointer", padding:0, fontSize:10, fontWeight:700, color:T.primary,
+              WebkitTapHighlightColor:"transparent",
+            }}
+          >
+            Four Laws
+            <span aria-hidden="true" style={{ fontSize:9, transition:"transform 0.2s", display:"inline-block", transform: expanded ? "rotate(180deg)" : "none" }}>▼</span>
+          </button>
+
+          {expanded && (
+            <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:10 }}>
+              <div style={{ textAlign:"center", background:T.primary+"0d", borderRadius:8, padding:"6px 10px", fontSize:11, fontWeight:700, color:T.primary }}>
+                Every rep is a vote for: <span style={{ fontWeight:800 }}>{identity.label}</span>
+              </div>
+
+              {fourLaws.map(law => (
+                <div key={law.key} style={{ display:"flex", gap:10 }}>
+                  <div aria-hidden="true" style={{ width:24, height:24, borderRadius:8, background:law.bg, color:law.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, flexShrink:0 }}>
+                    {law.n}
+                  </div>
+                  <div>
+                    <div style={{ fontSize:10, fontWeight:700, color:law.color, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:2 }}>{law.label}</div>
+                    <div style={{ fontSize:12.5, color:T.text, lineHeight:1.4 }}>{law.value}</div>
+                  </div>
+                </div>
+              ))}
+
+              {weekTrail && (
+                <div style={{ display:"flex", alignItems:"center", gap:4, paddingTop:8, borderTop:`1px solid ${T.surf2}` }}>
+                  <span style={{ fontSize:10, color:T.muted, marginRight:4 }}>Last 7 days</span>
+                  {weekTrail.map((done, i) => (
+                    <span key={i} aria-hidden="true" style={{
+                      width:14, height:14, borderRadius:4, flexShrink:0,
+                      background: done ? identity.color : T.surf2,
+                      border: done ? "none" : `1px dashed ${T.border}`,
+                    }} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 });
@@ -1907,7 +1989,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
 });
 
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
-const TodayView = memo(function TodayView({ identities, allHabits, todayData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask, editTask, setQuadrant }) {
+const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask, editTask, setQuadrant }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
   const [dayTab, setDayTab] = useState("habits"); // "habits" | "matrix"
@@ -1939,6 +2021,21 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, to
     (dailyTasks[selectedDate] || []).filter(t => !t.carried && !t.done).length,
     [dailyTasks, selectedDate]
   );
+
+  // 7-day check-in trail for a habit, ending today — feeds the Four Laws expander's
+  // mini heatmap. Anchored on todayKey (not selectedDate) since it's "recent history",
+  // not tied to whatever day is being viewed.
+  const getWeekTrail = useCallback((habitId) => {
+    const [y, mo, d] = todayKey.split("-").map(Number);
+    const base = new Date(y, mo - 1, d);
+    const out = [];
+    for (let i = 6; i >= 0; i--) {
+      const dt = new Date(base); dt.setDate(base.getDate() - i);
+      const key = dateToKey(dt);
+      out.push(!!(allData[key] && allData[key][habitId]));
+    }
+    return out;
+  }, [allData, todayKey]);
 
   // Memoized identity legend scores — avoids recomputing isScheduledOn for all habits on every render
   const identityScores = useMemo(() =>
@@ -2096,6 +2193,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, to
                   streak={getStreakForHabit(habit.id, habit.frequency)}
                   toggle={toggle}
                   openEditHabit={openEditHabit}
+                  weekTrail={getWeekTrail(habit.id)}
                 />
               </div>
             ))}
