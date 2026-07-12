@@ -2,6 +2,12 @@ import { useState, useEffect, useCallback, useRef, useMemo, useId, memo, Fragmen
 import { initializeApp, getApps } from "firebase/app";
 import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "firebase/auth";
+import { getMessaging, getToken as getFcmToken, isSupported as isMessagingSupported } from "firebase/messaging";
+
+// Generate in Firebase Console → Project Settings → Cloud Messaging →
+// Web Push certificates. Required for closed-app push; local reminders
+// still work without it, just less reliably on mobile.
+const VAPID_KEY = "PASTE_YOUR_VAPID_KEY_HERE";
 
 // ─── FIREBASE ────────────────────────────────────────────────────────────────
 // Config is read from .env (VITE_ prefix exposes vars to the browser bundle).
@@ -668,6 +674,25 @@ export default function App() {
     if (typeof Notification === "undefined") return "unsupported";
     const perm = await Notification.requestPermission();
     setNotifPermission(perm);
+    if (perm === "granted") {
+      // Best-effort FCM registration — enables push even when the app is
+      // fully closed. Silently skipped if VAPID_KEY isn't configured yet;
+      // the client-side timer reminder still works as a fallback either way.
+      try {
+        const supported = await isMessagingSupported();
+        if (supported && VAPID_KEY && VAPID_KEY !== "PASTE_YOUR_VAPID_KEY_HERE" && "serviceWorker" in navigator) {
+          const reg = await navigator.serviceWorker.ready;
+          const messaging = getMessaging(_fbApp);
+          const token = await getFcmToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
+          if (token) {
+            const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            setSettings(s => ({ ...s, fcmToken: token, timezone }));
+          }
+        }
+      } catch (err) {
+        console.error("FCM token registration failed (push reminders will fall back to local-only):", err);
+      }
+    }
     return perm;
   }, []);
 
