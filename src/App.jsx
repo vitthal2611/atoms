@@ -727,24 +727,21 @@ export default function App() {
   const openAddIdentity   = useCallback(() => setModal("addIdentity"), []);
 
   // ── Daily task CRUD (stable callbacks — only touch setDailyTasks) ──
-  const addTask = useCallback((dateKey, text, priority = "M") => {
+  // Tasks live on an Eisenhower matrix: `quadrant` is one of
+  // "do" | "schedule" | "delegate" | "eliminate" (see QUADRANTS below).
+  const addTask = useCallback((dateKey, text, quadrant = "schedule") => {
     setDailyTasks(prev => {
       const existing = prev[dateKey] || [];
-      return { ...prev, [dateKey]: [...existing, { id: uid(), text, done: false, priority }] };
+      return { ...prev, [dateKey]: [...existing, { id: uid(), text, done: false, quadrant }] };
     });
   }, []);
 
   const toggleTask = useCallback((dateKey, taskId) => {
     setDailyTasks(prev => ({
       ...prev,
-      [dateKey]: (prev[dateKey] || []).map(t => {
-        if (t.id !== taskId) return t;
-        const nowDone = !t.done;
-        // Checking a task off demotes it to Low priority so it settles to the
-        // bottom of the sort. Un-checking leaves priority as-is (we don't
-        // remember what it was before, so there's nothing sensible to restore).
-        return { ...t, done: nowDone, priority: nowDone ? "L" : t.priority };
-      }),
+      [dateKey]: (prev[dateKey] || []).map(t =>
+        t.id === taskId ? { ...t, done: !t.done } : t
+      ),
     }));
   }, []);
 
@@ -762,10 +759,10 @@ export default function App() {
     }));
   }, []);
 
-  const setPriority = useCallback((dateKey, taskId, priority) => {
+  const setQuadrant = useCallback((dateKey, taskId, quadrant) => {
     setDailyTasks(prev => ({
       ...prev,
-      [dateKey]: (prev[dateKey] || []).map(t => t.id === taskId ? { ...t, priority } : t),
+      [dateKey]: (prev[dateKey] || []).map(t => t.id === taskId ? { ...t, quadrant } : t),
     }));
   }, []);
 
@@ -1182,7 +1179,7 @@ export default function App() {
             toggleTask={toggleTask}
             deleteTask={deleteTask}
             editTask={editTask}
-            setPriority={setPriority}
+            setQuadrant={setQuadrant}
           />
         )}
 
@@ -1586,20 +1583,30 @@ function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
 }
 
 // ─── TOP 3 TASKS CARD ─────────────────────────────────────────────────────────
-const PRIORITY_ORDER = { H: 0, M: 1, L: 2 };
-const PRIORITY_STYLE = {
-  H: { bg: "#FEE2E2", color: "#B91C1C", label: "H" },
-  M: { bg: "#FEF9C3", color: "#92400E", label: "M" },
-  L: { bg: "#DCFCE7", color: "#166534", label: "L" },
-};
+// Eisenhower matrix quadrants. `quadrant` on a task is one of these four keys.
+// Colors are drawn from the app's Ocean Depth palette (T), not arbitrary hues.
+const QUADRANTS = [
+  { key: "do",        label: "Do first",  sub: "Urgent and important",         accent: T.red,     dark: "#791F1F", bg: "#FEE2E2" },
+  { key: "schedule",  label: "Schedule",  sub: "Important, not urgent",        accent: T.primary, dark: "#0C447C", bg: "#DBEAFE" },
+  { key: "delegate",  label: "Delegate",  sub: "Urgent, not important",        accent: T.gold,    dark: "#633806", bg: "#FEF3C7" },
+  { key: "eliminate", label: "Eliminate", sub: "Neither urgent nor important", accent: T.border2, dark: T.muted,   bg: T.surf2   },
+];
+// Back-compat: tasks created before the matrix redesign have a legacy
+// `priority: "H"|"M"|"L"` field instead of `quadrant`. Map them over so old
+// data still lands somewhere sensible instead of collapsing into one bucket.
+function taskQuadrant(t) {
+  if (t.quadrant) return t.quadrant;
+  if (t.priority === "H") return "do";
+  if (t.priority === "L") return "eliminate";
+  return "schedule";
+}
 
-const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd, onToggle, onDelete, onEdit, onPriority }) {
+const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd, onToggle, onDelete, onEdit, onQuadrant }) {
   const [inputVisible, setInputVisible] = useState(false);
   const [inputVal,     setInputVal]     = useState("");
-  const [inputPri,     setInputPri]     = useState("M");
+  const [inputQuad,    setInputQuad]    = useState("schedule");
   const [editingId,    setEditingId]    = useState(null);
   const [editVal,      setEditVal]      = useState("");
-  const [expanded,     setExpanded]     = useState(false);
   const inputRef = useRef(null);
   const editRef  = useRef(null);
 
@@ -1607,12 +1614,11 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
     if (inputVisible && inputRef.current) inputRef.current.focus();
   }, [inputVisible]);
 
-  // Reset expand + input state when navigating to a different date
+  // Reset input state when navigating to a different date
   useEffect(() => {
-    setExpanded(false);
     setInputVisible(false);
     setInputVal("");
-    setInputPri("M");
+    setInputQuad("schedule");
     setEditingId(null);
     setEditVal("");
   }, [dateKey]);
@@ -1624,8 +1630,8 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
   const handleAdd = () => {
     const t = inputVal.trim();
     if (!t) return;
-    onAdd(dateKey, t, inputPri);
-    setInputVal(""); setInputPri("M"); setInputVisible(false);
+    onAdd(dateKey, t, inputQuad);
+    setInputVal(""); setInputQuad("schedule"); setInputVisible(false);
   };
 
   const startEdit = (task) => {
@@ -1640,17 +1646,10 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
   };
 
   // Hide tasks that were carried forward to the next day (shown there instead)
-  // Sort by priority H→M→L, show top 3 or all when expanded
   const activeTasks = tasks.filter(t => !t.carried);
-  const sorted  = [...activeTasks].sort((a, b) =>
-    (PRIORITY_ORDER[a.priority || "M"] ?? 1) - (PRIORITY_ORDER[b.priority || "M"] ?? 1)
-  );
-  const visible = expanded ? sorted : sorted.slice(0, 3);
   const total   = activeTasks.length;
   const doneCnt = activeTasks.filter(t => t.done).length;
   const allDone = total > 0 && doneCnt === total;
-
-  const priStyle = (p) => PRIORITY_STYLE[p] || PRIORITY_STYLE.M;
 
   return (
     <div style={{ borderRadius:16, background:T.surface, border:`1.5px solid ${T.border}`, overflow:"hidden" }}>
@@ -1658,7 +1657,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
       <div style={{ display:"flex", alignItems:"center", gap:8, padding:"12px 14px 10px", borderBottom:`1px solid ${T.surf2}` }}>
         <span style={{ fontSize:16 }} aria-hidden="true">🎯</span>
         <span style={{ flex:1, fontSize:13, fontWeight:700, color:T.text, fontFamily:"'Space Grotesk','Inter',sans-serif", letterSpacing:".3px" }}>
-          Top 3 tasks
+          Task matrix
         </span>
         <span aria-label={`${doneCnt} of ${total} tasks done`} style={{
           fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20,
@@ -1669,152 +1668,140 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
         </span>
       </div>
 
-      {/* Top 3 task rows */}
-      {visible.map(task => {
-        const ps = priStyle(task.priority || "M");
-        const isEditing = editingId === task.id;
-        return (
-          <div key={task.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 14px", borderBottom:`1px solid ${T.surf2}` }}>
-            {/* Check circle */}
-            <button
-              onClick={() => onToggle(dateKey, task.id)}
-              aria-pressed={task.done}
-              aria-label={task.done ? `Uncheck: ${task.text}` : `Check: ${task.text}`}
-              style={{
-                width:22, height:22, borderRadius:"50%", flexShrink:0,
-                border:`2px solid ${task.done ? T.primary : T.border2}`,
-                background: task.done ? T.primary : "transparent",
-                display:"flex", alignItems:"center", justifyContent:"center",
-                cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"all 0.15s",
-              }}
-            >
-              {task.done && <span style={{ fontSize:11, color:"#fff", fontWeight:900, lineHeight:1 }} aria-hidden="true">✓</span>}
-            </button>
+      {/* 2x2 quadrant grid */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, padding:10 }}>
+        {QUADRANTS.map(q => {
+          const qTasks = activeTasks.filter(t => taskQuadrant(t) === q.key);
+          return (
+            <div key={q.key} style={{ background:T.bg, borderRadius:12, borderLeft:`3px solid ${q.accent}`, padding:"10px 10px 8px" }}>
+              <div style={{ fontSize:11, fontWeight:700, color:q.dark, marginBottom:1 }}>{q.label}</div>
+              <div style={{ fontSize:10, color:T.muted, marginBottom:8, lineHeight:1.3 }}>{q.sub}</div>
 
-            {/* Task text / edit input */}
-            {isEditing ? (
-              <input
-                ref={editRef}
-                value={editVal}
-                onChange={e => setEditVal(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === "Enter")  commitEdit(task.id);
-                  if (e.key === "Escape") { setEditingId(null); setEditVal(""); }
-                }}
-                onBlur={() => commitEdit(task.id)}
-                maxLength={80}
-                aria-label="Edit task"
-                style={{ flex:1, border:`1px solid ${T.accent}`, borderRadius:7, padding:"5px 8px", fontSize:13, background:"#fff", color:T.text, outline:"none", fontFamily:"inherit" }}
-              />
-            ) : (
-              <span
-                onClick={() => isToday && startEdit(task)}
-                title={isToday ? "Click to edit" : undefined}
-                style={{
-                  flex:1, fontSize:13, lineHeight:1.4,
-                  color:          task.done ? T.muted : T.text,
-                  textDecoration: task.done ? "line-through" : "none",
-                  textDecorationColor: T.muted,
-                  cursor: isToday ? "text" : "default",
-                }}
-              >
-                {task.text}
-              </span>
-            )}
+              {qTasks.length === 0 && (
+                <div style={{ fontSize:11, color:T.muted, fontStyle:"italic", padding:"2px 0 4px" }}>—</div>
+              )}
 
-            {/* Priority pills */}
-            {isToday ? (
-              <div style={{ display:"flex", gap:3, flexShrink:0 }}>
-                {["H","M","L"].map(p => {
-                  const active = (task.priority || "M") === p;
-                  const ps2 = PRIORITY_STYLE[p];
-                  return (
-                    <button key={p}
-                      onClick={() => onPriority(dateKey, task.id, p)}
-                      aria-pressed={active}
-                      aria-label={`Set priority ${p}`}
-                      style={{
-                        fontSize:9, fontWeight:800, padding:"2px 6px", borderRadius:10,
-                        border: active ? "none" : `1.5px solid ${T.border}`,
-                        background: active ? ps2.bg : "transparent",
-                        color: active ? ps2.color : T.muted,
-                        cursor:"pointer", WebkitTapHighlightColor:"transparent", letterSpacing:".3px",
-                        transition:"all 0.12s",
-                      }}
-                    >{p}</button>
-                  );
-                })}
-              </div>
-            ) : (
-              <span style={{
-                flexShrink:0, fontSize:10, fontWeight:800,
-                padding:"2px 7px", borderRadius:12,
-                background: ps.bg, color: ps.color, letterSpacing:".3px",
-              }}>
-                {ps.label}
-              </span>
-            )}
+              {qTasks.map(task => {
+                const isEditing = editingId === task.id;
+                return (
+                  <div key={task.id} style={{ display:"flex", flexDirection:"column", gap:4, padding:"5px 0" }}>
+                    <div style={{ display:"flex", alignItems:"flex-start", gap:6 }}>
+                      {/* Check circle */}
+                      <button
+                        onClick={() => onToggle(dateKey, task.id)}
+                        aria-pressed={task.done}
+                        aria-label={task.done ? `Uncheck: ${task.text}` : `Check: ${task.text}`}
+                        style={{
+                          width:16, height:16, marginTop:1, borderRadius:"50%", flexShrink:0,
+                          border:`1.5px solid ${task.done ? q.accent : T.border2}`,
+                          background: task.done ? q.accent : "transparent",
+                          display:"flex", alignItems:"center", justifyContent:"center",
+                          cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"all 0.15s",
+                        }}
+                      >
+                        {task.done && <span style={{ fontSize:9, color:"#fff", fontWeight:900, lineHeight:1 }} aria-hidden="true">✓</span>}
+                      </button>
 
-            {/* Delete */}
-            {isToday && !isEditing && (
-              <button
-                onClick={() => onDelete(dateKey, task.id)}
-                aria-label={`Delete task: ${task.text}`}
-                style={{ background:"transparent", border:"none", color:T.border2, fontSize:15, cursor:"pointer", padding:"4px 4px", lineHeight:1, WebkitTapHighlightColor:"transparent", flexShrink:0 }}
-              >
-                <span aria-hidden="true">✕</span>
-              </button>
-            )}
-          </div>
-        );
-      })}
+                      {/* Task text / edit input */}
+                      {isEditing ? (
+                        <input
+                          ref={editRef}
+                          value={editVal}
+                          onChange={e => setEditVal(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === "Enter")  commitEdit(task.id);
+                            if (e.key === "Escape") { setEditingId(null); setEditVal(""); }
+                          }}
+                          onBlur={() => commitEdit(task.id)}
+                          maxLength={80}
+                          aria-label="Edit task"
+                          style={{ flex:1, minWidth:0, border:`1px solid ${T.accent}`, borderRadius:6, padding:"3px 6px", fontSize:12, background:"#fff", color:T.text, outline:"none", fontFamily:"inherit" }}
+                        />
+                      ) : (
+                        <span
+                          onClick={() => isToday && startEdit(task)}
+                          title={isToday ? "Click to edit" : undefined}
+                          style={{
+                            flex:1, fontSize:12.5, lineHeight:1.35,
+                            color:          task.done ? T.muted : T.text,
+                            textDecoration: task.done ? "line-through" : "none",
+                            textDecorationColor: T.muted,
+                            cursor: isToday ? "text" : "default",
+                          }}
+                        >
+                          {task.text}
+                        </span>
+                      )}
 
-      {/* Expand / collapse queued tasks */}
-      {total > 3 && (
-        <button
-          onClick={() => setExpanded(e => !e)}
-          style={{
-            display:"flex", alignItems:"center", justifyContent:"center", gap:5,
-            width:"100%", padding:"7px 14px", background:"transparent", border:"none",
-            borderBottom:`1px solid ${T.surf2}`, cursor:"pointer",
-            fontSize:11, fontWeight:600, color:T.accent,
-            WebkitTapHighlightColor:"transparent",
-          }}
-        >
-          <span aria-hidden="true" style={{ fontSize:10, transition:"transform 0.2s", display:"inline-block", transform: expanded ? "rotate(180deg)" : "none" }}>▼</span>
-          {expanded ? "Show top 3 only" : `+${total - 3} more task${total - 3 > 1 ? "s" : ""} — tap to expand`}
-        </button>
-      )}
+                      {/* Delete */}
+                      {isToday && !isEditing && (
+                        <button
+                          onClick={() => onDelete(dateKey, task.id)}
+                          aria-label={`Delete task: ${task.text}`}
+                          style={{ background:"transparent", border:"none", color:T.border2, fontSize:13, cursor:"pointer", padding:"2px", lineHeight:1, WebkitTapHighlightColor:"transparent", flexShrink:0 }}
+                        >
+                          <span aria-hidden="true">✕</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Reassign quadrant — small dots, today only */}
+                    {isToday && !isEditing && (
+                      <div style={{ display:"flex", gap:4, paddingLeft:22 }}>
+                        {QUADRANTS.map(opt => {
+                          const active = taskQuadrant(task) === opt.key;
+                          return (
+                            <button
+                              key={opt.key}
+                              onClick={() => onQuadrant(dateKey, task.id, opt.key)}
+                              aria-pressed={active}
+                              aria-label={`Move to ${opt.label}`}
+                              title={opt.label}
+                              style={{
+                                width:9, height:9, borderRadius:"50%", padding:0, cursor:"pointer",
+                                border: active ? `1.5px solid ${opt.dark}` : `1.5px solid ${T.border}`,
+                                background: opt.accent, opacity: active ? 1 : 0.35,
+                                WebkitTapHighlightColor:"transparent", transition:"opacity 0.12s",
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
 
       {/* Add row / inline input */}
       {isToday && (
         inputVisible ? (
-          <div style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 12px", background:T.bg, flexWrap:"wrap" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 12px", background:T.bg, flexWrap:"wrap", borderTop:`1px solid ${T.surf2}` }}>
             <input
               ref={inputRef}
               value={inputVal}
               onChange={e => setInputVal(e.target.value)}
               onKeyDown={e => {
                 if (e.key === "Enter")  handleAdd();
-                if (e.key === "Escape") { setInputVisible(false); setInputVal(""); setInputPri("M"); }
+                if (e.key === "Escape") { setInputVisible(false); setInputVal(""); setInputQuad("schedule"); }
               }}
               placeholder="What needs to get done?"
               maxLength={80}
               aria-label="New task text"
-              style={{ flex:1, minWidth:0, border:`1px solid ${T.accent}`, borderRadius:8, padding:"7px 10px", fontSize:13, background:"#fff", color:T.text, outline:"none", fontFamily:"inherit" }}
+              style={{ flex:1, minWidth:120, border:`1px solid ${T.accent}`, borderRadius:8, padding:"7px 10px", fontSize:13, background:"#fff", color:T.text, outline:"none", fontFamily:"inherit" }}
             />
-            {/* Priority picker for new task */}
-            {["H","M","L"].map(p => {
-              const ps2 = PRIORITY_STYLE[p];
-              return (
-                <button key={p} onClick={() => setInputPri(p)} aria-pressed={inputPri === p}
-                  style={{
-                    fontSize:10, fontWeight:800, padding:"5px 9px", borderRadius:12, border: inputPri === p ? `2px solid ${ps2.color}` : "2px solid transparent",
-                    background: ps2.bg, color: ps2.color, cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"border 0.1s",
-                  }}
-                >{p}</button>
-              );
-            })}
+            {/* Quadrant picker for new task */}
+            {QUADRANTS.map(q => (
+              <button key={q.key} onClick={() => setInputQuad(q.key)} aria-pressed={inputQuad === q.key}
+                style={{
+                  fontSize:10, fontWeight:700, padding:"5px 8px", borderRadius:10, border: inputQuad === q.key ? `2px solid ${q.dark}` : "2px solid transparent",
+                  background: q.bg, color: q.dark, cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"border 0.1s",
+                }}
+              >{q.label}</button>
+            ))}
             <button
               onClick={handleAdd}
               style={{ background:T.primary, color:"#fff", border:"none", borderRadius:8, padding:"7px 14px", fontSize:12, fontWeight:700, cursor:"pointer", flexShrink:0, WebkitTapHighlightColor:"transparent" }}
@@ -1826,10 +1813,10 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
           <button
             onClick={() => setInputVisible(true)}
             aria-label="Add a task"
-            style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", width:"100%", background:"transparent", border:"none", cursor:"pointer", WebkitTapHighlightColor:"transparent" }}
+            style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px 14px", width:"100%", background:"transparent", border:"none", borderTop:`1px dashed ${T.border}`, cursor:"pointer", WebkitTapHighlightColor:"transparent" }}
           >
-            <div aria-hidden="true" style={{ width:22, height:22, borderRadius:"50%", border:`2px dashed ${T.accent}`, display:"flex", alignItems:"center", justifyContent:"center", color:T.accent, fontSize:16, lineHeight:1, flexShrink:0 }}>+</div>
-            <span style={{ fontSize:13, color:T.accent, fontWeight:500 }}>Add a task…</span>
+            <span aria-hidden="true" style={{ color:T.accent, fontSize:15, lineHeight:1 }}>+</span>
+            <span style={{ fontSize:13, color:T.accent, fontWeight:500 }}>Add task</span>
           </button>
         )
       )}
@@ -1845,7 +1832,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
 });
 
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
-const TodayView = memo(function TodayView({ identities, allHabits, todayData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask, editTask, setPriority }) {
+const TodayView = memo(function TodayView({ identities, allHabits, todayData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask, editTask, setQuadrant }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
 
@@ -1908,7 +1895,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, to
       {/* Day Navigator */}
       <DayNavigator selectedDate={selectedDate} setSelectedDate={setSelectedDate} todayKey={todayKey} />
 
-      {/* Top 3 Tasks */}
+      {/* Task matrix */}
       <TopTasksCard
         tasks={dailyTasks[selectedDate] || []}
         dateKey={selectedDate}
@@ -1917,7 +1904,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, to
         onToggle={toggleTask}
         onDelete={deleteTask}
         onEdit={editTask}
-        onPriority={setPriority}
+        onQuadrant={setQuadrant}
       />
 
       {/* Daily quote banner */}
