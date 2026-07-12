@@ -1398,6 +1398,22 @@ const HabitCard = memo(function HabitCard({ habit, identity, checked, streak, to
       position: "relative",
     }}>
 
+      {/* ── Identity ribbon — folded corner tag, top-left. Sits on top of the trigger
+          banner when one exists (same color family, so it reads as one unit); when
+          there's no trigger banner the toggle button below reserves extra top padding
+          so the ribbon doesn't collide with the check circle. ── */}
+      <div style={{
+        position: "absolute", top: 0, left: 0, zIndex: 1,
+        background: identity.color, color: "#fff",
+        fontSize: 9, fontWeight: 700, lineHeight: 1,
+        padding: "5px 12px 5px 10px",
+        borderRadius: "0 0 10px 0",
+        display: "flex", alignItems: "center", gap: 4,
+      }}>
+        <span aria-hidden="true">{identity.icon}</span>
+        <span>{shortLabel(identity.label)}</span>
+      </div>
+
       {/* ── Edit button ── */}
       <button
         onClick={e => { e.stopPropagation(); openEditHabit(identity.id, habit); }}
@@ -1422,7 +1438,11 @@ const HabitCard = memo(function HabitCard({ habit, identity, checked, streak, to
         aria-label={checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
         style={{
           display: "flex", flexDirection: "column",
-          width: "100%", padding: "12px 14px 14px",
+          width: "100%",
+          // Extra top padding when there's no trigger banner, so the identity
+          // ribbon (which overlays the banner when one exists) has clear room
+          // above the check circle instead of overlapping it.
+          padding: habit.trigger ? "12px 14px 14px" : "28px 14px 14px",
           background: "transparent", border: "none",
           cursor: "pointer", textAlign: "left",
           WebkitTapHighlightColor: "transparent",
