@@ -1965,11 +1965,15 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
     [dailyTasks, selectedDate]
   );
 
-  // Top 2 pending tasks (highest-priority quadrant first) for the collapsed "Today's Focus" preview
+  // "Do first" tasks (urgent + important) always show in full in the collapsed
+  // "Today's Focus" preview — they're never truncated behind "view matrix".
+  // When there are none, fall back to the top 2 pending tasks by quadrant priority.
   const previewTasks = useMemo(() => {
     const order = ["do", "schedule", "delegate", "eliminate"];
-    return (dailyTasks[selectedDate] || [])
-      .filter(t => !t.carried && !t.done)
+    const pending = (dailyTasks[selectedDate] || []).filter(t => !t.carried && !t.done);
+    const doFirst = pending.filter(t => taskQuadrant(t) === "do");
+    if (doFirst.length > 0) return doFirst;
+    return pending
       .sort((a, b) => order.indexOf(taskQuadrant(a)) - order.indexOf(taskQuadrant(b)))
       .slice(0, 2);
   }, [dailyTasks, selectedDate]);
