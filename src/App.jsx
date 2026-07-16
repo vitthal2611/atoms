@@ -1993,16 +1993,6 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
     return out;
   }, [allData, todayKey]);
 
-  // Memoized identity legend scores — avoids recomputing isScheduledOn for all habits on every render
-  const identityScores = useMemo(() =>
-    identities.map(i => {
-      const scheduled = i.habits.filter(h => isScheduledOn(h.frequency, selectedDate));
-      const done = scheduled.filter(h => todayData[h.id]).length;
-      return { id:i.id, color:i.color, label:i.label, done, total:scheduled.length };
-    }),
-    [identities, selectedDate, todayData]
-  );
-
   // ── Empty state — no identities yet ──
   if (identities.length === 0) {
     return (
@@ -2117,25 +2107,6 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
         </div>
         <div style={{ fontSize:14,color:T.text,fontStyle:"italic",lineHeight:1.65,fontWeight:500 }}>"{quote.text}"</div>
         {quote.author && <div style={{ fontSize:11,color:T.gold,fontWeight:700,marginTop:6 }}>— {quote.author}</div>}
-      </div>
-
-      {/* Identity legend bar — uses identityScores memoized at component level */}
-      <div style={{ ...S.card, padding:"12px 14px" }}>
-        <div style={{ fontSize:10,color:T.muted,marginBottom:8,letterSpacing:"0.1em",fontWeight:700,textTransform:"uppercase" }}>Your Identities</div>
-        <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-          {identityScores.map(({ id, color, label, done, total }) => {
-            const allDone = total > 0 && done === total;
-            return (
-              <div key={id}
-                aria-label={`${shortLabel(label)}: ${allDone ? "complete" : total > 0 ? `${done} of ${total}` : "none scheduled"}`}
-                style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, fontWeight:600 }}>
-                <span style={{ width:8, height:8, borderRadius:"50%", background:color, flexShrink:0, display:"inline-block" }} aria-hidden="true"/>
-                <span style={{ color }}>{shortLabel(label)}</span>
-                <span style={{ color:T.muted }}>{allDone ? "✓" : total > 0 ? `${done}/${total}` : "–"}</span>
-              </div>
-            );
-          })}
-        </div>
       </div>
 
       {/* Empty-identity nudge — show a contextual CTA for each identity with no habits */}
