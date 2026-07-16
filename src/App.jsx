@@ -2019,6 +2019,15 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
       {/* Day Navigator */}
       <DayNavigator selectedDate={selectedDate} setSelectedDate={setSelectedDate} todayKey={todayKey} />
 
+      {/* Daily quote banner */}
+      <div style={{ background:`linear-gradient(135deg,rgba(2,132,199,0.09),rgba(245,158,11,0.07))`, border:`1px solid rgba(2,132,199,0.2)`, borderRadius:16, padding:"14px 16px" }}>
+        <div style={{ fontSize:10,fontWeight:800,letterSpacing:"0.12em",color:T.primary,marginBottom:6,textTransform:"uppercase" }}>
+          <span aria-hidden="true">✨</span> Today's Motivation
+        </div>
+        <div style={{ fontSize:14,color:T.text,fontStyle:"italic",lineHeight:1.65,fontWeight:500 }}>"{quote.text}"</div>
+        {quote.author && <div style={{ fontSize:11,color:T.gold,fontWeight:700,marginTop:6 }}>— {quote.author}</div>}
+      </div>
+
       {/* Today's Focus — compact task preview, expands into the full Eisenhower matrix */}
       <div style={{ ...S.card, padding:"12px 14px" }}>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom: matrixExpanded ? 10 : 8 }}>
@@ -2098,15 +2107,6 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
             </button>
           </>
         )}
-      </div>
-
-      {/* Daily quote banner */}
-      <div style={{ background:`linear-gradient(135deg,rgba(2,132,199,0.09),rgba(245,158,11,0.07))`, border:`1px solid rgba(2,132,199,0.2)`, borderRadius:16, padding:"14px 16px" }}>
-        <div style={{ fontSize:10,fontWeight:800,letterSpacing:"0.12em",color:T.primary,marginBottom:6,textTransform:"uppercase" }}>
-          <span aria-hidden="true">✨</span> Today's Motivation
-        </div>
-        <div style={{ fontSize:14,color:T.text,fontStyle:"italic",lineHeight:1.65,fontWeight:500 }}>"{quote.text}"</div>
-        {quote.author && <div style={{ fontSize:11,color:T.gold,fontWeight:700,marginTop:6 }}>— {quote.author}</div>}
       </div>
 
       {/* Empty-identity nudge — show a contextual CTA for each identity with no habits */}
