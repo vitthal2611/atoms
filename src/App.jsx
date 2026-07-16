@@ -1935,7 +1935,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
 const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask, editTask, setQuadrant }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
-  const [dayTab, setDayTab] = useState("habits"); // "habits" | "matrix"
+  const [matrixExpanded, setMatrixExpanded] = useState(false);
 
   // Build enriched habit list with identity ref, time slot, and sort key
   const enrichedHabits  = useMemo(() =>
@@ -1964,6 +1964,15 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
     (dailyTasks[selectedDate] || []).filter(t => !t.carried && !t.done).length,
     [dailyTasks, selectedDate]
   );
+
+  // Top 2 pending tasks (highest-priority quadrant first) for the collapsed "Today's Focus" preview
+  const previewTasks = useMemo(() => {
+    const order = ["do", "schedule", "delegate", "eliminate"];
+    return (dailyTasks[selectedDate] || [])
+      .filter(t => !t.carried && !t.done)
+      .sort((a, b) => order.indexOf(taskQuadrant(a)) - order.indexOf(taskQuadrant(b)))
+      .slice(0, 2);
+  }, [dailyTasks, selectedDate]);
 
   // 7-day check-in trail for a habit, ending today — feeds the Four Laws expander's
   // mini heatmap. Anchored on todayKey (not selectedDate) since it's "recent history",
@@ -2016,59 +2025,87 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
       {/* Day Navigator */}
       <DayNavigator selectedDate={selectedDate} setSelectedDate={setSelectedDate} todayKey={todayKey} />
 
-      {/* Habits / Matrix segmented tabs */}
-      <div style={{ display:"flex", background:T.surf2, borderRadius:12, padding:3 }} role="tablist" aria-label="Today sections">
-        {[
-          { id:"habits", icon:"🔥", label:"Habits" },
-          { id:"matrix", icon:"🎯", label:"Matrix" },
-        ].map(t => {
-          const active = dayTab === t.id;
-          return (
-            <button
-              key={t.id}
-              role="tab"
-              aria-selected={active}
-              onClick={() => setDayTab(t.id)}
-              style={{
-                flex:1, position:"relative", display:"flex", alignItems:"center", justifyContent:"center", gap:6,
-                padding:"8px 0", borderRadius:9, border:"none", cursor:"pointer",
-                background: active ? T.surface : "transparent",
-                color: active ? T.primary : T.muted,
-                fontSize:13, fontWeight:500, fontFamily:"inherit",
-                WebkitTapHighlightColor:"transparent", transition:"background 0.15s",
-              }}
-            >
-              <span aria-hidden="true" style={{ fontSize:13 }}>{t.icon}</span>
-              {t.label}
-              {t.id === "matrix" && pendingTaskCount > 0 && (
-                <span aria-label={`${pendingTaskCount} pending tasks`} style={{
-                  fontSize:9, fontWeight:700, color:"#412402", background:T.gold,
-                  borderRadius:8, padding:"1px 5px", lineHeight:1.4,
-                }}>
-                  {pendingTaskCount}
-                </span>
-              )}
+      {/* Today's Focus — compact task preview, expands into the full Eisenhower matrix */}
+      <div style={{ ...S.card, padding:"12px 14px" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom: matrixExpanded ? 10 : 8 }}>
+          <span style={{ fontSize:10, color:T.muted, letterSpacing:"0.1em", fontWeight:700, textTransform:"uppercase" }}>
+            <span aria-hidden="true">🎯</span> Today's Focus
+          </span>
+          {pendingTaskCount > 0 && (
+            <span aria-label={`${pendingTaskCount} pending tasks`} style={{
+              fontSize:9, fontWeight:700, color:"#412402", background:T.gold,
+              borderRadius:8, padding:"1px 6px", lineHeight:1.4,
+            }}>
+              {pendingTaskCount}
+            </span>
+          )}
+          {matrixExpanded && (
+            <button onClick={() => setMatrixExpanded(false)} style={{
+              marginLeft:"auto", background:"transparent", border:"none", cursor:"pointer",
+              fontSize:11, fontWeight:700, color:T.primary, padding:0, WebkitTapHighlightColor:"transparent",
+            }}>
+              Collapse <span aria-hidden="true">▲</span>
             </button>
-          );
-        })}
+          )}
+        </div>
+
+        {matrixExpanded ? (
+          <TopTasksCard
+            tasks={dailyTasks[selectedDate] || []}
+            dateKey={selectedDate}
+            isToday={selectedDate >= todayKey}
+            onAdd={addTask}
+            onToggle={toggleTask}
+            onDelete={deleteTask}
+            onEdit={editTask}
+            onQuadrant={setQuadrant}
+          />
+        ) : previewTasks.length === 0 ? (
+          <div style={{ fontSize:12, color:T.muted, textAlign:"center", padding:"6px 0" }}>
+            Nothing here —{" "}
+            <button onClick={() => setMatrixExpanded(true)} style={{
+              background:"none", border:"none", color:T.primary, fontWeight:700,
+              cursor:"pointer", padding:0, fontSize:12, WebkitTapHighlightColor:"transparent",
+            }}>
+              add a task
+            </button>
+          </div>
+        ) : (
+          <>
+            {previewTasks.map(t => {
+              const q = quadrantOf(taskQuadrant(t));
+              return (
+                <div key={t.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"5px 0" }}>
+                  <button
+                    onClick={() => toggleTask(selectedDate, t.id)}
+                    aria-label={`Complete: ${t.text}`}
+                    style={{
+                      width:16, height:16, borderRadius:5, flexShrink:0,
+                      border:`2px solid ${q.accent}`, background:"transparent",
+                      cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent",
+                    }}
+                  />
+                  <span style={{
+                    fontSize:13, color:T.text, flex:1, minWidth:0,
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                  }}>{t.text}</span>
+                  <span style={{
+                    fontSize:9, fontWeight:700, color:q.dark, background:q.bg,
+                    padding:"2px 6px", borderRadius:8, flexShrink:0, whiteSpace:"nowrap",
+                  }}>{q.label}</span>
+                </div>
+              );
+            })}
+            <button onClick={() => setMatrixExpanded(true)} style={{
+              display:"block", width:"100%", textAlign:"center", background:"none", border:"none",
+              cursor:"pointer", fontSize:11, color:T.muted, padding:"6px 0 0", WebkitTapHighlightColor:"transparent",
+            }}>
+              {pendingTaskCount > previewTasks.length ? `+ ${pendingTaskCount - previewTasks.length} more · ` : ""}view matrix
+            </button>
+          </>
+        )}
       </div>
 
-      {/* Task matrix */}
-      {dayTab === "matrix" && (
-        <TopTasksCard
-          tasks={dailyTasks[selectedDate] || []}
-          dateKey={selectedDate}
-          isToday={selectedDate >= todayKey}
-          onAdd={addTask}
-          onToggle={toggleTask}
-          onDelete={deleteTask}
-          onEdit={editTask}
-          onQuadrant={setQuadrant}
-        />
-      )}
-
-      {dayTab === "habits" && (
-      <>
       {/* Daily quote banner */}
       <div style={{ background:`linear-gradient(135deg,rgba(2,132,199,0.09),rgba(245,158,11,0.07))`, border:`1px solid rgba(2,132,199,0.2)`, borderRadius:16, padding:"14px 16px" }}>
         <div style={{ fontSize:10,fontWeight:800,letterSpacing:"0.12em",color:T.primary,marginBottom:6,textTransform:"uppercase" }}>
@@ -2253,8 +2290,6 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
         <span style={S.footerQuote}>"Habits are the compound interest of self-improvement."</span>
         <span style={S.footerAuthor}>— James Clear, Atomic Habits</span>
       </div>
-      </>
-      )}
     </div>
   );
 });
