@@ -833,6 +833,17 @@ export default function App() {
     }));
   }, []);
 
+  // Toggle a task's Big 5 flag — at most BIG5_LIMIT active Big 5 tasks per day
+  const toggleTaskBig = useCallback((dateKey, taskId) => {
+    setDailyTasks(prev => {
+      const list = prev[dateKey] || [];
+      const t = list.find(x => x.id === taskId);
+      if (!t) return prev;
+      if (!t.big && list.filter(x => x.big && !x.carried).length >= 5) return prev;
+      return { ...prev, [dateKey]: list.map(x => x.id === taskId ? { ...x, big: !x.big } : x) };
+    });
+  }, []);
+
   // ── Task rollover — runs on every refresh/mount and at midnight.
   // Idempotent via `carriedFrom`: each carried task records the source ID,
   // so the same task is never duplicated even across multiple refreshes.
@@ -1248,6 +1259,7 @@ export default function App() {
             deleteTask={deleteTask}
             editTask={editTask}
             setTaskPriority={setTaskPriority}
+            toggleTaskBig={toggleTaskBig}
             deferTask={deferTask}
           />
         )}
@@ -1747,8 +1759,11 @@ function taskPriority(t) {
   if (t.quadrant === "eliminate") return "L";
   return "M";
 }
+// Big 5 tasks (t.big) always sort above everything, then High → Medium → Low
+const taskRank = (t) => (t.big ? -1 : PRIORITY_ORDER[taskPriority(t)]);
+const BIG5_LIMIT = 5;
 
-const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd, onToggle, onDelete, onEdit, onPriority, onDefer }) {
+const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd, onToggle, onDelete, onEdit, onPriority, onBig, onDefer }) {
   const [inputVisible, setInputVisible] = useState(false);
   const [inputVal,     setInputVal]     = useState("");
   const [inputPriority, setInputPriority] = useState("M");
@@ -1824,7 +1839,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
         const openTasks = activeTasks
           .filter(t => !t.done)
           .slice()
-          .sort((a, b) => PRIORITY_ORDER[taskPriority(a)] - PRIORITY_ORDER[taskPriority(b)]);
+          .sort((a, b) => taskRank(a) - taskRank(b));
         if (openTasks.length === 0) {
           return (
             <div style={{ fontSize:13, color:T.muted, fontStyle:"italic", textAlign:"center", padding:"14px 0" }}>
@@ -1872,9 +1887,11 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
                       title={isToday ? "Tap for options" : undefined}
                       style={{
                         flex:1, minWidth:0, fontSize:15, lineHeight:1.4, color:T.text,
+                        fontWeight: task.big ? 700 : 400,
                         cursor: isToday ? "pointer" : "default",
                       }}
                     >
+                      {task.big && <span aria-label="Big 5" style={{ marginRight:5 }}>⭐</span>}
                       {task.text}
                     </span>
                   )}
@@ -2029,6 +2046,28 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
                 );
               })}
             </div>
+            {(() => {
+              const bigCount = activeTasks.filter(t => t.big).length;
+              const bigFull = !sheetTask.big && bigCount >= BIG5_LIMIT;
+              return (
+                <button
+                  onClick={() => { if (!bigFull) { onBig(dateKey, sheetTask.id); setSheetTask(null); } }}
+                  aria-pressed={!!sheetTask.big}
+                  aria-disabled={bigFull}
+                  style={{
+                    display:"flex", alignItems:"center", justifyContent:"center", gap:8, width:"100%",
+                    padding:"12px 10px", background: sheetTask.big ? T.gold+"28" : T.gold+"14",
+                    border: sheetTask.big ? `2px solid ${T.gold}` : "2px solid transparent",
+                    borderRadius:10, cursor: bigFull ? "default" : "pointer", marginBottom:8,
+                    fontSize:13, fontWeight:700, color:"#92400E", opacity: bigFull ? 0.5 : 1,
+                    fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
+                  }}
+                >
+                  <span aria-hidden="true">⭐</span>
+                  {sheetTask.big ? "Remove from Big 5" : bigFull ? "Big 5 is full" : "Mark as Big 5"}
+                </button>
+              );
+            })()}
             <button
               onClick={() => { onDefer(dateKey, sheetTask.id); setSheetTask(null); }}
               style={{
@@ -2062,7 +2101,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
 });
 
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
-const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask, editTask, setTaskPriority, deferTask }) {
+const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask, editTask, setTaskPriority, toggleTaskBig, deferTask }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
   const [matrixExpanded, setMatrixExpanded] = useState(false);
@@ -2110,16 +2149,15 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
     [dailyTasks, selectedDate]
   );
 
-  // High-priority tasks always show in full in the collapsed "Today's Focus"
-  // preview. When there are none, fall back to the top 2 pending tasks by priority.
+  // Big 5 and High-priority tasks always show in full in the collapsed
+  // "Today's Focus" preview (Big 5 on top). When there are none, fall back
+  // to the top 2 pending tasks by rank.
   const previewTasks = useMemo(() => {
     const pending = (dailyTasks[selectedDate] || []).filter(t => !t.carried && !t.done);
-    const high = pending.filter(t => taskPriority(t) === "H");
-    if (high.length > 0) return high;
-    return pending
-      .slice()
-      .sort((a, b) => PRIORITY_ORDER[taskPriority(a)] - PRIORITY_ORDER[taskPriority(b)])
-      .slice(0, 2);
+    const sorted = pending.slice().sort((a, b) => taskRank(a) - taskRank(b));
+    const top = sorted.filter(t => t.big || taskPriority(t) === "H");
+    if (top.length > 0) return top;
+    return sorted.slice(0, 2);
   }, [dailyTasks, selectedDate]);
 
   // 7-day check-in trail for a habit, ending today — feeds the Four Laws expander's
@@ -2206,6 +2244,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
             onDelete={deleteTask}
             onEdit={editTask}
             onPriority={setTaskPriority}
+            onBig={toggleTaskBig}
             onDefer={deferTask}
           />
         ) : previewTasks.length === 0 ? (
@@ -2220,26 +2259,34 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
           </div>
         ) : (
           <>
-            {previewTasks.map(t => {
+            {previewTasks.map((t, i) => {
               const q = priorityOf(taskPriority(t));
               return (
-                <div key={t.id} style={{ display:"flex", alignItems:"center", gap:9, padding:"7px 0" }}>
+                <div key={t.id} style={{ display:"flex", alignItems:"center", gap:11, padding:"9px 2px", borderTop: i === 0 ? "none" : `1px solid ${T.surf2}` }}>
                   <button
                     onClick={() => toggleTask(selectedDate, t.id)}
                     aria-label={`Complete: ${t.text}`}
                     style={{
-                      width:20, height:20, borderRadius:6, flexShrink:0, boxSizing:"border-box",
+                      width:22, height:22, borderRadius:"50%", flexShrink:0, boxSizing:"border-box",
                       border:`2px solid ${q.accent}`, background:"transparent",
                       cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent",
                     }}
                   />
-                  <span style={{
-                    fontSize:13, color:T.text, flex:1, minWidth:0,
-                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-                  }}>{t.text}</span>
-                  <span style={{
-                    fontSize:9, fontWeight:700, color:q.dark, background:q.bg,
-                    padding:"2px 6px", borderRadius:8, flexShrink:0, whiteSpace:"nowrap",
+                  <span
+                    onClick={() => setMatrixExpanded(true)}
+                    title="Tap for options"
+                    style={{
+                      fontSize:15, lineHeight:1.4, color:T.text, flex:1, minWidth:0,
+                      fontWeight: t.big ? 700 : 400, cursor:"pointer",
+                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                    }}
+                  >
+                    {t.big && <span aria-label="Big 5" style={{ marginRight:5 }}>⭐</span>}
+                    {t.text}
+                  </span>
+                  <span aria-label={`Priority: ${q.label}`} style={{
+                    fontSize:9, fontWeight:800, color:q.dark, background:q.bg,
+                    padding:"2px 7px", borderRadius:8, flexShrink:0, whiteSpace:"nowrap", letterSpacing:"0.03em",
                   }}>{q.label}</span>
                 </div>
               );
