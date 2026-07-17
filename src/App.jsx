@@ -1387,8 +1387,21 @@ function getSlotId(timeStr) {
   return "anytime";
 }
 
-// ─── HABIT CARD ───────────────────────────────────────────────────────────────
-const HabitCard = memo(function HabitCard({ habit, identity, checked, streak, toggle, openEditHabit, weekTrail }) {
+// Collapse a time-sorted habit list into runs of consecutive same-identity
+// habits — each run renders as one IdentityGroupCard with a shared band
+function groupByIdentityRuns(items) {
+  const groups = [];
+  for (const item of items) {
+    const last = groups[groups.length - 1];
+    if (last && last.identity.id === item.identity.id) last.items.push(item);
+    else groups.push({ identity: item.identity, items: [item] });
+  }
+  return groups;
+}
+
+// ─── HABIT ROW ────────────────────────────────────────────────────────────────
+// One habit inside an IdentityGroupCard: trigger cue → action row → meta.
+function HabitRow({ habit, identity, checked, streak, toggle, openEditHabit, weekTrail, first }) {
   const next = getNextMilestone(streak);
   const [expanded, setExpanded] = useState(false);
 
@@ -1413,38 +1426,25 @@ const HabitCard = memo(function HabitCard({ habit, identity, checked, streak, to
 
   return (
     <div style={{
-      borderRadius: 14, marginBottom: 8,
-      background: checked ? identity.color + "24" : T.surface,
-      border: `1px solid ${identity.color}55`,
-      transition: "all 0.2s ease",
-      overflow: "hidden",
+      position: "relative",
+      background: checked ? identity.color + "1f" : "transparent",
+      borderTop: first ? "none" : `1px solid ${identity.color}22`,
+      transition: "background 0.2s ease",
     }}>
 
-      {/* ── Identity band — who this habit is a vote for ── */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 7,
-        background: identity.color + "26", padding: "5px 4px 5px 12px",
-      }}>
-        <span style={{ fontSize: 13, flexShrink: 0 }} aria-hidden="true">{identity.icon}</span>
-        <span style={{
-          flex: 1, minWidth: 0, fontSize: 10.5, fontWeight: 800,
-          letterSpacing: "0.07em", textTransform: "uppercase", color: identity.color,
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-        }}>
-          {shortLabel(identity.label)}
-        </span>
-        <button
-          onClick={e => { e.stopPropagation(); openEditHabit(identity.id, habit); }}
-          aria-label={`Edit habit: ${habit.label}`}
-          style={{
-            background: "transparent", border: "none", flexShrink: 0,
-            fontSize: 12, color: T.muted, cursor: "pointer",
-            padding: "5px 10px", lineHeight: 1, WebkitTapHighlightColor: "transparent",
-          }}
-        >
-          <span aria-hidden="true">✎</span>
-        </button>
-      </div>
+      {/* ── Edit button ── */}
+      <button
+        onClick={e => { e.stopPropagation(); openEditHabit(identity.id, habit); }}
+        aria-label={`Edit habit: ${habit.label}`}
+        style={{
+          position: "absolute", top: 2, right: 0, zIndex: 1,
+          background: "transparent", border: "none",
+          fontSize: 12, color: T.muted, cursor: "pointer",
+          padding: "8px 10px", lineHeight: 1, WebkitTapHighlightColor: "transparent",
+        }}
+      >
+        <span aria-hidden="true">✎</span>
+      </button>
 
       {/* ── Tap target ── */}
       <button
@@ -1454,7 +1454,7 @@ const HabitCard = memo(function HabitCard({ habit, identity, checked, streak, to
         aria-label={checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
         style={{
           display: "flex", flexDirection: "column",
-          width: "100%", padding: "9px 12px 10px",
+          width: "100%", padding: "9px 34px 10px 12px",
           background: "transparent", border: "none",
           cursor: "pointer", textAlign: "left",
           WebkitTapHighlightColor: "transparent",
@@ -1507,6 +1507,13 @@ const HabitCard = memo(function HabitCard({ habit, identity, checked, streak, to
             {metaParts.join(" · ")}
           </div>
         )}
+
+        {/* Milestone micro-bar — progress toward the next streak badge */}
+        {next && streak > 0 && (
+          <div aria-hidden="true" style={{ height: 3, borderRadius: 99, background: T.surf2, marginTop: 6, marginLeft: 30, width: "calc(100% - 30px)", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${Math.min(100, (streak / next.days) * 100)}%`, background: identity.color, borderRadius: 99, transition: "width 0.4s ease" }} />
+          </div>
+        )}
       </button>
 
       {/* ── Four Laws expander — sits outside the toggle button (can't nest buttons) ── */}
@@ -1517,7 +1524,7 @@ const HabitCard = memo(function HabitCard({ habit, identity, checked, streak, to
             aria-expanded={expanded}
             style={{
               display:"flex", alignItems:"center", gap:4, background:"transparent", border:"none",
-              cursor:"pointer", padding:0, fontSize:10, fontWeight:700, color:T.primary,
+              cursor:"pointer", padding:"6px 8px 6px 0", fontSize:11, fontWeight:700, color:T.primary,
               WebkitTapHighlightColor:"transparent",
             }}
           >
@@ -1559,6 +1566,62 @@ const HabitCard = memo(function HabitCard({ habit, identity, checked, streak, to
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── IDENTITY GROUP CARD ──────────────────────────────────────────────────────
+// One card per run of consecutive same-identity habits in a time slot: a single
+// identity band on top (with the identity's done-today count), then one
+// HabitRow per habit — hierarchy reads identity → trigger → action.
+const IdentityGroupCard = memo(function IdentityGroupCard({ identity, items, todayData, justChecked, getStreakForHabit, toggle, openEditHabit, getWeekTrail, doneToday, totalToday }) {
+  const dim = identity.colorDim || T.text;
+  return (
+    <div style={{
+      borderRadius: 14, marginBottom: 8,
+      background: T.surface,
+      border: `1px solid ${identity.color}55`,
+      overflow: "hidden",
+    }}>
+      {/* ── Identity band — who these habits are a vote for ── */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 7,
+        background: identity.color + "26", padding: "5px 10px 5px 12px",
+      }}>
+        <span style={{ fontSize: 13, flexShrink: 0 }} aria-hidden="true">{identity.icon}</span>
+        <span style={{
+          flex: 1, minWidth: 0, fontSize: 10.5, fontWeight: 800,
+          letterSpacing: "0.07em", textTransform: "uppercase", color: dim,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}>
+          {shortLabel(identity.label)}
+        </span>
+        <span
+          aria-label={`${doneToday} of ${totalToday} habits done today for ${shortLabel(identity.label)}`}
+          style={{
+            flexShrink: 0, fontSize: 10, fontWeight: 800, color: dim,
+            background: "rgba(255,255,255,0.6)", borderRadius: 10, padding: "2px 8px",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {doneToday}/{totalToday}
+        </span>
+      </div>
+
+      {items.map(({ habit }, i) => (
+        <div key={habit.id} className={justChecked === habit.id ? "card-leaving" : ""}>
+          <HabitRow
+            habit={habit}
+            identity={identity}
+            checked={!!todayData[habit.id]}
+            streak={getStreakForHabit(habit.id, habit.frequency)}
+            toggle={toggle}
+            openEditHabit={openEditHabit}
+            weekTrail={getWeekTrail(habit.id)}
+            first={i === 0}
+          />
+        </div>
+      ))}
     </div>
   );
 });
@@ -1985,6 +2048,17 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
 
   const quote = useMemo(() => getDailyQuote(), []);
 
+  // Done/total per identity for the selected day — feeds the band's count pill
+  const identityDayCounts = useMemo(() => {
+    const m = {};
+    for (const { habit, identity } of scheduledHabits) {
+      const c = m[identity.id] || (m[identity.id] = { done: 0, total: 0 });
+      c.total += 1;
+      if (todayData[habit.id]) c.done += 1;
+    }
+    return m;
+  }, [scheduledHabits, todayData]);
+
   // Slot the clock is currently in — used to mark "Now" on today's section headers
   const nowHour   = new Date().getHours();
   const nowSlotId = (TIME_SLOTS.find(s => s.range && nowHour >= s.range[0] && nowHour < s.range[1]) || { id: "anytime" }).id;
@@ -2173,18 +2247,20 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
               )}
             </div>
 
-            {slotVisible.map(({ habit, identity }) => (
-              <div key={habit.id} className={justChecked === habit.id ? "card-leaving" : ""}>
-                <HabitCard
-                  habit={habit}
-                  identity={identity}
-                  checked={!!todayData[habit.id]}
-                  streak={getStreakForHabit(habit.id, habit.frequency)}
-                  toggle={toggle}
-                  openEditHabit={openEditHabit}
-                  weekTrail={getWeekTrail(habit.id)}
-                />
-              </div>
+            {groupByIdentityRuns(slotVisible).map(g => (
+              <IdentityGroupCard
+                key={g.items[0].habit.id}
+                identity={g.identity}
+                items={g.items}
+                todayData={todayData}
+                justChecked={justChecked}
+                getStreakForHabit={getStreakForHabit}
+                toggle={toggle}
+                openEditHabit={openEditHabit}
+                getWeekTrail={getWeekTrail}
+                doneToday={(identityDayCounts[g.identity.id] || {}).done || 0}
+                totalToday={(identityDayCounts[g.identity.id] || {}).total || 0}
+              />
             ))}
           </div>
         );
