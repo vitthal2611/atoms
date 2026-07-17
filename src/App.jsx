@@ -839,7 +839,7 @@ export default function App() {
       const list = prev[dateKey] || [];
       const t = list.find(x => x.id === taskId);
       if (!t) return prev;
-      if (!t.big && list.filter(x => x.big && !x.carried).length >= 5) return prev;
+      if (!t.big && list.filter(x => x.big && !x.carried && !x.done).length >= 5) return prev;
       return { ...prev, [dateKey]: list.map(x => x.id === taskId ? { ...x, big: !x.big } : x) };
     });
   }, []);
@@ -2032,7 +2032,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
               })}
             </div>
             {(() => {
-              const bigCount = activeTasks.filter(t => t.big).length;
+              const bigCount = activeTasks.filter(t => t.big && !t.done).length;
               const bigFull = !sheetTask.big && bigCount >= BIG5_LIMIT;
               return (
                 <button
