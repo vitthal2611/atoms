@@ -1818,23 +1818,8 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
   const allDone = total > 0 && doneCnt === total;
 
   return (
-    <div style={{ borderRadius:16, background:T.surface, border:`1.5px solid ${T.border}`, overflow:"hidden" }}>
-      {/* Header */}
-      <div style={{ display:"flex", alignItems:"center", gap:8, padding:"12px 14px 10px", borderBottom:`1px solid ${T.surf2}` }}>
-        <span style={{ fontSize:16 }} aria-hidden="true">🎯</span>
-        <span style={{ flex:1, fontSize:13, fontWeight:700, color:T.text, fontFamily:FONT_DISPLAY, letterSpacing:".3px" }}>
-          Tasks
-        </span>
-        <span aria-label={`${doneCnt} of ${total} tasks done`} style={{
-          fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20,
-          background: allDone ? T.primary+"18" : T.gold+"20",
-          color:      allDone ? T.primary       : "#92400E",
-        }}>
-          {doneCnt} / {total}
-        </span>
-      </div>
-
-      {/* Open tasks — one simple list, High → Medium → Low; long lists scroll */}
+    <div>
+      {/* Open tasks — one simple list, Big 5 → High → Medium → Low; long lists scroll */}
       {(() => {
         const openTasks = activeTasks
           .filter(t => !t.done)
@@ -1848,7 +1833,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
           );
         }
         return (
-          <div style={{ padding:"2px 12px", maxHeight:320, overflowY:"auto", WebkitOverflowScrolling:"touch" }}>
+          <div style={{ padding:"2px 0", maxHeight:320, overflowY:"auto", WebkitOverflowScrolling:"touch" }}>
             {openTasks.map((task, i) => {
               const p = priorityOf(taskPriority(task));
               const isEditing = editingId === task.id;
@@ -1915,7 +1900,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
         const completedTasks = activeTasks.filter(t => t.done);
         if (completedTasks.length === 0) return null;
         return (
-          <div style={{ borderTop:`1px solid ${T.surf2}`, padding:"8px 10px" }}>
+          <div style={{ borderTop:`1px solid ${T.surf2}`, padding:"8px 0" }}>
             <button
               onClick={() => setCompletedOpen(o => !o)}
               aria-expanded={completedOpen}
