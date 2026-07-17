@@ -762,12 +762,11 @@ export default function App() {
   const openAddIdentity   = useCallback(() => setModal("addIdentity"), []);
 
   // ── Daily task CRUD (stable callbacks — only touch setDailyTasks) ──
-  // Tasks live on an Eisenhower matrix: `quadrant` is one of
-  // "do" | "schedule" | "delegate" | "eliminate" (see QUADRANTS below).
-  const addTask = useCallback((dateKey, text, quadrant = "schedule") => {
+  // Tasks carry a simple `priority`: "H" | "M" | "L" (see PRIORITIES below).
+  const addTask = useCallback((dateKey, text, priority = "M") => {
     setDailyTasks(prev => {
       const existing = prev[dateKey] || [];
-      return { ...prev, [dateKey]: [...existing, { id: uid(), text, done: false, quadrant }] };
+      return { ...prev, [dateKey]: [...existing, { id: uid(), text, done: false, priority }] };
     });
   }, []);
 
@@ -781,10 +780,43 @@ export default function App() {
   }, []);
 
   const deleteTask = useCallback((dateKey, taskId) => {
+    const list = dailyTasks[dateKey] || [];
+    const idx = list.findIndex(t => t.id === taskId);
+    if (idx === -1) return;
+    const victim = list[idx];
     setDailyTasks(prev => ({
       ...prev,
       [dateKey]: (prev[dateKey] || []).filter(t => t.id !== taskId),
     }));
+    clearTimeout(undoTimerRef.current);
+    setUndoDelete({
+      label: `"${victim.text}" deleted`,
+      restore: () => setDailyTasks(prev => {
+        const l = prev[dateKey] || [];
+        const at = Math.min(idx, l.length);
+        return { ...prev, [dateKey]: [...l.slice(0, at), victim, ...l.slice(at)] };
+      }),
+    });
+    undoTimerRef.current = setTimeout(() => setUndoDelete(null), 5000);
+  }, [dailyTasks]);
+
+  // Push a task to tomorrow — same carried/carriedFrom bookkeeping as the
+  // midnight rollover, so neither mechanism ever duplicates a task
+  const deferTask = useCallback((dateKey, taskId) => {
+    setDailyTasks(prev => {
+      const list = prev[dateKey] || [];
+      const src = list.find(t => t.id === taskId);
+      if (!src) return prev;
+      const d = new Date(dateKey + "T12:00:00"); d.setDate(d.getDate() + 1);
+      const nextKey = dateToKey(d);
+      const nextList = prev[nextKey] || [];
+      if (nextList.some(t => t.carriedFrom === taskId)) return prev;
+      return {
+        ...prev,
+        [dateKey]: list.map(t => t.id === taskId ? { ...t, carried: true } : t),
+        [nextKey]: [...nextList, { ...src, id: uid(), done: false, carried: false, carriedFrom: taskId }],
+      };
+    });
   }, []);
 
   const editTask = useCallback((dateKey, taskId, text) => {
@@ -794,10 +826,10 @@ export default function App() {
     }));
   }, []);
 
-  const setQuadrant = useCallback((dateKey, taskId, quadrant) => {
+  const setTaskPriority = useCallback((dateKey, taskId, priority) => {
     setDailyTasks(prev => ({
       ...prev,
-      [dateKey]: (prev[dateKey] || []).map(t => t.id === taskId ? { ...t, quadrant } : t),
+      [dateKey]: (prev[dateKey] || []).map(t => t.id === taskId ? { ...t, priority } : t),
     }));
   }, []);
 
@@ -1215,7 +1247,8 @@ export default function App() {
             toggleTask={toggleTask}
             deleteTask={deleteTask}
             editTask={editTask}
-            setQuadrant={setQuadrant}
+            setTaskPriority={setTaskPriority}
+            deferTask={deferTask}
           />
         )}
 
@@ -1695,35 +1728,30 @@ function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
   );
 }
 
-// ─── TOP 3 TASKS CARD ─────────────────────────────────────────────────────────
-// Eisenhower matrix quadrants. `quadrant` on a task is one of these four keys.
+// ─── DAILY TASKS CARD ─────────────────────────────────────────────────────────
+// Simple priority list: each task is High, Medium, or Low.
 // Colors are drawn from the app's Ocean Depth palette (T), not arbitrary hues.
-const QUADRANTS = [
-  { key: "do",        short: "Do",   label: "Do first",  sub: "Urgent and important",         accent: T.red,     dark: "#791F1F", bg: "#FEE2E2" },
-  { key: "schedule",  short: "Sch",  label: "Schedule",  sub: "Important, not urgent",        accent: T.primary, dark: "#0C447C", bg: "#DBEAFE" },
-  { key: "delegate",  short: "Del",  label: "Delegate",  sub: "Urgent, not important",        accent: T.gold,    dark: "#633806", bg: "#FEF3C7" },
-  // Slate, not blue — kept visually distinct from "schedule" so the two
-  // don't get confused at a glance (both used to sit in the same blue family).
-  { key: "eliminate", short: "Elim", label: "Eliminate", sub: "Neither urgent nor important", accent: "#64748B", dark: "#334155", bg: "#E2E8F0" },
+const PRIORITIES = [
+  { key: "H", label: "High",   accent: T.red,     dark: "#791F1F", bg: "#FEE2E2" },
+  { key: "M", label: "Medium", accent: T.gold,    dark: "#633806", bg: "#FEF3C7" },
+  { key: "L", label: "Low",    accent: "#64748B", dark: "#334155", bg: "#E2E8F0" },
 ];
-const QUADRANT_KEYS = new Set(QUADRANTS.map(q => q.key));
-const quadrantOf = (key) => QUADRANTS.find(q => q.key === key) || QUADRANTS[1];
-// Back-compat: tasks created before the matrix redesign have a legacy
-// `priority: "H"|"M"|"L"` field instead of `quadrant`. Map them over so old
-// data still lands somewhere sensible instead of collapsing into one bucket.
-// Also guards against an unrecognized/corrupted `quadrant` value silently
-// making a task disappear from all four buckets.
-function taskQuadrant(t) {
-  if (t.quadrant && QUADRANT_KEYS.has(t.quadrant)) return t.quadrant;
-  if (t.priority === "H") return "do";
-  if (t.priority === "L") return "eliminate";
-  return "schedule";
+const PRIORITY_ORDER = { H: 0, M: 1, L: 2 };
+const priorityOf = (key) => PRIORITIES.find(p => p.key === key) || PRIORITIES[1];
+// Back-compat: tasks created during the Eisenhower-matrix era carry a
+// `quadrant` field instead of `priority`. Map them over so old data still
+// lands somewhere sensible; anything unrecognized falls back to Medium.
+function taskPriority(t) {
+  if (t.priority === "H" || t.priority === "M" || t.priority === "L") return t.priority;
+  if (t.quadrant === "do") return "H";
+  if (t.quadrant === "eliminate") return "L";
+  return "M";
 }
 
-const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd, onToggle, onDelete, onEdit, onQuadrant }) {
+const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd, onToggle, onDelete, onEdit, onPriority, onDefer }) {
   const [inputVisible, setInputVisible] = useState(false);
   const [inputVal,     setInputVal]     = useState("");
-  const [inputQuad,    setInputQuad]    = useState("schedule");
+  const [inputPriority, setInputPriority] = useState("M");
   const [editingId,    setEditingId]    = useState(null);
   const [editVal,      setEditVal]      = useState("");
   const [completedOpen, setCompletedOpen] = useState(false);
@@ -1739,7 +1767,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
   useEffect(() => {
     setInputVisible(false);
     setInputVal("");
-    setInputQuad("schedule");
+    setInputPriority("M");
     setEditingId(null);
     setEditVal("");
     setCompletedOpen(false);
@@ -1753,8 +1781,8 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
   const handleAdd = () => {
     const t = inputVal.trim();
     if (!t) return;
-    onAdd(dateKey, t, inputQuad);
-    setInputVal(""); setInputQuad("schedule"); setInputVisible(false);
+    onAdd(dateKey, t, inputPriority);
+    setInputVal(""); setInputPriority("M"); setInputVisible(false);
   };
 
   const startEdit = (task) => {
@@ -1780,7 +1808,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
       <div style={{ display:"flex", alignItems:"center", gap:8, padding:"12px 14px 10px", borderBottom:`1px solid ${T.surf2}` }}>
         <span style={{ fontSize:16 }} aria-hidden="true">🎯</span>
         <span style={{ flex:1, fontSize:13, fontWeight:700, color:T.text, fontFamily:FONT_DISPLAY, letterSpacing:".3px" }}>
-          Task matrix
+          Tasks
         </span>
         <span aria-label={`${doneCnt} of ${total} tasks done`} style={{
           fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20,
@@ -1791,85 +1819,79 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
         </span>
       </div>
 
-      {/* Quadrant sections — stacked full-width instead of a cramped 2x2 grid,
-          so task text and checkboxes can be sized for easy reading/tapping. */}
-      <div style={{ display:"flex", flexDirection:"column", gap:8, padding:10 }}>
-        {QUADRANTS.map(q => {
-          // Done tasks move out of the quadrant into the Completed strip below,
-          // so the list only ever shows what's still open.
-          const qTasks = activeTasks.filter(t => taskQuadrant(t) === q.key && !t.done);
+      {/* Open tasks — one simple list, High → Medium → Low; long lists scroll */}
+      {(() => {
+        const openTasks = activeTasks
+          .filter(t => !t.done)
+          .slice()
+          .sort((a, b) => PRIORITY_ORDER[taskPriority(a)] - PRIORITY_ORDER[taskPriority(b)]);
+        if (openTasks.length === 0) {
           return (
-            <div key={q.key} style={{ background:T.bg, borderRadius:12, borderLeft:`4px solid ${q.accent}`, padding:"12px 14px" }}>
-              <div style={{ display:"flex", alignItems:"baseline", gap:6, marginBottom:10 }}>
-                <span style={{ fontSize:13, fontWeight:700, color:q.dark }}>{q.label}</span>
-                <span style={{ fontSize:11, color:T.muted }}>· {q.sub}</span>
-              </div>
-
-              {qTasks.length === 0 && (
-                <div style={{ fontSize:13, color:T.muted, fontStyle:"italic" }}>Nothing here</div>
-              )}
-
-              {qTasks.length > 0 && (
-                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                  {qTasks.map(task => {
-                    const isEditing = editingId === task.id;
-                    return (
-                      <div key={task.id} style={{ display:"flex", alignItems:"center", gap:12 }}>
-                        {/* Check circle */}
-                        <button
-                          onClick={() => onToggle(dateKey, task.id)}
-                          aria-pressed={task.done}
-                          aria-label={task.done ? `Uncheck: ${task.text}` : `Check: ${task.text}`}
-                          style={{
-                            width:24, height:24, borderRadius:"50%", flexShrink:0,
-                            border:`2px solid ${task.done ? q.accent : T.border}`,
-                            background: task.done ? q.accent : "transparent",
-                            display:"flex", alignItems:"center", justifyContent:"center",
-                            cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"all 0.15s",
-                          }}
-                        >
-                          {task.done && <span style={{ fontSize:13, color:"#fff", fontWeight:900, lineHeight:1 }} aria-hidden="true">✓</span>}
-                        </button>
-
-                        {/* Task text / edit input */}
-                        {isEditing ? (
-                          <input
-                            ref={editRef}
-                            value={editVal}
-                            onChange={e => setEditVal(e.target.value)}
-                            onKeyDown={e => {
-                              if (e.key === "Enter")  commitEdit(task.id);
-                              if (e.key === "Escape") { setEditingId(null); setEditVal(""); }
-                            }}
-                            onBlur={() => commitEdit(task.id)}
-                            maxLength={80}
-                            aria-label="Edit task"
-                            style={{ flex:1, minWidth:0, border:`1px solid ${T.accent}`, borderRadius:8, padding:"6px 8px", fontSize:15, background:"#fff", color:T.text, outline:"none", fontFamily:"inherit" }}
-                          />
-                        ) : (
-                          <span
-                            onClick={() => isToday && setSheetTask(task)}
-                            title={isToday ? "Tap for options" : undefined}
-                            style={{
-                              flex:1, fontSize:15, lineHeight:1.4,
-                              color:          task.done ? T.muted : T.text,
-                              textDecoration: task.done ? "line-through" : "none",
-                              textDecorationColor: T.muted,
-                              cursor: isToday ? "pointer" : "default",
-                            }}
-                          >
-                            {task.text}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+            <div style={{ fontSize:13, color:T.muted, fontStyle:"italic", textAlign:"center", padding:"14px 0" }}>
+              No open tasks
             </div>
           );
-        })}
-      </div>
+        }
+        return (
+          <div style={{ padding:"2px 12px", maxHeight:320, overflowY:"auto", WebkitOverflowScrolling:"touch" }}>
+            {openTasks.map((task, i) => {
+              const p = priorityOf(taskPriority(task));
+              const isEditing = editingId === task.id;
+              return (
+                <div key={task.id} style={{ display:"flex", alignItems:"center", gap:11, padding:"9px 2px", borderTop: i === 0 ? "none" : `1px solid ${T.surf2}` }}>
+                  {/* Check circle */}
+                  <button
+                    onClick={() => onToggle(dateKey, task.id)}
+                    aria-pressed={task.done}
+                    aria-label={task.done ? `Uncheck: ${task.text}` : `Check: ${task.text}`}
+                    style={{
+                      width:22, height:22, borderRadius:"50%", flexShrink:0, boxSizing:"border-box",
+                      border:`2px solid ${p.accent}`, background:"transparent",
+                      cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"all 0.15s",
+                    }}
+                  />
+
+                  {/* Task text / edit input */}
+                  {isEditing ? (
+                    <input
+                      ref={editRef}
+                      value={editVal}
+                      onChange={e => setEditVal(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter")  commitEdit(task.id);
+                        if (e.key === "Escape") { setEditingId(null); setEditVal(""); }
+                      }}
+                      onBlur={() => commitEdit(task.id)}
+                      maxLength={80}
+                      aria-label="Edit task"
+                      style={{ flex:1, minWidth:0, border:`1px solid ${T.accent}`, borderRadius:8, padding:"6px 8px", fontSize:15, background:"#fff", color:T.text, outline:"none", fontFamily:"inherit" }}
+                    />
+                  ) : (
+                    <span
+                      onClick={() => isToday && setSheetTask(task)}
+                      title={isToday ? "Tap for options" : undefined}
+                      style={{
+                        flex:1, minWidth:0, fontSize:15, lineHeight:1.4, color:T.text,
+                        cursor: isToday ? "pointer" : "default",
+                      }}
+                    >
+                      {task.text}
+                    </span>
+                  )}
+
+                  {/* Priority chip */}
+                  <span aria-label={`Priority: ${p.label}`} style={{
+                    flexShrink:0, fontSize:9, fontWeight:800, color:p.dark, background:p.bg,
+                    borderRadius:8, padding:"2px 7px", letterSpacing:"0.03em",
+                  }}>
+                    {p.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {/* Completed strip — collapsed by default, tap a row to send it back to its quadrant */}
       {(() => {
@@ -1898,7 +1920,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
             {completedOpen && (
               <div style={{ display:"flex", flexDirection:"column", gap:6, padding:"8px 4px 2px" }}>
                 {completedTasks.map(task => {
-                  const q = quadrantOf(taskQuadrant(task));
+                  const q = priorityOf(taskPriority(task));
                   return (
                     <button
                       key={task.id}
@@ -1934,7 +1956,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
                 onChange={e => setInputVal(e.target.value)}
                 onKeyDown={e => {
                   if (e.key === "Enter")  handleAdd();
-                  if (e.key === "Escape") { setInputVisible(false); setInputVal(""); setInputQuad("schedule"); }
+                  if (e.key === "Escape") { setInputVisible(false); setInputVal(""); setInputPriority("M"); }
                 }}
                 placeholder="What needs to get done?"
                 maxLength={80}
@@ -1948,17 +1970,18 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
                 Add
               </button>
             </div>
-            {/* Row 2: quadrant picker — equal-width flex items, short labels so nothing wraps */}
-            <div style={{ display:"flex", gap:4 }}>
-              {QUADRANTS.map(q => (
-                <button key={q.key} onClick={() => setInputQuad(q.key)} aria-pressed={inputQuad === q.key}
-                  aria-label={q.label} title={q.label}
+            {/* Row 2: priority picker — three equal segments */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:4 }}>
+              {PRIORITIES.map(p => (
+                <button key={p.key} onClick={() => setInputPriority(p.key)} aria-pressed={inputPriority === p.key}
+                  aria-label={`${p.label} priority`}
                   style={{
-                    flex:1, fontSize:10, fontWeight:700, padding:"6px 2px", borderRadius:9,
-                    border: inputQuad === q.key ? `2px solid ${q.dark}` : "2px solid transparent",
-                    background: q.bg, color: q.dark, cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"border 0.1s",
+                    fontSize:11, fontWeight:700, padding:"8px 4px", borderRadius:9,
+                    border: inputPriority === p.key ? `2px solid ${p.dark}` : "2px solid transparent",
+                    background: p.bg, color: p.dark, cursor:"pointer", fontFamily:"inherit",
+                    WebkitTapHighlightColor:"transparent", transition:"border 0.1s",
                   }}
-                >{q.short}</button>
+                >{p.label}</button>
               ))}
             </div>
           </div>
@@ -1985,29 +2008,48 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
       {sheetTask && (
         <Modal title={sheetTask.text} onClose={() => setSheetTask(null)}>
           <div style={{ padding:"4px 20px 20px" }}>
-            <div style={S.fieldLabel}>Move to</div>
-            <div style={{ display:"flex", flexDirection:"column", gap:2, marginBottom:16 }}>
-              {QUADRANTS.filter(q => q.key !== taskQuadrant(sheetTask)).map(q => (
-                <button
-                  key={q.key}
-                  onClick={() => { onQuadrant(dateKey, sheetTask.id, q.key); setSheetTask(null); }}
-                  style={{ display:"flex", alignItems:"center", gap:10, padding:"11px 4px", background:"transparent", border:"none", cursor:"pointer", width:"100%", textAlign:"left", WebkitTapHighlightColor:"transparent" }}
-                >
-                  <span aria-hidden="true" style={{ width:12, height:12, borderRadius:"50%", background:q.accent, flexShrink:0 }} />
-                  <span style={{ fontSize:14, color:T.text }}>{q.label}</span>
-                </button>
-              ))}
+            <div style={S.fieldLabel}>Priority</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:10 }}>
+              {PRIORITIES.map(p => {
+                const current = p.key === taskPriority(sheetTask);
+                return (
+                  <button
+                    key={p.key}
+                    onClick={() => { if (!current) onPriority(dateKey, sheetTask.id, p.key); setSheetTask(null); }}
+                    aria-pressed={current}
+                    style={{
+                      padding:"12px 10px", background:p.bg, borderRadius:10,
+                      border: current ? `2px solid ${p.dark}` : "2px solid transparent",
+                      cursor:"pointer", fontSize:13, fontWeight:700, color:p.dark,
+                      fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
             </div>
-            <div style={{ display:"flex", gap:20, borderTop:`1px solid ${T.surf2}`, paddingTop:14 }}>
+            <button
+              onClick={() => { onDefer(dateKey, sheetTask.id); setSheetTask(null); }}
+              style={{
+                display:"flex", alignItems:"center", justifyContent:"center", gap:8, width:"100%",
+                padding:"12px 10px", background:T.surf2, border:"none", borderRadius:10,
+                cursor:"pointer", marginBottom:16, fontSize:13, fontWeight:700, color:T.text2,
+                fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
+              }}
+            >
+              <span aria-hidden="true">⏭</span> Move to tomorrow
+            </button>
+            <div style={{ display:"flex", gap:8, borderTop:`1px solid ${T.surf2}`, paddingTop:14 }}>
               <button
                 onClick={() => { startEdit(sheetTask); setSheetTask(null); }}
-                style={{ background:"transparent", border:"none", color:T.primary, fontSize:13, fontWeight:600, cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent" }}
+                style={{ flex:1, background:T.primary+"12", border:"none", borderRadius:10, color:T.primary, fontSize:13, fontWeight:700, cursor:"pointer", padding:"12px 10px", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}
               >
-                Edit
+                Edit text
               </button>
               <button
                 onClick={() => { onDelete(dateKey, sheetTask.id); setSheetTask(null); }}
-                style={{ background:"transparent", border:"none", color:T.red, fontSize:13, fontWeight:600, cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent" }}
+                style={{ flex:1, background:T.red+"12", border:"none", borderRadius:10, color:T.red, fontSize:13, fontWeight:700, cursor:"pointer", padding:"12px 10px", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}
               >
                 Delete
               </button>
@@ -2020,7 +2062,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
 });
 
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
-const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask, editTask, setQuadrant }) {
+const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask, editTask, setTaskPriority, deferTask }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
   const [matrixExpanded, setMatrixExpanded] = useState(false);
@@ -2068,16 +2110,15 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
     [dailyTasks, selectedDate]
   );
 
-  // "Do first" tasks (urgent + important) always show in full in the collapsed
-  // "Today's Focus" preview — they're never truncated behind "view matrix".
-  // When there are none, fall back to the top 2 pending tasks by quadrant priority.
+  // High-priority tasks always show in full in the collapsed "Today's Focus"
+  // preview. When there are none, fall back to the top 2 pending tasks by priority.
   const previewTasks = useMemo(() => {
-    const order = ["do", "schedule", "delegate", "eliminate"];
     const pending = (dailyTasks[selectedDate] || []).filter(t => !t.carried && !t.done);
-    const doFirst = pending.filter(t => taskQuadrant(t) === "do");
-    if (doFirst.length > 0) return doFirst;
+    const high = pending.filter(t => taskPriority(t) === "H");
+    if (high.length > 0) return high;
     return pending
-      .sort((a, b) => order.indexOf(taskQuadrant(a)) - order.indexOf(taskQuadrant(b)))
+      .slice()
+      .sort((a, b) => PRIORITY_ORDER[taskPriority(a)] - PRIORITY_ORDER[taskPriority(b)])
       .slice(0, 2);
   }, [dailyTasks, selectedDate]);
 
@@ -2131,7 +2172,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
         {quote.author && <div style={{ fontSize:11,color:T.gold,fontWeight:700,marginTop:6 }}>— {quote.author}</div>}
       </div>
 
-      {/* Today's Focus — compact task preview, expands into the full Eisenhower matrix */}
+      {/* Today's Focus — compact task preview, expands into the full task list */}
       <div style={{ ...S.card, padding:"12px 14px" }}>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom: matrixExpanded ? 10 : 8 }}>
           <span style={{ fontSize:10, color:T.muted, letterSpacing:"0.1em", fontWeight:700, textTransform:"uppercase" }}>
@@ -2164,7 +2205,8 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
             onToggle={toggleTask}
             onDelete={deleteTask}
             onEdit={editTask}
-            onQuadrant={setQuadrant}
+            onPriority={setTaskPriority}
+            onDefer={deferTask}
           />
         ) : previewTasks.length === 0 ? (
           <div style={{ fontSize:12, color:T.muted, textAlign:"center", padding:"6px 0" }}>
@@ -2179,7 +2221,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
         ) : (
           <>
             {previewTasks.map(t => {
-              const q = quadrantOf(taskQuadrant(t));
+              const q = priorityOf(taskPriority(t));
               return (
                 <div key={t.id} style={{ display:"flex", alignItems:"center", gap:9, padding:"7px 0" }}>
                   <button
@@ -2206,7 +2248,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
               display:"block", width:"100%", textAlign:"center", background:"none", border:"none",
               cursor:"pointer", fontSize:12, fontWeight:700, color:T.primary, padding:"9px 0 3px", WebkitTapHighlightColor:"transparent",
             }}>
-              {pendingTaskCount > previewTasks.length ? `+ ${pendingTaskCount - previewTasks.length} more · ` : ""}view matrix <span aria-hidden="true">▾</span>
+              {pendingTaskCount > previewTasks.length ? `+ ${pendingTaskCount - previewTasks.length} more · ` : ""}view all <span aria-hidden="true">▾</span>
             </button>
           </>
         )}
