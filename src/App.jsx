@@ -369,6 +369,7 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     trigger:    initial.trigger    || "",
     attractive: initial.attractive || "",
     easy:       initial.easy       || "",
+    starter:    initial.starter    || "",
     satisfying: initial.satisfying || "",
     time:       initial.time       || "",
     location:   initial.location   || "",
@@ -386,6 +387,7 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     trigger:    fId + "-trigger",
     attractive: fId + "-attractive",
     easy:       fId + "-easy",
+    starter:    fId + "-starter",
     satisfying: fId + "-satisfying",
     time:       fId + "-time",
     location:   fId + "-location",
@@ -404,6 +406,31 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
       <label htmlFor={ids.trigger} style={S.fieldLabel}><span aria-hidden="true">⚡</span> Trigger (what cues this habit?)</label>
       <input id={ids.trigger} style={S.input} value={form.trigger} onChange={e=>set("trigger",e.target.value)} placeholder="e.g. After morning coffee" maxLength={120} />
 
+      {/* Habit stacking — tap an existing habit to chain onto it (Law 1: obvious) */}
+      {(() => {
+        const options = identities
+          .flatMap(i => i.habits.map(h => h.label))
+          .filter(l => l && l !== initial.label)
+          .slice(0, 8);
+        if (options.length === 0) return null;
+        return (
+          <div style={{ display:"flex", gap:6, overflowX:"auto", marginTop:8, paddingBottom:2, WebkitOverflowScrolling:"touch" }} aria-label="Stack after an existing habit">
+            {options.map(l => (
+              <button key={l} type="button" onClick={() => set("trigger", `After ${l}`)}
+                style={{
+                  flexShrink:0, fontSize:12, fontWeight:600, color:T.primary,
+                  background:T.primary+"10", border:`1px solid ${T.primary}33`, borderRadius:20,
+                  padding:"5px 11px", cursor:"pointer", fontFamily:"inherit",
+                  WebkitTapHighlightColor:"transparent", maxWidth:190,
+                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                }}>
+                After {l}
+              </button>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* ── Four Laws — optional, shown on the habit card as an expandable "Four Laws" section ── */}
       <div style={{ marginTop:18, marginBottom:2, fontSize:12, letterSpacing:"0.08em", color:T.primary, fontWeight:700, textTransform:"uppercase" }}>
         Four Laws of Behavior Change <span style={{ color:T.muted, fontWeight:500, textTransform:"none", letterSpacing:"normal" }}>(optional)</span>
@@ -414,6 +441,9 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
 
       <label htmlFor={ids.easy} style={S.fieldLabel}>Make it easy</label>
       <input id={ids.easy} style={S.input} value={form.easy} onChange={e=>set("easy",e.target.value)} placeholder="e.g. Book stays on the counter" maxLength={140} />
+
+      <label htmlFor={ids.starter} style={S.fieldLabel}><span aria-hidden="true">⏱</span> Two-minute starter</label>
+      <input id={ids.starter} style={S.input} value={form.starter} onChange={e=>set("starter",e.target.value)} placeholder="e.g. Just read 2 pages" maxLength={100} />
 
       <label htmlFor={ids.satisfying} style={S.fieldLabel}>Make it satisfying</label>
       <input id={ids.satisfying} style={S.input} value={form.satisfying} onChange={e=>set("satisfying",e.target.value)} placeholder="e.g. Move a bead on the reading jar" maxLength={140} />
@@ -981,28 +1011,28 @@ export default function App() {
   }
 
   // ── CRUD: Habits ──
-  const addHabit = ({ label, trigger, attractive, easy, satisfying, time, location, identityId, frequency }) => {
+  const addHabit = ({ label, trigger, attractive, easy, starter, satisfying, time, location, identityId, frequency }) => {
     setIdentities(prev => prev.map(ident =>
       ident.id !== identityId ? ident :
-      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, attractive, easy, satisfying, time, location, frequency: frequency || DEFAULT_FREQUENCY }] }
+      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, attractive, easy, starter, satisfying, time, location, frequency: frequency || DEFAULT_FREQUENCY }] }
     ));
     setModal(null);
   };
 
-  const updateHabit = ({ label, trigger, attractive, easy, satisfying, time, location, identityId: newIdentityId, frequency }) => {
+  const updateHabit = ({ label, trigger, attractive, easy, starter, satisfying, time, location, identityId: newIdentityId, frequency }) => {
     const { identityId: oldIdentityId, habitId } = modalCtx;
     const freq = frequency || DEFAULT_FREQUENCY;
     if (newIdentityId === oldIdentityId) {
       setIdentities(prev => prev.map(ident =>
         ident.id !== oldIdentityId ? ident :
-        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, attractive, easy, satisfying, time, location, frequency: freq }) }
+        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, attractive, easy, starter, satisfying, time, location, frequency: freq }) }
       ));
     } else {
       setIdentities(prev => {
         const habitData = prev.find(i => i.id === oldIdentityId)?.habits.find(h => h.id === habitId);
         return prev.map(ident => {
           if (ident.id === oldIdentityId) return { ...ident, habits: ident.habits.filter(h => h.id !== habitId) };
-          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, attractive, easy, satisfying, time, location, frequency: freq }] };
+          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, attractive, easy, starter, satisfying, time, location, frequency: freq }] };
           return ident;
         });
       });
@@ -1591,6 +1621,22 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         {metaParts.length > 0 && (
           <div style={{ fontSize:11.5, color: T.muted, marginTop: 4, marginLeft: 30, lineHeight: 1.4 }}>
             {metaParts.join(" · ")}
+          </div>
+        )}
+
+        {/* Two-minute starter (Law 3) — the friction-free way in, shown while pending */}
+        {!checked && !missed && habit.starter && (
+          <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:4, marginLeft:30, fontSize:12, fontWeight:600, color:"#0F6E56", minWidth:0, maxWidth:"100%" }}>
+            <span style={{ flexShrink:0 }} aria-hidden="true">⏱</span>
+            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>2-min start: {habit.starter}</span>
+          </div>
+        )}
+
+        {/* Temptation bundle (Law 2) — surfaced at the moment of action, not hidden in the expander */}
+        {!checked && !missed && habit.attractive && (
+          <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:3, marginLeft:30, fontSize:12, fontWeight:600, color:"#534AB7", minWidth:0, maxWidth:"100%" }}>
+            <span style={{ flexShrink:0 }} aria-hidden="true">✨</span>
+            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.attractive}</span>
           </div>
         )}
 
