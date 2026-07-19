@@ -553,7 +553,7 @@ export default function App() {
     [allHabits, selectedDate]
   );
   const { totalDone, totalTotal, pct } = useMemo(() => {
-    const done  = scheduledToday.filter(h => selectedData[h.id]).length;
+    const done  = scheduledToday.filter(h => selectedData[h.id] === true).length;
     const total = scheduledToday.length;
     return { totalDone: done, totalTotal: total, pct: total > 0 ? Math.round((done/total)*100) : 0 };
   }, [scheduledToday, selectedData]);
@@ -690,7 +690,7 @@ export default function App() {
       const key = dateToKey(d);
       const scheduled = isScheduledOn(frequency, key);
       if (scheduled) {
-        if (data[key] && data[key][habitId]) {
+        if (data[key] && data[key][habitId] === true) {
           streak++;
         } else {
           if (i > 0) break;
@@ -710,8 +710,11 @@ export default function App() {
     let wasChecked;
     setData(prev=>{
       const day=prev[selectedDate]||{};
-      wasChecked = !!day[habitId];
-      return {...prev,[selectedDate]:{...day,[habitId]:!day[habitId]}};
+      wasChecked = day[habitId] === true;
+      // Checking a habit always sets done — including from the "miss" state
+      const next = {...day};
+      if (wasChecked) delete next[habitId]; else next[habitId] = true;
+      return {...prev,[selectedDate]:next};
     });
     clearTimeout(justCheckedTimerRef.current);
     setJustChecked(habitId);
@@ -731,6 +734,18 @@ export default function App() {
       identityVoteTimerRef.current = setTimeout(()=>setIdentityVote(null), 1800);
     }
   }, [selectedDate, getStreakForHabit]);
+
+  // ── Mark a habit as missed (tap again to clear) — "miss" breaks the streak
+  // and feeds the never-miss-twice warning the next day ──
+  const markMiss = useCallback((habitId) => {
+    setData(prev => {
+      const day = prev[selectedDate] || {};
+      const next = { ...day };
+      if (next[habitId] === "miss") delete next[habitId];
+      else next[habitId] = "miss";
+      return { ...prev, [selectedDate]: next };
+    });
+  }, [selectedDate]);
 
   // Cleanup all timers on unmount
   useEffect(() => () => {
@@ -1244,6 +1259,7 @@ export default function App() {
             todayData={selectedData}
             allData={data}
             toggle={toggle}
+            markMiss={markMiss}
             justChecked={justChecked}
             getStreakForHabit={getStreakForHabit}
             openEditHabit={openEditHabit}
@@ -1446,7 +1462,7 @@ function groupByIdentityRuns(items) {
 
 // ─── HABIT ROW ────────────────────────────────────────────────────────────────
 // One habit inside an IdentityGroupCard: trigger cue → action row → meta.
-function HabitRow({ habit, identity, checked, streak, toggle, openEditHabit, weekTrail, first }) {
+function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, onMiss, openEditHabit, weekTrail, first }) {
   const next = getNextMilestone(streak);
   const [expanded, setExpanded] = useState(false);
 
@@ -1472,24 +1488,39 @@ function HabitRow({ habit, identity, checked, streak, toggle, openEditHabit, wee
   return (
     <div style={{
       position: "relative",
-      background: checked ? identity.color + "1f" : "transparent",
+      background: checked ? identity.color + "1f" : missed ? T.red + "10" : "transparent",
       borderTop: first ? "none" : `1px solid ${identity.color}22`,
       transition: "background 0.2s ease",
     }}>
 
-      {/* ── Edit button ── */}
-      <button
-        onClick={e => { e.stopPropagation(); openEditHabit(identity.id, habit); }}
-        aria-label={`Edit habit: ${habit.label}`}
-        style={{
-          position: "absolute", top: 2, right: 0, zIndex: 1,
-          background: "transparent", border: "none",
-          fontSize:13, color: T.muted, cursor: "pointer",
-          padding: "8px 10px", lineHeight: 1, WebkitTapHighlightColor: "transparent",
-        }}
-      >
-        <span aria-hidden="true">✎</span>
-      </button>
+      {/* ── Miss + edit buttons ── */}
+      <div style={{ position: "absolute", top: 2, right: 0, zIndex: 1, display: "flex" }}>
+        <button
+          onClick={e => { e.stopPropagation(); onMiss(habit.id); }}
+          aria-pressed={missed}
+          aria-label={missed ? `Clear missed: ${habit.label}` : `Mark missed: ${habit.label}`}
+          title={missed ? "Clear missed" : "Mark as missed"}
+          style={{
+            background: "transparent", border: "none",
+            fontSize:13, fontWeight: 800, color: missed ? T.red : T.muted,
+            opacity: missed ? 1 : 0.65, cursor: "pointer",
+            padding: "8px 7px", lineHeight: 1, WebkitTapHighlightColor: "transparent",
+          }}
+        >
+          <span aria-hidden="true">✕</span>
+        </button>
+        <button
+          onClick={e => { e.stopPropagation(); openEditHabit(identity.id, habit); }}
+          aria-label={`Edit habit: ${habit.label}`}
+          style={{
+            background: "transparent", border: "none",
+            fontSize:13, color: T.muted, cursor: "pointer",
+            padding: "8px 10px 8px 7px", lineHeight: 1, WebkitTapHighlightColor: "transparent",
+          }}
+        >
+          <span aria-hidden="true">✎</span>
+        </button>
+      </div>
 
       {/* ── Tap target ── */}
       <button
@@ -1499,7 +1530,7 @@ function HabitRow({ habit, identity, checked, streak, toggle, openEditHabit, wee
         aria-label={checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
         style={{
           display: "flex", flexDirection: "column",
-          width: "100%", padding: "9px 34px 10px 12px",
+          width: "100%", padding: "9px 62px 10px 12px",
           background: "transparent", border: "none",
           cursor: "pointer", textAlign: "left",
           WebkitTapHighlightColor: "transparent",
@@ -1520,21 +1551,31 @@ function HabitRow({ habit, identity, checked, streak, toggle, openEditHabit, wee
         <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%" }}>
           <div aria-hidden="true" style={{
             width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
-            border: `2px solid ${identity.color}`,
+            border: `2px solid ${missed ? T.red : identity.color}`,
             background: checked ? identity.color : "transparent",
             display: "flex", alignItems: "center", justifyContent: "center",
             transition: "all 0.2s",
           }}>
             {checked && <span style={{ fontSize:12, color: "#fff", fontWeight: 900, lineHeight: 1 }} className="check-pop">✓</span>}
+            {missed && <span style={{ fontSize:11, color: T.red, fontWeight: 900, lineHeight: 1 }}>✕</span>}
           </div>
 
           <div style={{
             flex: 1, minWidth: 0, fontSize:15, fontWeight: 600, lineHeight: 1.25,
-            color: T.text,
+            color: missed ? T.muted : T.text,
             transition: "color 0.2s",
           }}>
             {habit.label}
           </div>
+
+          {missed && (
+            <span style={{
+              fontSize:11, fontWeight: 800, color: T.red, flexShrink: 0, whiteSpace: "nowrap",
+              background: T.red + "14", padding: "2px 8px", borderRadius: 20,
+            }}>
+              Missed
+            </span>
+          )}
 
           {streak >= 2 && (
             <span style={{
@@ -1557,6 +1598,13 @@ function HabitRow({ habit, identity, checked, streak, toggle, openEditHabit, wee
         {next && streak > 0 && (
           <div aria-hidden="true" style={{ height: 3, borderRadius: 99, background: T.surf2, marginTop: 6, marginLeft: 30, width: "calc(100% - 30px)", overflow: "hidden" }}>
             <div style={{ height: "100%", width: `${Math.min(100, (streak / next.days) * 100)}%`, background: identity.color, borderRadius: 99, transition: "width 0.4s ease" }} />
+          </div>
+        )}
+
+        {/* Never-miss-twice nudge — this habit was missed yesterday */}
+        {warnMissedYesterday && !checked && !missed && (
+          <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 5, marginLeft: 30, fontSize:12, fontWeight: 700, color: "#B45309" }}>
+            <span aria-hidden="true">⚠️</span> Missed yesterday — never miss twice!
           </div>
         )}
       </button>
@@ -1619,7 +1667,7 @@ function HabitRow({ habit, identity, checked, streak, toggle, openEditHabit, wee
 // One card per run of consecutive same-identity habits in a time slot: a single
 // identity band on top (with the identity's done-today count), then one
 // HabitRow per habit — hierarchy reads identity → trigger → action.
-const IdentityGroupCard = memo(function IdentityGroupCard({ identity, items, todayData, justChecked, getStreakForHabit, toggle, openEditHabit, getWeekTrail, doneToday, totalToday }) {
+const IdentityGroupCard = memo(function IdentityGroupCard({ identity, items, todayData, justChecked, getStreakForHabit, toggle, markMiss, warnIds, openEditHabit, getWeekTrail, doneToday, totalToday }) {
   const dim = identity.colorDim || T.text;
   return (
     <div style={{
@@ -1658,9 +1706,12 @@ const IdentityGroupCard = memo(function IdentityGroupCard({ identity, items, tod
           <HabitRow
             habit={habit}
             identity={identity}
-            checked={!!todayData[habit.id]}
+            checked={todayData[habit.id] === true}
+            missed={todayData[habit.id] === "miss"}
+            warnMissedYesterday={!!warnIds && warnIds.has(habit.id) && todayData[habit.id] == null}
             streak={getStreakForHabit(habit.id, habit.frequency)}
             toggle={toggle}
+            onMiss={markMiss}
             openEditHabit={openEditHabit}
             weekTrail={getWeekTrail(habit.id)}
             first={i === 0}
@@ -2086,7 +2137,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
 });
 
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
-const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask, editTask, setTaskPriority, toggleTaskBig, deferTask }) {
+const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, markMiss, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask, editTask, setTaskPriority, toggleTaskBig, deferTask }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
   const [matrixExpanded, setMatrixExpanded] = useState(false);
@@ -2120,10 +2171,29 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
     for (const { habit, identity } of scheduledHabits) {
       const c = m[identity.id] || (m[identity.id] = { done: 0, total: 0 });
       c.total += 1;
-      if (todayData[habit.id]) c.done += 1;
+      if (todayData[habit.id] === true) c.done += 1;
     }
     return m;
   }, [scheduledHabits, todayData]);
+
+  // Habits scheduled both today and yesterday that were NOT done yesterday —
+  // fuels the "never miss twice" warning (Atomic Habits rule)
+  const missedYesterdayIds = useMemo(() => {
+    const [y, mo, d] = selectedDate.split("-").map(Number);
+    const dt = new Date(y, mo - 1, d); dt.setDate(dt.getDate() - 1);
+    const yKey = dateToKey(dt);
+    const yd = allData[yKey] || {};
+    const ids = new Set();
+    for (const { habit } of scheduledHabits) {
+      if (isScheduledOn(habit.frequency, yKey) && yd[habit.id] !== true) ids.add(habit.id);
+    }
+    return ids;
+  }, [allData, selectedDate, scheduledHabits]);
+  const missedWarnCount = useMemo(() =>
+    selectedDate === todayKey
+      ? scheduledHabits.filter(({ habit }) => missedYesterdayIds.has(habit.id) && todayData[habit.id] == null).length
+      : 0,
+    [selectedDate, todayKey, scheduledHabits, missedYesterdayIds, todayData]);
 
   // Slot the clock is currently in — used to mark "Now" on today's section headers
   const nowHour   = new Date().getHours();
@@ -2155,7 +2225,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
     for (let i = 6; i >= 0; i--) {
       const dt = new Date(base); dt.setDate(base.getDate() - i);
       const key = dateToKey(dt);
-      out.push(!!(allData[key] && allData[key][habitId]));
+      out.push(allData[key] ? allData[key][habitId] === true : false);
     }
     return out;
   }, [allData, todayKey]);
@@ -2298,12 +2368,25 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
         </div>
       ))}
 
+      {/* Never-miss-twice alert — habits missed yesterday and still pending today */}
+      {missedWarnCount > 0 && (
+        <div role="alert" style={{ display:"flex", alignItems:"center", gap:11, background:T.red+"10", border:`1.5px solid ${T.red}44`, borderRadius:14, padding:"11px 14px" }}>
+          <span style={{ fontSize:19, flexShrink:0 }} aria-hidden="true">⚠️</span>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:14, fontWeight:800, color:T.red, lineHeight:1.3 }}>Never miss twice</div>
+            <div style={{ fontSize:12.5, color:T.text2, marginTop:2, lineHeight:1.45 }}>
+              {missedWarnCount === 1 ? "1 habit was missed yesterday — win it back today." : `${missedWarnCount} habits were missed yesterday — win them back today.`}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Time slot sections */}
       {TIME_SLOTS.map(slot => {
         const slotAll     = scheduledHabits.filter(h => h.slotId === slot.id);
-        const slotVisible = slotAll.filter(({habit}) => !todayData[habit.id] || habit.id === justChecked);
+        const slotVisible = slotAll.filter(({habit}) => todayData[habit.id] !== true || habit.id === justChecked);
         if (slotVisible.length === 0) return null;
-        const pendingCnt  = slotAll.filter(({habit}) => !todayData[habit.id]).length;
+        const pendingCnt  = slotAll.filter(({habit}) => todayData[habit.id] == null).length;
         return (
           <div key={slot.id}>
             <div style={{ display:"flex", alignItems:"center", gap:8, margin:"4px 0 8px", paddingLeft:2 }}>
@@ -2330,6 +2413,8 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                 justChecked={justChecked}
                 getStreakForHabit={getStreakForHabit}
                 toggle={toggle}
+                markMiss={markMiss}
+                warnIds={selectedDate === todayKey ? missedYesterdayIds : null}
                 openEditHabit={openEditHabit}
                 getWeekTrail={getWeekTrail}
                 doneToday={(identityDayCounts[g.identity.id] || {}).done || 0}
@@ -2342,7 +2427,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
 
       {/* Completed section */}
       {(() => {
-        const done = scheduledHabits.filter(({habit}) => todayData[habit.id] && habit.id !== justChecked);
+        const done = scheduledHabits.filter(({habit}) => todayData[habit.id] === true && habit.id !== justChecked);
         if (done.length === 0) return null;
         return (
           <div style={{ marginTop:8 }}>
@@ -2518,19 +2603,22 @@ const WeekView = memo(function WeekView({ data, todayKey, identities }) {
                   <Fragment key={habit.id}>
                     <div style={S.weekHabitLabel}>{habit.label}</div>
                     {weekDates.map(d=>{
-                      const done      = !!(data[d]&&data[d][habit.id]);
+                      const val       = data[d] && data[d][habit.id];
+                      const done      = val === true;
+                      const missed    = val === "miss";
                       const scheduled = isScheduledOn(habit.frequency, d);
                       const future    = d > todayKey;
-                      const dotLabel  = done ? "Done" : future ? "Future" : scheduled ? "Missed" : "Not scheduled";
+                      const dotLabel  = done ? "Done" : missed ? "Missed" : future ? "Future" : scheduled ? "Not done" : "Not scheduled";
                       return (
                         <div key={d} aria-label={dotLabel} style={{
                           ...S.weekDot,
-                          background: done ? identity.color : scheduled ? T.surf2 : "transparent",
-                          border: done ? `1px solid ${identity.color}` : scheduled ? `1px solid ${T.border}` : `1px dashed ${T.border}`,
+                          background: done ? identity.color : missed ? T.red+"1c" : scheduled ? T.surf2 : "transparent",
+                          border: done ? `1px solid ${identity.color}` : missed ? `1px solid ${T.red}66` : scheduled ? `1px solid ${T.border}` : `1px dashed ${T.border}`,
                           opacity: future ? 0.35 : scheduled ? 1 : 0.4,
                           display:"flex", alignItems:"center", justifyContent:"center",
                         }}>
                           {done && <span style={{fontSize:11,color:"#fff",fontWeight:900,lineHeight:1}} aria-hidden="true">✓</span>}
+                          {missed && <span style={{fontSize:11,color:T.red,fontWeight:900,lineHeight:1}} aria-hidden="true">✕</span>}
                         </div>
                       );
                     })}
@@ -2545,7 +2633,7 @@ const WeekView = memo(function WeekView({ data, todayKey, identities }) {
         <div style={{...S.cardLabel,color:T.gold,marginBottom:14}}><span aria-hidden="true">📊</span> Weekly Score</div>
         {identities.map(identity=>{
           const done = weekDates.reduce((a,d) =>
-            a + identity.habits.filter(h => isScheduledOn(h.frequency, d) && data[d]?.[h.id]).length, 0);
+            a + identity.habits.filter(h => isScheduledOn(h.frequency, d) && data[d]?.[h.id] === true).length, 0);
           const possible = weekDates
             .filter(d => d <= todayKey)
             .reduce((a,d) => a + identity.habits.filter(h => isScheduledOn(h.frequency, d)).length, 0);
