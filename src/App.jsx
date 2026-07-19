@@ -1380,12 +1380,6 @@ export default function App() {
 const ManageView = memo(function ManageView({ identities, onAddHabit, onEditHabit, onDeleteHabit, onAddIdentity, onEditIdentity, onDeleteIdentity }) {
   return (
     <div style={S.content}>
-      <div style={{...S.card,padding:"14px 16px",background:`linear-gradient(135deg,rgba(2,132,199,0.07),rgba(245,158,11,0.04))`}}>
-        <div style={{...S.cardLabel,color:T.primary,marginBottom:4}}>
-          <span aria-hidden="true">🗂</span> Manage Your System
-        </div>
-        <div style={{fontSize:14,color:T.text2,lineHeight:1.5}}>Add, edit, or delete your identities and habits.</div>
-      </div>
 
       {identities.length === 0 && (
         <div style={{textAlign:"center",padding:"40px 16px",color:T.muted}}>
@@ -1505,14 +1499,15 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
   ].filter(l => l.value);
   const hasFourLaws = !!habit.trigger || fourLaws.length > 0;
 
-  // Meta line under the label: time · location · frequency (if not every day) · next badge countdown
+  // One cue line above the label: trigger · time · location · frequency.
+  // The milestone countdown lives in the micro-bar, not as text.
   const freq = habit.frequency;
   const isEveryDay = freq && freq.cadence === "weekly" && (freq.days || []).length === 7;
-  const metaParts = [
+  const cueParts = [
+    habit.trigger,
     habit.time && to24h(habit.time),
     habit.location,
     freq && !isEveryDay && getFreqLabel(freq),
-    next && streak > 0 && `${next.days - streak}d to ${next.label}`,
   ].filter(Boolean);
 
   return (
@@ -1566,14 +1561,14 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           WebkitTapHighlightColor: "transparent",
         }}
       >
-        {/* Trigger — the cue that prompts the action */}
-        {habit.trigger && (
+        {/* Cue line — trigger · time · location · frequency, one muted line */}
+        {cueParts.length > 0 && (
           <div style={{
-            display: "flex", alignItems: "center", gap: 5, marginBottom: 7,
-            fontSize:12.5, color: T.muted, minWidth: 0, maxWidth: "100%",
+            display: "flex", alignItems: "center", gap: 5, marginBottom: 6,
+            fontSize:12, color: T.muted, minWidth: 0, maxWidth: "100%",
           }}>
-            <span style={{ flexShrink: 0 }} aria-hidden="true">⚡</span>
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{habit.trigger}</span>
+            {habit.trigger && <span style={{ flexShrink: 0 }} aria-hidden="true">⚡</span>}
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cueParts.join(" · ")}</span>
           </div>
         )}
 
@@ -1617,26 +1612,13 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           )}
         </div>
 
-        {/* Meta line — time, location, frequency, next-badge countdown, all inline */}
-        {metaParts.length > 0 && (
-          <div style={{ fontSize:11.5, color: T.muted, marginTop: 4, marginLeft: 30, lineHeight: 1.4 }}>
-            {metaParts.join(" · ")}
-          </div>
-        )}
-
-        {/* Two-minute starter (Law 3) — the friction-free way in, shown while pending */}
-        {!checked && !missed && habit.starter && (
-          <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:4, marginLeft:30, fontSize:12, fontWeight:600, color:"#0F6E56", minWidth:0, maxWidth:"100%" }}>
-            <span style={{ flexShrink:0 }} aria-hidden="true">⏱</span>
-            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>2-min start: {habit.starter}</span>
-          </div>
-        )}
-
-        {/* Temptation bundle (Law 2) — surfaced at the moment of action, not hidden in the expander */}
-        {!checked && !missed && habit.attractive && (
-          <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:3, marginLeft:30, fontSize:12, fontWeight:600, color:"#534AB7", minWidth:0, maxWidth:"100%" }}>
-            <span style={{ flexShrink:0 }} aria-hidden="true">✨</span>
-            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.attractive}</span>
+        {/* One helper line while pending — the 2-minute starter wins, else the temptation bundle */}
+        {!checked && !missed && (habit.starter || habit.attractive) && (
+          <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:4, marginLeft:30, fontSize:12, fontWeight:600, color: habit.starter ? "#0F6E56" : "#534AB7", minWidth:0, maxWidth:"100%" }}>
+            <span style={{ flexShrink:0 }} aria-hidden="true">{habit.starter ? "⏱" : "✨"}</span>
+            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              {habit.starter ? `2-min start: ${habit.starter}` : habit.attractive}
+            </span>
           </div>
         )}
 
@@ -2302,13 +2284,10 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
       {/* Day Navigator */}
       <DayNavigator selectedDate={selectedDate} setSelectedDate={setSelectedDate} todayKey={todayKey} />
 
-      {/* Daily quote banner */}
-      <div style={{ background:`linear-gradient(135deg,rgba(2,132,199,0.09),rgba(245,158,11,0.07))`, border:`1px solid rgba(2,132,199,0.2)`, borderRadius:16, padding:"14px 16px" }}>
-        <div style={{ fontSize:11,fontWeight:800,letterSpacing:"0.12em",color:T.primary,marginBottom:6,textTransform:"uppercase" }}>
-          <span aria-hidden="true">✨</span> Today's Motivation
-        </div>
-        <div style={{ fontSize:15,color:T.text,fontStyle:"italic",lineHeight:1.65,fontWeight:500 }}>"{quote.text}"</div>
-        {quote.author && <div style={{ fontSize:12,color:T.gold,fontWeight:700,marginTop:6 }}>— {quote.author}</div>}
+      {/* Daily quote — one compact line */}
+      <div style={{ background:`linear-gradient(135deg,rgba(2,132,199,0.07),rgba(245,158,11,0.05))`, border:`1px solid rgba(2,132,199,0.16)`, borderRadius:14, padding:"10px 14px" }}>
+        <span style={{ fontSize:13.5,color:T.text2,fontStyle:"italic",lineHeight:1.55 }}>"{quote.text}"</span>
+        {quote.author && <span style={{ fontSize:12,color:T.gold,fontWeight:700,fontStyle:"normal" }}> — {quote.author}</span>}
       </div>
 
       {/* Today's Focus — compact task preview, expands into the full task list */}
