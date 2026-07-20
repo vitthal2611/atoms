@@ -448,6 +448,10 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
         </div>
       </div>
 
+      {/* Environment design — stored in the legacy `easy` field so old data resurfaces */}
+      <label htmlFor={ids.easy} style={S.fieldLabel}><span aria-hidden="true">🏠</span> Environment (set it up)</label>
+      <input id={ids.easy} style={S.input} value={form.easy} onChange={e=>set("easy",e.target.value)} placeholder="e.g. Keep gym clothes out at night" maxLength={140} />
+
       <label style={S.fieldLabel}><span aria-hidden="true">🔁</span> Frequency</label>
       <FrequencyPicker value={form.frequency} onChange={v=>set("frequency",v)} />
 
@@ -1693,6 +1697,14 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:5, marginLeft:30, fontSize:12, fontWeight:600, color:"#534AB7", minWidth:0, maxWidth:"100%" }}>
             <span style={{ flexShrink:0 }} aria-hidden="true">✨</span>
             <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.attractive}</span>
+          </div>
+        )}
+
+        {/* Environment setup (Law 1) — the prep that makes the cue unmissable */}
+        {!checked && !missed && habit.easy && (
+          <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:5, marginLeft:30, fontSize:12, fontWeight:600, color:T.text2, minWidth:0, maxWidth:"100%" }}>
+            <span style={{ flexShrink:0 }} aria-hidden="true">🏠</span>
+            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.easy}</span>
           </div>
         )}
 
