@@ -1270,6 +1270,15 @@ export default function App() {
               ? new Date(selectedDate + "T12:00:00").toLocaleDateString(navigator.language||undefined,{weekday:"long",day:"numeric",month:"short"})
               : new Date().toLocaleDateString(navigator.language||undefined,{weekday:"long",day:"numeric",month:"short"})}
           </div>
+          {view === "today" && totalDone > 0 && (
+            <span aria-label={`${totalDone} votes cast ${selectedDate === todayKey ? "today" : "this day"}`} style={{
+              display:"inline-flex", alignItems:"center", gap:5, marginTop:6,
+              fontSize:12, fontWeight:700, color:"#92400E", background:T.gold+"1f",
+              borderRadius:20, padding:"3px 10px",
+            }}>
+              <span aria-hidden="true">🗳️</span> {totalDone} vote{totalDone !== 1 ? "s" : ""}{selectedDate === todayKey ? " today" : ""}
+            </span>
+          )}
         </div>
         <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
           <button onClick={()=>fbSignOut(_auth)} title={user.email||undefined} style={{ background:"transparent", border:`1px solid ${T.border}`, borderRadius:20, fontSize:12, color:T.muted, padding:"3px 10px", cursor:"pointer", fontFamily:"inherit", maxWidth:120, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -1531,6 +1540,14 @@ function groupByIdentityRuns(items) {
 // One habit inside an IdentityGroupCard: trigger cue → action row → meta.
 function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, onMiss, openEditHabit, openDeleteHabit, first }) {
   const next = getNextMilestone(streak);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuItem = {
+    display: "flex", alignItems: "center", gap: 10, width: "100%",
+    padding: "13px 8px", background: "transparent", border: "none",
+    borderBottom: `1px solid ${T.surf2}`, cursor: "pointer", textAlign: "left",
+    fontSize: 14, fontWeight: 600, color: T.text, fontFamily: "inherit",
+    WebkitTapHighlightColor: "transparent",
+  };
 
   // One cue line above the label: trigger · time · location · frequency.
   // The milestone countdown lives in the micro-bar, not as text.
@@ -1551,45 +1568,46 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
       transition: "background 0.2s ease",
     }}>
 
-      {/* ── Miss + edit buttons ── */}
-      <div style={{ position: "absolute", top: 2, right: 0, zIndex: 1, display: "flex" }}>
-        <button
-          onClick={e => { e.stopPropagation(); onMiss(habit.id); }}
-          aria-pressed={missed}
-          aria-label={missed ? `Clear missed: ${habit.label}` : `Mark missed: ${habit.label}`}
-          title={missed ? "Clear missed" : "Mark as missed"}
-          style={{
-            background: "transparent", border: "none",
-            fontSize:13, fontWeight: 800, color: missed ? T.red : T.muted,
-            opacity: missed ? 1 : 0.65, cursor: "pointer",
-            padding: "8px 7px", lineHeight: 1, WebkitTapHighlightColor: "transparent",
-          }}
-        >
-          <span aria-hidden="true">✕</span>
-        </button>
-        <button
-          onClick={e => { e.stopPropagation(); openEditHabit(identity.id, habit); }}
-          aria-label={`Edit habit: ${habit.label}`}
-          style={{
-            background: "transparent", border: "none",
-            fontSize:13, color: T.muted, cursor: "pointer",
-            padding: "8px 7px", lineHeight: 1, WebkitTapHighlightColor: "transparent",
-          }}
-        >
-          <span aria-hidden="true">✎</span>
-        </button>
-        <button
-          onClick={e => { e.stopPropagation(); openDeleteHabit(identity.id, habit); }}
-          aria-label={`Delete habit: ${habit.label}`}
-          style={{
-            background: "transparent", border: "none",
-            fontSize:12, color: T.red, opacity: 0.75, cursor: "pointer",
-            padding: "8px 10px 8px 7px", lineHeight: 1, WebkitTapHighlightColor: "transparent",
-          }}
-        >
-          <span aria-hidden="true">🗑</span>
-        </button>
-      </div>
+      {/* ── Row menu — miss / edit / delete behind one button ── */}
+      <button
+        onClick={e => { e.stopPropagation(); setMenuOpen(true); }}
+        aria-label={`Options for ${habit.label}`}
+        aria-haspopup="menu"
+        style={{
+          position: "absolute", top: 2, right: 0, zIndex: 1,
+          background: "transparent", border: "none",
+          fontSize:15, fontWeight: 800, color: missed ? T.red : T.muted, letterSpacing: "1px",
+          cursor: "pointer", padding: "8px 12px", lineHeight: 1, WebkitTapHighlightColor: "transparent",
+        }}
+      >
+        <span aria-hidden="true">⋯</span>
+      </button>
+
+      {menuOpen && (
+        <Modal title={habit.label} onClose={() => setMenuOpen(false)}>
+          <div style={{ padding: "0 20px 16px" }}>
+            <button
+              onClick={() => { setMenuOpen(false); onMiss(habit.id); }}
+              style={menuItem}
+            >
+              <span aria-hidden="true" style={{ color: T.red, fontWeight: 800 }}>✕</span>
+              {missed ? "Clear missed" : "Mark as missed"}
+            </button>
+            <button
+              onClick={() => { setMenuOpen(false); openEditHabit(identity.id, habit); }}
+              style={menuItem}
+            >
+              <span aria-hidden="true">✎</span> Edit habit
+            </button>
+            <button
+              onClick={() => { setMenuOpen(false); openDeleteHabit(identity.id, habit); }}
+              style={{ ...menuItem, color: T.red, borderBottom: "none" }}
+            >
+              <span aria-hidden="true">🗑</span> Delete habit
+            </button>
+          </div>
+        </Modal>
+      )}
 
       {/* ── Tap target ── */}
       <button
@@ -1599,7 +1617,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         aria-label={checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
         style={{
           display: "flex", flexDirection: "column",
-          width: "100%", padding: "9px 88px 10px 12px",
+          width: "100%", padding: "9px 44px 10px 12px",
           background: "transparent", border: "none",
           cursor: "pointer", textAlign: "left",
           WebkitTapHighlightColor: "transparent",
@@ -1658,12 +1676,14 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           )}
         </div>
 
-        {/* Two-minute starter chip (Law 3) — the friction-free way in */}
+        {/* Two-minute starter chip (Law 3) — tappable: the whole row checks the habit,
+            so tapping the chip IS "did the 2-min version" and earns the vote */}
         {!checked && !missed && habit.starter && (
-          <div style={{ marginTop:6, marginLeft:30, maxWidth:"100%" }}>
-            <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:12, fontWeight:700, color:"#085041", background:"#E1F5EE", borderRadius:20, padding:"4px 11px", maxWidth:"100%", boxSizing:"border-box" }}>
+          <div style={{ marginTop:7, marginLeft:30, maxWidth:"100%" }}>
+            <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12.5, fontWeight:700, color:"#085041", background:"#E1F5EE", border:"1px solid #9FE1CB", borderRadius:20, padding:"6px 13px", maxWidth:"100%", boxSizing:"border-box" }}>
               <span style={{ flexShrink:0 }} aria-hidden="true">⏱</span>
               <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>2-min: {habit.starter}</span>
+              <span style={{ flexShrink:0, fontWeight:900 }} aria-hidden="true">✓</span>
             </span>
           </div>
         )}
@@ -2403,6 +2423,77 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
           </div>
         </div>
       )}
+
+      {/* "Up next" hero — the single next pending habit by time (Law 1: one clear cue) */}
+      {selectedDate === todayKey && (() => {
+        const nextUp = scheduledHabits.find(({ habit }) => todayData[habit.id] == null);
+        if (!nextUp) return null;
+        const { habit, identity } = nextUp;
+        const dim = identity.colorDim || T.text;
+        const streak = getStreakForHabit(habit.id, habit.frequency);
+        const nextMs = getNextMilestone(streak);
+        const cue = [habit.trigger, habit.time && to24h(habit.time), habit.location].filter(Boolean).join(" · ");
+        const check = () => toggle(habit.id, habit.frequency, identity);
+        return (
+          <div style={{ border:`2px solid ${identity.color}`, borderRadius:16, overflow:"hidden", background:T.surface }}>
+            <div style={{ display:"flex", alignItems:"center", gap:7, background:identity.color+"26", padding:"6px 12px" }}>
+              <span style={{ fontSize:10.5, fontWeight:800, letterSpacing:"0.09em", textTransform:"uppercase", color:dim }}>Up next</span>
+              <span style={{ flex:1 }} />
+              <span style={{ fontSize:13 }} aria-hidden="true">{identity.icon}</span>
+              <span style={{ fontSize:10.5, fontWeight:800, letterSpacing:"0.05em", textTransform:"uppercase", color:dim, maxWidth:180, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{shortLabel(identity.label)}</span>
+            </div>
+            <div style={{ padding:"12px 14px 13px" }}>
+              {cue && (
+                <div style={{ fontSize:12, color:T.muted, marginBottom:7, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  <span aria-hidden="true">⚡</span> {cue}
+                </div>
+              )}
+              <div style={{ display:"flex", alignItems:"center", gap:11 }}>
+                <button
+                  onClick={check}
+                  aria-label={`Check: ${habit.label}`}
+                  style={{ width:30, height:30, borderRadius:"50%", flexShrink:0, boxSizing:"border-box", border:`2.5px solid ${identity.color}`, background:"transparent", cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent" }}
+                />
+                <span onClick={check} style={{ flex:1, minWidth:0, fontSize:16, fontWeight:700, color:T.text, lineHeight:1.3, cursor:"pointer" }}>
+                  {habit.label}
+                </span>
+                {streak >= 2 && (
+                  <span style={{ fontSize:11, fontWeight:700, color:"#B45309", flexShrink:0, whiteSpace:"nowrap", background:T.gold+"1f", padding:"2px 8px", borderRadius:20 }} aria-label={`${streak} day streak`}>
+                    <span aria-hidden="true">🔥</span> {streak}d
+                  </span>
+                )}
+              </div>
+              {habit.attractive && (
+                <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:9, marginLeft:41, fontSize:12.5, fontWeight:600, color:"#534AB7", minWidth:0 }}>
+                  <span style={{ flexShrink:0 }} aria-hidden="true">✨</span>
+                  <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.attractive}</span>
+                </div>
+              )}
+              {habit.starter && (
+                <div style={{ marginTop:9, marginLeft:41 }}>
+                  <button
+                    onClick={check}
+                    aria-label={`Do the two-minute version: ${habit.starter}`}
+                    style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12.5, fontWeight:700, color:"#085041", background:"#E1F5EE", border:"1px solid #9FE1CB", borderRadius:20, padding:"7px 14px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", maxWidth:"100%" }}
+                  >
+                    <span aria-hidden="true">⏱</span>
+                    <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>2-min: {habit.starter}</span>
+                    <span style={{ fontWeight:900 }} aria-hidden="true">✓</span>
+                  </button>
+                </div>
+              )}
+              {nextMs && streak > 0 && (
+                <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:10, marginLeft:41 }} aria-label={`${streak} of ${nextMs.days} days to ${nextMs.label}`}>
+                  <div aria-hidden="true" style={{ flex:1, height:4, borderRadius:99, background:T.surf2, overflow:"hidden" }}>
+                    <div style={{ height:"100%", width:`${Math.min(100, (streak / nextMs.days) * 100)}%`, background:identity.color, borderRadius:99 }} />
+                  </div>
+                  <span aria-hidden="true" style={{ fontSize:11, color:T.muted, fontWeight:600, flexShrink:0, fontVariantNumeric:"tabular-nums" }}>{streak}/{nextMs.days}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Time slot sections */}
       {TIME_SLOTS.map(slot => {
