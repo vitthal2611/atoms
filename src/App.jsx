@@ -1285,7 +1285,7 @@ export default function App() {
               fontSize:12, fontWeight:700, color:"#92400E", background:T.gold+"1f",
               borderRadius:20, padding:"3px 10px",
             }}>
-              <span aria-hidden="true">🗳️</span> {totalDone} vote{totalDone !== 1 ? "s" : ""}{selectedDate === todayKey ? " today" : ""}
+              <Ic name="vote" size={13} color="#92400E" /> {totalDone} vote{totalDone !== 1 ? "s" : ""}{selectedDate === todayKey ? " today" : ""}
             </span>
           )}
         </div>
@@ -1545,6 +1545,30 @@ function groupByIdentityRuns(items) {
   return groups;
 }
 
+// ─── ICONS — crisp inline SVG strokes, consistent across devices ──────────────
+const IC_PATHS = {
+  bolt:   <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>,
+  clock:  <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,
+  home:   <><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></>,
+  gift:   <><path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></>,
+  spark:  <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/>,
+  flame:  <path d="M12 2s5 4.5 5 9.5a5 5 0 0 1-10 0C7 9.5 8 8 9 6.5c.3 1.8 1.2 3 3 3.5-.5-3-.5-5.5 0-8z"/>,
+  check:  <path d="M20 6L9 17l-5-5"/>,
+  x:      <path d="M18 6L6 18M6 6l12 12"/>,
+  dots:   <><circle cx="5" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.7" fill="currentColor" stroke="none"/></>,
+  vote:   <><path d="M21 9v12H3V9"/><path d="M1 4h22v5H1z"/><path d="M9 4l3-2 3 2"/></>,
+  warn:   <><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></>,
+  pencil: <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>,
+  trash:  <><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></>,
+};
+const Ic = ({ name, size = 13, color = "currentColor", style }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color}
+    strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+    aria-hidden="true" style={{ flexShrink: 0, ...style }}>
+    {IC_PATHS[name]}
+  </svg>
+);
+
 // ─── HABIT ROW ────────────────────────────────────────────────────────────────
 // One habit inside an IdentityGroupCard: trigger cue → action row → meta.
 function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, onMiss, openEditHabit, openDeleteHabit, first }) {
@@ -1589,7 +1613,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           cursor: "pointer", padding: "8px 12px", lineHeight: 1, WebkitTapHighlightColor: "transparent",
         }}
       >
-        <span aria-hidden="true">⋯</span>
+        <Ic name="dots" size={17} color={missed ? T.red : T.muted} />
       </button>
 
       {menuOpen && (
@@ -1599,20 +1623,20 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               onClick={() => { setMenuOpen(false); onMiss(habit.id); }}
               style={menuItem}
             >
-              <span aria-hidden="true" style={{ color: T.red, fontWeight: 800 }}>✕</span>
+              <Ic name="x" size={15} color={T.red} />
               {missed ? "Clear missed" : "Mark as missed"}
             </button>
             <button
               onClick={() => { setMenuOpen(false); openEditHabit(identity.id, habit); }}
               style={menuItem}
             >
-              <span aria-hidden="true">✎</span> Edit habit
+              <Ic name="pencil" size={15} color={T.text2} /> Edit habit
             </button>
             <button
               onClick={() => { setMenuOpen(false); openDeleteHabit(identity.id, habit); }}
               style={{ ...menuItem, color: T.red, borderBottom: "none" }}
             >
-              <span aria-hidden="true">🗑</span> Delete habit
+              <Ic name="trash" size={15} color={T.red} /> Delete habit
             </button>
           </div>
         </Modal>
@@ -1638,7 +1662,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             display: "flex", alignItems: "center", gap: 5, marginBottom: 6,
             fontSize:12, color: T.muted, minWidth: 0, maxWidth: "100%",
           }}>
-            {habit.trigger && <span style={{ flexShrink: 0 }} aria-hidden="true">⚡</span>}
+            {habit.trigger && <Ic name="bolt" size={12} color={T.muted} />}
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cueParts.join(" · ")}</span>
           </div>
         )}
@@ -1652,8 +1676,8 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             display: "flex", alignItems: "center", justifyContent: "center",
             transition: "all 0.2s",
           }}>
-            {checked && <span style={{ fontSize:12, color: "#fff", fontWeight: 900, lineHeight: 1 }} className="check-pop">✓</span>}
-            {missed && <span style={{ fontSize:12, color: T.red, fontWeight: 900, lineHeight: 1 }}>✕</span>}
+            {checked && <span className="check-pop" style={{ display:"inline-flex" }}><Ic name="check" size={12} color="#fff" /></span>}
+            {missed && <Ic name="x" size={11} color={T.red} />}
           </div>
 
           <div style={{
@@ -1680,7 +1704,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               fontSize:12, fontWeight: 700, color: "#B45309", flexShrink: 0, whiteSpace: "nowrap",
               background: T.gold + "1f", padding: "2px 7px", borderRadius: 20,
             }} aria-label={`${streak} day streak`}>
-              <span aria-hidden="true">🔥</span> {streak}d
+              <Ic name="flame" size={11} color="#B45309" style={{ verticalAlign:"-1px" }} /> {streak}d
             </span>
           )}
         </div>
@@ -1690,9 +1714,9 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         {!checked && !missed && habit.starter && (
           <div style={{ marginTop:6, marginLeft:30, maxWidth:"100%" }}>
             <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:12, fontWeight:700, color:"#085041", background:"#E1F5EE", borderRadius:20, padding:"4px 11px", maxWidth:"100%", boxSizing:"border-box" }}>
-              <span style={{ flexShrink:0 }} aria-hidden="true">⏱</span>
+              <Ic name="clock" size={12} color="#085041" />
               <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>2-min: {habit.starter}</span>
-              <span style={{ flexShrink:0, fontWeight:900 }} aria-hidden="true">✓</span>
+              <Ic name="check" size={11} color="#085041" />
             </span>
           </div>
         )}
@@ -1701,10 +1725,16 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         {!checked && !missed && (habit.attractive || habit.easy || habit.satisfying) && (
           <div style={{ fontSize:12, color:T.muted, marginTop:5, marginLeft:30, minWidth:0, maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", lineHeight:1.4 }}>
             {[
-              habit.attractive && `✨ ${habit.attractive}`,
-              habit.easy && `🏠 ${habit.easy}`,
-              habit.satisfying && `🎁 ${habit.satisfying}`,
-            ].filter(Boolean).join("  ·  ")}
+              habit.attractive && { icon:"spark", text:habit.attractive },
+              habit.easy && { icon:"home", text:habit.easy },
+              habit.satisfying && { icon:"gift", text:habit.satisfying },
+            ].filter(Boolean).map((h, i) => (
+              <Fragment key={h.icon}>
+                {i > 0 && <span style={{ margin:"0 7px", color:T.border2 }} aria-hidden="true">·</span>}
+                <Ic name={h.icon} size={12} color={T.muted} style={{ verticalAlign:"-2px", marginRight:4 }} />
+                {h.text}
+              </Fragment>
+            ))}
           </div>
         )}
 
@@ -1712,14 +1742,14 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         {checked && (
           <div style={{ display:"flex", flexDirection:"column", gap:5, marginTop:8, width:"100%", boxSizing:"border-box", background:"#fff", border:"1px solid #9FE1CB", borderRadius:12, padding:"9px 12px", minWidth:0 }}>
             <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
-              <span style={{ flexShrink:0, fontSize:15 }} aria-hidden="true">🗳️</span>
+              <Ic name="vote" size={14} color="#0F6E56" />
               <span style={{ fontSize:12.5, fontWeight:600, color:"#085041", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", minWidth:0 }}>
                 +1 vote for {shortLabel(identity.label)} · {streak}d streak{next ? ` · ${next.days - streak}d to ${next.label}` : ""}
               </span>
             </div>
             {habit.satisfying && (
               <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
-                <span style={{ flexShrink:0, fontSize:14 }} aria-hidden="true">🎁</span>
+                <Ic name="gift" size={14} color="#854F0B" />
                 <span style={{ fontSize:12.5, fontWeight:700, color:"#854F0B", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", minWidth:0 }}>
                   Claim your reward: {habit.satisfying}
                 </span>
@@ -1741,7 +1771,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         {/* Never-miss-twice nudge — this habit was missed yesterday */}
         {warnMissedYesterday && !checked && !missed && (
           <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 5, marginLeft: 30, fontSize:12, fontWeight: 700, color: "#B45309" }}>
-            <span aria-hidden="true">⚠️</span> Missed yesterday — never miss twice!
+            <Ic name="warn" size={13} color="#B45309" /> Missed yesterday — never miss twice!
           </div>
         )}
       </button>
@@ -2477,7 +2507,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
       {/* Never-miss-twice alert — habits missed yesterday and still pending today */}
       {missedWarnCount > 0 && (
         <div role="alert" style={{ display:"flex", alignItems:"center", gap:11, background:T.red+"10", border:`1.5px solid ${T.red}44`, borderRadius:14, padding:"11px 14px" }}>
-          <span style={{ fontSize:19, flexShrink:0 }} aria-hidden="true">⚠️</span>
+          <Ic name="warn" size={19} color={T.red} />
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ fontSize:14, fontWeight:800, color:T.red, lineHeight:1.3 }}>Never miss twice</div>
             <div style={{ fontSize:12.5, color:T.text2, marginTop:2, lineHeight:1.45 }}>
@@ -2508,7 +2538,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
             <div style={{ padding:"12px 14px 13px" }}>
               {cue && (
                 <div style={{ fontSize:12, color:T.muted, marginBottom:7, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                  <span aria-hidden="true">⚡</span> {cue}
+                  <Ic name="bolt" size={12} color={T.muted} style={{ verticalAlign:"-2px" }} /> {cue}
                 </div>
               )}
               <div style={{ display:"flex", alignItems:"center", gap:11 }}>
@@ -2522,13 +2552,13 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                 </span>
                 {streak >= 2 && (
                   <span style={{ fontSize:12, fontWeight:700, color:"#B45309", flexShrink:0, whiteSpace:"nowrap", background:T.gold+"1f", padding:"2px 8px", borderRadius:20 }} aria-label={`${streak} day streak`}>
-                    <span aria-hidden="true">🔥</span> {streak}d
+                    <Ic name="flame" size={11} color="#B45309" style={{ verticalAlign:"-1px" }} /> {streak}d
                   </span>
                 )}
               </div>
               {habit.attractive && (
                 <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:9, marginLeft:41, fontSize:12.5, fontWeight:600, color:"#534AB7", minWidth:0 }}>
-                  <span style={{ flexShrink:0 }} aria-hidden="true">✨</span>
+                  <Ic name="spark" size={13} color="#534AB7" />
                   <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.attractive}</span>
                 </div>
               )}
@@ -2539,9 +2569,9 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                     aria-label={`Do the two-minute version: ${habit.starter}`}
                     style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12.5, fontWeight:700, color:"#085041", background:"#E1F5EE", border:"1px solid #9FE1CB", borderRadius:20, padding:"7px 14px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", maxWidth:"100%" }}
                   >
-                    <span aria-hidden="true">⏱</span>
+                    <Ic name="clock" size={13} color="#085041" />
                     <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>2-min: {habit.starter}</span>
-                    <span style={{ fontWeight:900 }} aria-hidden="true">✓</span>
+                    <Ic name="check" size={12} color="#085041" />
                   </button>
                 </div>
               )}
