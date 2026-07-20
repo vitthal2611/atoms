@@ -748,7 +748,8 @@ export default function App() {
     });
     clearTimeout(justCheckedTimerRef.current);
     setJustChecked(habitId);
-    justCheckedTimerRef.current = setTimeout(()=>setJustChecked(null),600);
+    // Long enough for the reward strip to register before the row fades out
+    justCheckedTimerRef.current = setTimeout(()=>setJustChecked(null),1500);
     const streak = getStreakForHabit(habitId, frequency) + 1;
     const milestone = MILESTONES.find(m=>m.days===streak);
     if(milestone && !wasChecked) {
@@ -1293,6 +1294,7 @@ export default function App() {
             justChecked={justChecked}
             getStreakForHabit={getStreakForHabit}
             openEditHabit={openEditHabit}
+            openDeleteHabit={openDeleteHabit}
             setModal={setModal}
             openAddHabit={openAddHabit}
             openAddIdentity={openAddIdentity}
@@ -1486,18 +1488,8 @@ function groupByIdentityRuns(items) {
 
 // ─── HABIT ROW ────────────────────────────────────────────────────────────────
 // One habit inside an IdentityGroupCard: trigger cue → action row → meta.
-function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, onMiss, openEditHabit, weekTrail, first }) {
+function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, onMiss, openEditHabit, openDeleteHabit, first }) {
   const next = getNextMilestone(streak);
-  const [expanded, setExpanded] = useState(false);
-
-  // Laws 2-4 — law 1 (cue) is already shown above as the trigger banner, so it's
-  // not repeated here. Only laws the user actually filled in get a row.
-  const fourLaws = [
-    { key:"attractive", n:2, label:"Make it attractive", color:"#534AB7", bg:"#EEEDFE", value: habit.attractive },
-    { key:"easy",       n:3, label:"Make it easy",        color:"#0F6E56", bg:"#E1F5EE", value: habit.easy },
-    { key:"satisfying", n:4, label:"Make it satisfying",  color:"#854F0B", bg:"#FAEEDA", value: habit.satisfying },
-  ].filter(l => l.value);
-  const hasFourLaws = !!habit.trigger || fourLaws.length > 0;
 
   // One cue line above the label: trigger · time · location · frequency.
   // The milestone countdown lives in the micro-bar, not as text.
@@ -1540,10 +1532,21 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           style={{
             background: "transparent", border: "none",
             fontSize:13, color: T.muted, cursor: "pointer",
-            padding: "8px 10px 8px 7px", lineHeight: 1, WebkitTapHighlightColor: "transparent",
+            padding: "8px 7px", lineHeight: 1, WebkitTapHighlightColor: "transparent",
           }}
         >
           <span aria-hidden="true">✎</span>
+        </button>
+        <button
+          onClick={e => { e.stopPropagation(); openDeleteHabit(identity.id, habit); }}
+          aria-label={`Delete habit: ${habit.label}`}
+          style={{
+            background: "transparent", border: "none",
+            fontSize:12, color: T.red, opacity: 0.75, cursor: "pointer",
+            padding: "8px 10px 8px 7px", lineHeight: 1, WebkitTapHighlightColor: "transparent",
+          }}
+        >
+          <span aria-hidden="true">🗑</span>
         </button>
       </div>
 
@@ -1555,7 +1558,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         aria-label={checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
         style={{
           display: "flex", flexDirection: "column",
-          width: "100%", padding: "9px 62px 10px 12px",
+          width: "100%", padding: "9px 88px 10px 12px",
           background: "transparent", border: "none",
           cursor: "pointer", textAlign: "left",
           WebkitTapHighlightColor: "transparent",
@@ -1612,12 +1615,30 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           )}
         </div>
 
-        {/* One helper line while pending — the 2-minute starter wins, else the temptation bundle */}
-        {!checked && !missed && (habit.starter || habit.attractive) && (
-          <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:4, marginLeft:30, fontSize:12, fontWeight:600, color: habit.starter ? "#0F6E56" : "#534AB7", minWidth:0, maxWidth:"100%" }}>
-            <span style={{ flexShrink:0 }} aria-hidden="true">{habit.starter ? "⏱" : "✨"}</span>
+        {/* Two-minute starter chip (Law 3) — the friction-free way in */}
+        {!checked && !missed && habit.starter && (
+          <div style={{ marginTop:6, marginLeft:30, maxWidth:"100%" }}>
+            <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:12, fontWeight:700, color:"#085041", background:"#E1F5EE", borderRadius:20, padding:"4px 11px", maxWidth:"100%", boxSizing:"border-box" }}>
+              <span style={{ flexShrink:0 }} aria-hidden="true">⏱</span>
+              <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>2-min: {habit.starter}</span>
+            </span>
+          </div>
+        )}
+
+        {/* Temptation bundle (Law 2) — visible at the moment of action */}
+        {!checked && !missed && habit.attractive && (
+          <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:5, marginLeft:30, fontSize:12, fontWeight:600, color:"#534AB7", minWidth:0, maxWidth:"100%" }}>
+            <span style={{ flexShrink:0 }} aria-hidden="true">✨</span>
+            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.attractive}</span>
+          </div>
+        )}
+
+        {/* Reward strip (Law 4) — instant payoff shown the moment it's checked */}
+        {checked && (
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:6, marginLeft:30, fontSize:12, fontWeight:700, color:"#0F6E56", minWidth:0, maxWidth:"100%" }}>
+            <span style={{ flexShrink:0 }} aria-hidden="true">🗳️</span>
             <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-              {habit.starter ? `2-min start: ${habit.starter}` : habit.attractive}
+              +1 vote for {shortLabel(identity.label)} · {streak}d streak{next ? ` · ${next.days - streak}d to ${next.label}` : ""}
             </span>
           </div>
         )}
@@ -1637,56 +1658,6 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         )}
       </button>
 
-      {/* ── Four Laws expander — sits outside the toggle button (can't nest buttons) ── */}
-      {hasFourLaws && (
-        <div style={{ padding: "0 12px 10px 30px" }}>
-          <button
-            onClick={() => setExpanded(e => !e)}
-            aria-expanded={expanded}
-            style={{
-              display:"flex", alignItems:"center", gap:4, background:"transparent", border:"none",
-              cursor:"pointer", padding:"6px 8px 6px 0", fontSize:12, fontWeight:700, color:T.primary,
-              WebkitTapHighlightColor:"transparent",
-            }}
-          >
-            Four Laws
-            <span aria-hidden="true" style={{ fontSize:10.5, transition:"transform 0.2s", display:"inline-block", transform: expanded ? "rotate(180deg)" : "none" }}>▼</span>
-          </button>
-
-          {expanded && (
-            <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:10 }}>
-              <div style={{ textAlign:"center", background:T.primary+"0d", borderRadius:8, padding:"6px 10px", fontSize:12, fontWeight:700, color:T.primary }}>
-                Every rep is a vote for: <span style={{ fontWeight:800 }}>{identity.label}</span>
-              </div>
-
-              {fourLaws.map(law => (
-                <div key={law.key} style={{ display:"flex", gap:10 }}>
-                  <div aria-hidden="true" style={{ width:24, height:24, borderRadius:8, background:law.bg, color:law.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, flexShrink:0 }}>
-                    {law.n}
-                  </div>
-                  <div>
-                    <div style={{ fontSize:11, fontWeight:700, color:law.color, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:2 }}>{law.label}</div>
-                    <div style={{ fontSize:13.5, color:T.text, lineHeight:1.4 }}>{law.value}</div>
-                  </div>
-                </div>
-              ))}
-
-              {weekTrail && (
-                <div style={{ display:"flex", alignItems:"center", gap:4, paddingTop:8, borderTop:`1px solid ${T.surf2}` }}>
-                  <span style={{ fontSize:11, color:T.muted, marginRight:4 }}>Last 7 days</span>
-                  {weekTrail.map((done, i) => (
-                    <span key={i} aria-hidden="true" style={{
-                      width:14, height:14, borderRadius:4, flexShrink:0,
-                      background: done ? identity.color : T.surf2,
-                      border: done ? "none" : `1px dashed ${T.border}`,
-                    }} />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -1695,7 +1666,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 // One card per run of consecutive same-identity habits in a time slot: a single
 // identity band on top (with the identity's done-today count), then one
 // HabitRow per habit — hierarchy reads identity → trigger → action.
-const IdentityGroupCard = memo(function IdentityGroupCard({ identity, items, todayData, justChecked, getStreakForHabit, toggle, markMiss, warnIds, openEditHabit, getWeekTrail, doneToday, totalToday }) {
+const IdentityGroupCard = memo(function IdentityGroupCard({ identity, items, todayData, justChecked, getStreakForHabit, toggle, markMiss, warnIds, openEditHabit, openDeleteHabit, doneToday, totalToday }) {
   const dim = identity.colorDim || T.text;
   return (
     <div style={{
@@ -1730,7 +1701,7 @@ const IdentityGroupCard = memo(function IdentityGroupCard({ identity, items, tod
       </div>
 
       {items.map(({ habit }, i) => (
-        <div key={habit.id} className={justChecked === habit.id ? "card-leaving" : ""}>
+        <div key={habit.id} className={justChecked === habit.id ? "row-leaving" : ""}>
           <HabitRow
             habit={habit}
             identity={identity}
@@ -1741,7 +1712,7 @@ const IdentityGroupCard = memo(function IdentityGroupCard({ identity, items, tod
             toggle={toggle}
             onMiss={markMiss}
             openEditHabit={openEditHabit}
-            weekTrail={getWeekTrail(habit.id)}
+            openDeleteHabit={openDeleteHabit}
             first={i === 0}
           />
         </div>
@@ -2165,7 +2136,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
 });
 
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
-const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, markMiss, justChecked, getStreakForHabit, openEditHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask, editTask, setTaskPriority, toggleTaskBig, deferTask }) {
+const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, markMiss, justChecked, getStreakForHabit, openEditHabit, openDeleteHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask, editTask, setTaskPriority, toggleTaskBig, deferTask }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
   const [matrixExpanded, setMatrixExpanded] = useState(false);
@@ -2242,21 +2213,6 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
     if (top.length > 0) return top;
     return sorted.slice(0, 2);
   }, [dailyTasks, selectedDate]);
-
-  // 7-day check-in trail for a habit, ending today — feeds the Four Laws expander's
-  // mini heatmap. Anchored on todayKey (not selectedDate) since it's "recent history",
-  // not tied to whatever day is being viewed.
-  const getWeekTrail = useCallback((habitId) => {
-    const [y, mo, d] = todayKey.split("-").map(Number);
-    const base = new Date(y, mo - 1, d);
-    const out = [];
-    for (let i = 6; i >= 0; i--) {
-      const dt = new Date(base); dt.setDate(base.getDate() - i);
-      const key = dateToKey(dt);
-      out.push(allData[key] ? allData[key][habitId] === true : false);
-    }
-    return out;
-  }, [allData, todayKey]);
 
   // ── Empty state — no identities yet ──
   if (identities.length === 0) {
@@ -2441,7 +2397,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                 markMiss={markMiss}
                 warnIds={selectedDate === todayKey ? missedYesterdayIds : null}
                 openEditHabit={openEditHabit}
-                getWeekTrail={getWeekTrail}
+                openDeleteHabit={openDeleteHabit}
                 doneToday={(identityDayCounts[g.identity.id] || {}).done || 0}
                 totalToday={(identityDayCounts[g.identity.id] || {}).total || 0}
               />
@@ -2845,6 +2801,7 @@ html, body, #root { height: 100%; }
 .habit-toggle:active { opacity: 0.7; transform: scale(0.98); }
 .check-pop { animation: pop 0.25s cubic-bezier(0.34,1.56,0.64,1) both; }
 .card-leaving { animation: fadeOut 0.3s ease forwards; }
+.row-leaving { animation: fadeOut 0.35s ease 1.15s forwards; }
 .sheet-in { animation: slideUp 0.28s cubic-bezier(0.32,0.72,0,1) both; }
 .toast-in { animation: fadeSlideDown 0.3s cubic-bezier(0.32,0.72,0,1) both; }
 .toast-in-up { animation: fadeSlideUp 0.3s cubic-bezier(0.32,0.72,0,1) both; }
