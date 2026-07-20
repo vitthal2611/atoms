@@ -347,7 +347,7 @@ function FrequencyPicker({ value, onChange }) {
                     border:`1.5px solid ${on ? T.accent : T.border}`,
                     background: on ? T.accent : T.surface,
                     color: on ? "#fff" : T.text2,
-                    fontSize:11, fontWeight:600, cursor:"pointer",
+                    fontSize:12, fontWeight:600, cursor:"pointer",
                     WebkitTapHighlightColor:"transparent", transition:"all 0.15s",
                   }}>Last day</button>
               );
@@ -405,7 +405,7 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
 
       {/* ── Law 1 · Make it obvious — cue, time, place, schedule ── */}
       <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:24 }}>
-        <span aria-hidden="true" style={{ width:19, height:19, borderRadius:"50%", background:T.primary, color:"#fff", fontSize:11, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>1</span>
+        <span aria-hidden="true" style={{ width:19, height:19, borderRadius:"50%", background:T.primary, color:"#fff", fontSize:12, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>1</span>
         <span style={{ fontSize:12, fontWeight:800, letterSpacing:"0.07em", textTransform:"uppercase", color:T.primary }}>Make it obvious</span>
       </div>
 
@@ -453,9 +453,9 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
 
       {/* ── Law 2 · Make it attractive — temptation bundle ── */}
       <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:24 }}>
-        <span aria-hidden="true" style={{ width:19, height:19, borderRadius:"50%", background:"#534AB7", color:"#fff", fontSize:11, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>2</span>
+        <span aria-hidden="true" style={{ width:19, height:19, borderRadius:"50%", background:"#534AB7", color:"#fff", fontSize:12, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>2</span>
         <span style={{ fontSize:12, fontWeight:800, letterSpacing:"0.07em", textTransform:"uppercase", color:"#534AB7" }}>Make it attractive</span>
-        <span style={{ fontSize:11, color:T.muted }}>optional</span>
+        <span style={{ fontSize:12, color:T.muted }}>optional</span>
       </div>
       <div style={{ marginTop:10 }}>
         <input id={ids.attractive} aria-label="Temptation bundle — pair it with something you enjoy" style={S.input} value={form.attractive} onChange={e=>set("attractive",e.target.value)} placeholder="✨ Pair it with… e.g. evening chai" maxLength={140} />
@@ -463,9 +463,9 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
 
       {/* ── Law 3 · Make it easy — two-minute starter ── */}
       <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:24 }}>
-        <span aria-hidden="true" style={{ width:19, height:19, borderRadius:"50%", background:"#0F6E56", color:"#fff", fontSize:11, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>3</span>
+        <span aria-hidden="true" style={{ width:19, height:19, borderRadius:"50%", background:"#0F6E56", color:"#fff", fontSize:12, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>3</span>
         <span style={{ fontSize:12, fontWeight:800, letterSpacing:"0.07em", textTransform:"uppercase", color:"#0F6E56" }}>Make it easy</span>
-        <span style={{ fontSize:11, color:T.muted }}>optional</span>
+        <span style={{ fontSize:12, color:T.muted }}>optional</span>
       </div>
       <div style={{ marginTop:10 }}>
         <input id={ids.starter} aria-label="Two-minute starter version" style={S.input} value={form.starter} onChange={e=>set("starter",e.target.value)} placeholder="⏱ 2-min version… e.g. just read 2 pages" maxLength={100} />
@@ -473,7 +473,7 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
 
       {/* ── Law 4 · Make it satisfying — automatic, nothing to fill ── */}
       <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:24 }}>
-        <span aria-hidden="true" style={{ width:19, height:19, borderRadius:"50%", background:"#854F0B", color:"#fff", fontSize:11, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>4</span>
+        <span aria-hidden="true" style={{ width:19, height:19, borderRadius:"50%", background:"#854F0B", color:"#fff", fontSize:12, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>4</span>
         <span style={{ fontSize:12, fontWeight:800, letterSpacing:"0.07em", textTransform:"uppercase", color:"#854F0B" }}>Make it satisfying</span>
       </div>
       <div style={{ marginTop:8, fontSize:12.5, color:T.text2, lineHeight:1.5, background:T.gold+"12", border:`1px solid ${T.gold}33`, borderRadius:10, padding:"9px 12px" }}>
@@ -1644,7 +1644,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             transition: "all 0.2s",
           }}>
             {checked && <span style={{ fontSize:12, color: "#fff", fontWeight: 900, lineHeight: 1 }} className="check-pop">✓</span>}
-            {missed && <span style={{ fontSize:11, color: T.red, fontWeight: 900, lineHeight: 1 }}>✕</span>}
+            {missed && <span style={{ fontSize:12, color: T.red, fontWeight: 900, lineHeight: 1 }}>✕</span>}
           </div>
 
           <div style={{
@@ -1659,7 +1659,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
           {missed && (
             <span style={{
-              fontSize:11, fontWeight: 800, color: T.red, flexShrink: 0, whiteSpace: "nowrap",
+              fontSize:12, fontWeight: 800, color: T.red, flexShrink: 0, whiteSpace: "nowrap",
               background: T.red + "14", padding: "2px 8px", borderRadius: 20,
             }}>
               Missed
@@ -1668,7 +1668,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
           {streak >= 2 && (
             <span style={{
-              fontSize:11, fontWeight: 700, color: "#B45309", flexShrink: 0, whiteSpace: "nowrap",
+              fontSize:12, fontWeight: 700, color: "#B45309", flexShrink: 0, whiteSpace: "nowrap",
               background: T.gold + "1f", padding: "2px 7px", borderRadius: 20,
             }} aria-label={`${streak} day streak`}>
               <span aria-hidden="true">🔥</span> {streak}d
@@ -1712,7 +1712,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             <div aria-hidden="true" style={{ flex: 1, height: 3.5, borderRadius: 99, background: T.surf2, overflow: "hidden" }}>
               <div style={{ height: "100%", width: `${Math.min(100, (streak / next.days) * 100)}%`, background: identity.color, borderRadius: 99, transition: "width 0.4s ease" }} />
             </div>
-            <span aria-hidden="true" style={{ fontSize:10.5, color: T.muted, fontWeight: 600, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{streak}/{next.days}</span>
+            <span aria-hidden="true" style={{ fontSize:11.5, color: T.muted, fontWeight: 600, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{streak}/{next.days}</span>
           </div>
         )}
 
@@ -1748,7 +1748,7 @@ const IdentityGroupCard = memo(function IdentityGroupCard({ identity, items, tod
       }}>
         <span style={{ fontSize:14, flexShrink: 0 }} aria-hidden="true">{identity.icon}</span>
         <span style={{
-          flex: 1, minWidth: 0, fontSize:11.5, fontWeight: 800,
+          flex: 1, minWidth: 0, fontSize:12, fontWeight: 800,
           letterSpacing: "0.07em", textTransform: "uppercase", color: dim,
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}>
@@ -1757,7 +1757,7 @@ const IdentityGroupCard = memo(function IdentityGroupCard({ identity, items, tod
         <span
           aria-label={`${doneToday} of ${totalToday} habits done today for ${shortLabel(identity.label)}`}
           style={{
-            flexShrink: 0, fontSize:11, fontWeight: 800, color: dim,
+            flexShrink: 0, fontSize:12, fontWeight: 800, color: dim,
             background: "rgba(255,255,255,0.6)", borderRadius: 10, padding: "2px 8px",
             fontVariantNumeric: "tabular-nums",
           }}
@@ -1836,7 +1836,7 @@ function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
         </div>
         {!isToday && (
           <button onClick={()=>setSelectedDate(todayKey)} aria-label="Go to today" style={{
-            marginTop:3, fontSize:11, fontWeight:700, color:T.accent,
+            marginTop:3, fontSize:12, fontWeight:700, color:T.accent,
             background:T.accent+"18", border:`1px solid ${T.accent}44`,
             borderRadius:20, padding:"8px 12px", cursor:"pointer",
             letterSpacing:"0.04em", textTransform:"uppercase",
@@ -1950,7 +1950,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
             <button key={p.key} onClick={() => setInputPriority(p.key)} aria-pressed={inputPriority === p.key}
               aria-label={`${p.label} priority`}
               style={{
-                flexShrink:0, fontSize:10.5, fontWeight:800, padding:"5px 8px", borderRadius:8,
+                flexShrink:0, fontSize:11.5, fontWeight:800, padding:"5px 8px", borderRadius:8,
                 border: inputPriority === p.key ? `1.5px solid ${p.dark}` : "1.5px solid transparent",
                 background: p.bg, color: p.dark, cursor:"pointer", fontFamily:"inherit",
                 WebkitTapHighlightColor:"transparent", transition:"border 0.1s",
@@ -2036,7 +2036,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
 
                   {/* Priority chip */}
                   <span aria-label={`Priority: ${p.label}`} style={{
-                    flexShrink:0, fontSize:10.5, fontWeight:800, color:p.dark, background:p.bg,
+                    flexShrink:0, fontSize:11.5, fontWeight:800, color:p.dark, background:p.bg,
                     borderRadius:8, padding:"2px 7px", letterSpacing:"0.03em",
                   }}>
                     {p.label}
@@ -2064,12 +2064,12 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
               }}
             >
               <div aria-hidden="true" style={{ width:18, height:18, borderRadius:"50%", background:T.primary, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <span style={{ fontSize:11, color:"#fff", fontWeight:900, lineHeight:1 }}>✓</span>
+                <span style={{ fontSize:12, color:"#fff", fontWeight:900, lineHeight:1 }}>✓</span>
               </div>
               <span style={{ flex:1, textAlign:"left", fontSize:13, fontWeight:500, color:T.primary }}>
                 {completedTasks.length} completed
               </span>
-              <span aria-hidden="true" style={{ fontSize:11, color:T.primary, transition:"transform 0.2s", display:"inline-block", transform: completedOpen ? "rotate(180deg)" : "none" }}>▼</span>
+              <span aria-hidden="true" style={{ fontSize:12, color:T.primary, transition:"transform 0.2s", display:"inline-block", transform: completedOpen ? "rotate(180deg)" : "none" }}>▼</span>
             </button>
 
             {completedOpen && (
@@ -2285,12 +2285,12 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
       {/* Today's Focus — compact task preview, expands into the full task list */}
       <div style={{ ...S.card, padding:"12px 14px" }}>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom: matrixExpanded ? 10 : 8 }}>
-          <span style={{ fontSize:11, color:T.muted, letterSpacing:"0.1em", fontWeight:700, textTransform:"uppercase" }}>
+          <span style={{ fontSize:12, color:T.muted, letterSpacing:"0.1em", fontWeight:700, textTransform:"uppercase" }}>
             <span aria-hidden="true">🎯</span> Today's Focus
           </span>
           {taskCounts.total > 0 && (
             <span aria-label={`${taskCounts.done} of ${taskCounts.total} tasks done`} style={{
-              fontSize:11, fontWeight:800, color:"#0F6E56", background:"#E1F5EE",
+              fontSize:12, fontWeight:800, color:"#0F6E56", background:"#E1F5EE",
               borderRadius:20, padding:"2px 9px", lineHeight:1.4, fontVariantNumeric:"tabular-nums",
             }}>
               {taskCounts.done}/{taskCounts.total} done
@@ -2351,7 +2351,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                 cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent",
               }}
             >
-              {t.done && <span style={{ fontSize:11, color:"#fff", fontWeight:900, lineHeight:1 }} aria-hidden="true">✓</span>}
+              {t.done && <span style={{ fontSize:12, color:"#fff", fontWeight:900, lineHeight:1 }} aria-hidden="true">✓</span>}
             </button>
           );
           if (active.length === 0) {
@@ -2372,8 +2372,8 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
               {/* Big 5 — the day's five most important tasks, done ones stay visible */}
               <div style={{ display:"flex", alignItems:"center", gap:6, margin:"2px 0 6px" }}>
                 <span aria-hidden="true" style={{ fontSize:12 }}>⭐</span>
-                <span style={{ fontSize:11, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:"#854F0B" }}>Big 5</span>
-                {bigAll.length > 0 && <span style={{ fontSize:11, color:T.muted }}>· {bigDone}/{bigAll.length} done</span>}
+                <span style={{ fontSize:12, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:"#854F0B" }}>Big 5</span>
+                {bigAll.length > 0 && <span style={{ fontSize:12, color:T.muted }}>· {bigDone}/{bigAll.length} done</span>}
               </div>
               <div style={{ border:`1px solid ${T.gold}55`, background:T.gold+"0a", borderRadius:12, padding:"2px 10px", marginBottom:10 }}>
                 {bigAll.map((t, i) => {
@@ -2383,7 +2383,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                       {circle(t, "#B45309")}
                       {rowText(t)}
                       {!t.done && (
-                        <span aria-label={`Priority: ${p.label}`} style={{ fontSize:10.5, fontWeight:800, color:p.dark, background:p.bg, borderRadius:8, padding:"2px 7px", flexShrink:0 }}>{p.label}</span>
+                        <span aria-label={`Priority: ${p.label}`} style={{ fontSize:11.5, fontWeight:800, color:p.dark, background:p.bg, borderRadius:8, padding:"2px 7px", flexShrink:0 }}>{p.label}</span>
                       )}
                     </div>
                   );
@@ -2406,7 +2406,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                 <>
                   <div style={{ display:"flex", alignItems:"center", gap:6, margin:"2px 0 2px" }}>
                     <span aria-hidden="true" style={{ width:8, height:8, borderRadius:"50%", background:T.red, flexShrink:0 }} />
-                    <span style={{ fontSize:11, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:"#A32D2D" }}>High priority</span>
+                    <span style={{ fontSize:12, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:"#A32D2D" }}>High priority</span>
                   </div>
                   {highPending.map((t, i) => (
                     <div key={t.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 2px", borderTop: i === 0 ? "none" : `1px solid ${T.surf2}` }}>
@@ -2424,7 +2424,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                   <div key={t.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 2px", borderTop: i === 0 ? "none" : `1px solid ${T.surf2}` }}>
                     {circle(t, p.accent)}
                     {rowText(t)}
-                    <span aria-label={`Priority: ${p.label}`} style={{ fontSize:10.5, fontWeight:800, color:p.dark, background:p.bg, borderRadius:8, padding:"2px 7px", flexShrink:0 }}>{p.label}</span>
+                    <span aria-label={`Priority: ${p.label}`} style={{ fontSize:11.5, fontWeight:800, color:p.dark, background:p.bg, borderRadius:8, padding:"2px 7px", flexShrink:0 }}>{p.label}</span>
                   </div>
                 );
               })}
@@ -2478,10 +2478,10 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
         return (
           <div style={{ border:`2px solid ${identity.color}`, borderRadius:16, overflow:"hidden", background:T.surface }}>
             <div style={{ display:"flex", alignItems:"center", gap:7, background:identity.color+"26", padding:"6px 12px" }}>
-              <span style={{ fontSize:10.5, fontWeight:800, letterSpacing:"0.09em", textTransform:"uppercase", color:dim }}>Up next</span>
+              <span style={{ fontSize:11.5, fontWeight:800, letterSpacing:"0.09em", textTransform:"uppercase", color:dim }}>Up next</span>
               <span style={{ flex:1 }} />
               <span style={{ fontSize:13 }} aria-hidden="true">{identity.icon}</span>
-              <span style={{ fontSize:10.5, fontWeight:800, letterSpacing:"0.05em", textTransform:"uppercase", color:dim, maxWidth:180, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{shortLabel(identity.label)}</span>
+              <span style={{ fontSize:11.5, fontWeight:800, letterSpacing:"0.05em", textTransform:"uppercase", color:dim, maxWidth:180, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{shortLabel(identity.label)}</span>
             </div>
             <div style={{ padding:"12px 14px 13px" }}>
               {cue && (
@@ -2499,7 +2499,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                   {habit.label}
                 </span>
                 {streak >= 2 && (
-                  <span style={{ fontSize:11, fontWeight:700, color:"#B45309", flexShrink:0, whiteSpace:"nowrap", background:T.gold+"1f", padding:"2px 8px", borderRadius:20 }} aria-label={`${streak} day streak`}>
+                  <span style={{ fontSize:12, fontWeight:700, color:"#B45309", flexShrink:0, whiteSpace:"nowrap", background:T.gold+"1f", padding:"2px 8px", borderRadius:20 }} aria-label={`${streak} day streak`}>
                     <span aria-hidden="true">🔥</span> {streak}d
                   </span>
                 )}
@@ -2528,7 +2528,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                   <div aria-hidden="true" style={{ flex:1, height:4, borderRadius:99, background:T.surf2, overflow:"hidden" }}>
                     <div style={{ height:"100%", width:`${Math.min(100, (streak / nextMs.days) * 100)}%`, background:identity.color, borderRadius:99 }} />
                   </div>
-                  <span aria-hidden="true" style={{ fontSize:11, color:T.muted, fontWeight:600, flexShrink:0, fontVariantNumeric:"tabular-nums" }}>{streak}/{nextMs.days}</span>
+                  <span aria-hidden="true" style={{ fontSize:12, color:T.muted, fontWeight:600, flexShrink:0, fontVariantNumeric:"tabular-nums" }}>{streak}/{nextMs.days}</span>
                 </div>
               )}
             </div>
@@ -2548,7 +2548,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
               <span style={{ fontSize:16 }} aria-hidden="true">{slot.emoji}</span>
               <span style={{ fontSize:14, fontWeight:700, color:T.text, fontFamily:FONT_DISPLAY, letterSpacing:"-0.01em" }}>{slot.label}</span>
               {selectedDate === todayKey && slot.id === nowSlotId && (
-                <span style={{ fontSize:10.5, fontWeight:800, color:T.primary, background:T.primary+"14", border:`1px solid ${T.primary}44`, borderRadius:8, padding:"1px 7px", letterSpacing:"0.08em", textTransform:"uppercase" }}>
+                <span style={{ fontSize:11.5, fontWeight:800, color:T.primary, background:T.primary+"14", border:`1px solid ${T.primary}44`, borderRadius:8, padding:"1px 7px", letterSpacing:"0.08em", textTransform:"uppercase" }}>
                   Now
                 </span>
               )}
@@ -2668,7 +2668,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                       <div style={{ fontSize:14, fontWeight:600, color:T.muted }}>{habit.label}</div>
                       <div style={{ fontSize:12, color:T.muted, marginTop:2 }}><span aria-hidden="true">{identity.icon}</span> {shortLabel(identity.label)}</div>
                     </div>
-                    <span style={{ fontSize:11, fontWeight:700, color, background:bg, padding:"3px 8px", borderRadius:20, flexShrink:0, whiteSpace:"nowrap" }}>
+                    <span style={{ fontSize:12, fontWeight:700, color, background:bg, padding:"3px 8px", borderRadius:20, flexShrink:0, whiteSpace:"nowrap" }}>
                       {getFreqLabel(habit.frequency)}
                     </span>
                   </div>
@@ -2729,7 +2729,7 @@ const WeekView = memo(function WeekView({ data, todayKey, identities }) {
       </div>
 
       {/* Dot legend */}
-      <div style={{ display:"flex", gap:14, fontSize:11, color:T.muted, paddingLeft:4, flexWrap:"wrap" }} aria-hidden="true">
+      <div style={{ display:"flex", gap:14, fontSize:12, color:T.muted, paddingLeft:4, flexWrap:"wrap" }} aria-hidden="true">
         <span style={{ display:"flex", alignItems:"center", gap:4 }}>
           <span style={{ display:"inline-block", width:10, height:10, borderRadius:3, background:T.primary }}/>Done
         </span>
@@ -2772,8 +2772,8 @@ const WeekView = memo(function WeekView({ data, todayKey, identities }) {
                           opacity: future ? 0.35 : scheduled ? 1 : 0.4,
                           display:"flex", alignItems:"center", justifyContent:"center",
                         }}>
-                          {done && <span style={{fontSize:11,color:"#fff",fontWeight:900,lineHeight:1}} aria-hidden="true">✓</span>}
-                          {missed && <span style={{fontSize:11,color:T.red,fontWeight:900,lineHeight:1}} aria-hidden="true">✕</span>}
+                          {done && <span style={{fontSize:12,color:"#fff",fontWeight:900,lineHeight:1}} aria-hidden="true">✓</span>}
+                          {missed && <span style={{fontSize:12,color:T.red,fontWeight:900,lineHeight:1}} aria-hidden="true">✕</span>}
                         </div>
                       );
                     })}
@@ -2868,7 +2868,7 @@ const StreaksView = memo(function StreaksView({ getStreak, identities }) {
                          role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
                       <div style={{height:"100%",width:`${pct}%`,background:identity.color,borderRadius:99,transition:"width 0.5s"}}/>
                     </div>
-                    <span style={{fontSize:11,color:T.muted,flexShrink:0,fontWeight:600}}>{next?`→ ${next.emoji} ${next.days}d`:"💎 Max"}</span>
+                    <span style={{fontSize:12,color:T.muted,flexShrink:0,fontWeight:600}}>{next?`→ ${next.emoji} ${next.days}d`:"💎 Max"}</span>
                   </div>
                 </div>
               );
@@ -2953,7 +2953,7 @@ const S = {
   card:{background:T.surface,borderRadius:16,border:`1px solid ${T.border}`,padding:"14px 16px"},
   cardLabel:{fontSize:14,fontWeight:700,color:T.text,fontFamily:FONT_DISPLAY,letterSpacing:"-0.01em",display:"flex",alignItems:"center",gap:6},
   weekGrid:{display:"grid",gridTemplateColumns:"120px repeat(7, 1fr)",gap:6,overflowX:"auto"},
-  weekDayH:{fontSize:11,fontWeight:700,color:T.muted,textAlign:"center",padding:"2px 0",letterSpacing:"0.06em"},
+  weekDayH:{fontSize:12,fontWeight:700,color:T.muted,textAlign:"center",padding:"2px 0",letterSpacing:"0.06em"},
   weekHabitLabel:{fontSize:12,color:T.text2,fontWeight:500,display:"flex",alignItems:"center",paddingRight:6,lineHeight:1.3},
   weekDot:{width:"100%",aspectRatio:"1",borderRadius:5,minWidth:22},
   crudBtn:{background:"transparent",border:"none",color:T.muted,cursor:"pointer",fontSize:16,padding:"6px 8px",lineHeight:1,borderRadius:8,WebkitTapHighlightColor:"transparent",display:"flex",alignItems:"center",justifyContent:"center"},
