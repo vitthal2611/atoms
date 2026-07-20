@@ -1688,8 +1688,8 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         {/* Two-minute starter chip (Law 3) — tappable: the whole row checks the habit,
             so tapping the chip IS "did the 2-min version" and earns the vote */}
         {!checked && !missed && habit.starter && (
-          <div style={{ marginTop:7, marginLeft:30, maxWidth:"100%" }}>
-            <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12.5, fontWeight:700, color:"#085041", background:"#E1F5EE", border:"1px solid #9FE1CB", borderRadius:20, padding:"6px 13px", maxWidth:"100%", boxSizing:"border-box" }}>
+          <div style={{ marginTop:6, marginLeft:30, maxWidth:"100%" }}>
+            <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:12, fontWeight:700, color:"#085041", background:"#E1F5EE", borderRadius:20, padding:"4px 11px", maxWidth:"100%", boxSizing:"border-box" }}>
               <span style={{ flexShrink:0 }} aria-hidden="true">⏱</span>
               <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>2-min: {habit.starter}</span>
               <span style={{ flexShrink:0, fontWeight:900 }} aria-hidden="true">✓</span>
@@ -1697,27 +1697,14 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           </div>
         )}
 
-        {/* Temptation bundle (Law 2) — visible at the moment of action */}
-        {!checked && !missed && habit.attractive && (
-          <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:5, marginLeft:30, fontSize:12, fontWeight:600, color:"#534AB7", minWidth:0, maxWidth:"100%" }}>
-            <span style={{ flexShrink:0 }} aria-hidden="true">✨</span>
-            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.attractive}</span>
-          </div>
-        )}
-
-        {/* Environment setup (Law 1) — the prep that makes the cue unmissable */}
-        {!checked && !missed && habit.easy && (
-          <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:5, marginLeft:30, fontSize:12, fontWeight:600, color:T.text2, minWidth:0, maxWidth:"100%" }}>
-            <span style={{ flexShrink:0 }} aria-hidden="true">🏠</span>
-            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.easy}</span>
-          </div>
-        )}
-
-        {/* Reward preview (Law 4) — what's waiting on the other side of the check */}
-        {!checked && !missed && habit.satisfying && (
-          <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:5, marginLeft:30, fontSize:12, fontWeight:600, color:"#854F0B", minWidth:0, maxWidth:"100%" }}>
-            <span style={{ flexShrink:0 }} aria-hidden="true">🎁</span>
-            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.satisfying}</span>
+        {/* Hints — bundle · environment · reward merged into one quiet line */}
+        {!checked && !missed && (habit.attractive || habit.easy || habit.satisfying) && (
+          <div style={{ fontSize:12, color:T.muted, marginTop:5, marginLeft:30, minWidth:0, maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", lineHeight:1.4 }}>
+            {[
+              habit.attractive && `✨ ${habit.attractive}`,
+              habit.easy && `🏠 ${habit.easy}`,
+              habit.satisfying && `🎁 ${habit.satisfying}`,
+            ].filter(Boolean).join("  ·  ")}
           </div>
         )}
 
