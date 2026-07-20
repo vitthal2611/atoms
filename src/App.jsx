@@ -1432,7 +1432,7 @@ const ManageView = memo(function ManageView({ identities, onAddHabit, onEditHabi
 
           {identity.habits.length>0 && (
             <div style={{borderTop:`1px solid ${T.border}`,paddingTop:10,marginBottom:10}}>
-              {identity.habits.map(habit=>(
+              {[...identity.habits].sort(byHabitTime).map(habit=>(
                 <div key={habit.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:`1px solid ${T.surf2}`}}>
                   <div style={{flex:1}}>
                     <div style={{fontSize:14,color:T.text,fontWeight:600}}>{habit.label}</div>
@@ -1496,6 +1496,24 @@ function getSlotId(timeStr) {
   }
   return "anytime";
 }
+
+// Habit's time as total minutes for sorting — handles "HH:MM" (time input)
+// and legacy "6:45 AM" style strings; no time sorts last
+function habitSortMinutes(habit) {
+  const t = habit.time;
+  if (!t) return Infinity;
+  const hm = t.match(/^(\d{1,2}):(\d{2})$/);
+  if (hm) return parseInt(hm[1]) * 60 + parseInt(hm[2]);
+  const m = t.toLowerCase().trim().match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/);
+  if (!m) return Infinity;
+  let h = parseInt(m[1]);
+  const min = m[2] ? parseInt(m[2]) : 0;
+  if (m[3] === "pm" && h !== 12) h += 12;
+  if (m[3] === "am" && h === 12) h = 0;
+  if (isNaN(h) || h > 23) return Infinity;
+  return h * 60 + min;
+}
+const byHabitTime = (a, b) => habitSortMinutes(a) - habitSortMinutes(b);
 
 // Collapse a time-sorted habit list into runs of consecutive same-identity
 // habits — each run renders as one IdentityGroupCard with a shared band
@@ -2170,16 +2188,12 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
   const [matrixExpanded, setMatrixExpanded] = useState(false);
 
   // Build enriched habit list with identity ref, time slot, and sort key
+  // (habitSortMinutes handles HH:MM and legacy am/pm formats, minutes included)
   const enrichedHabits  = useMemo(() =>
     identities.flatMap(identity =>
-      identity.habits.map(habit => {
-        // Parse HH:MM (from <input type="time">) → total minutes for precise sort
-        const hm = habit.time ? habit.time.match(/^(\d{1,2}):(\d{2})$/) : null;
-        const sortMinutes = hm
-          ? parseInt(hm[1]) * 60 + parseInt(hm[2])
-          : (parseHour(habit.time) !== null ? parseHour(habit.time) * 60 : Infinity);
-        return { habit, identity, slotId: getSlotId(habit.time), sortMinutes };
-      })
+      identity.habits.map(habit => (
+        { habit, identity, slotId: getSlotId(habit.time), sortMinutes: habitSortMinutes(habit) }
+      ))
     ), [identities]);
 
   const [scheduledHabits, notTodayHabits] = useMemo(() => {
@@ -2608,7 +2622,7 @@ const WeekView = memo(function WeekView({ data, todayKey, identities }) {
                 {weekDates.map((d,i)=>(
                   <div key={d} style={{...S.weekDayH,color:d===todayKey?identity.color:T.muted,fontWeight:d===todayKey?700:500}}>{DAY_LABELS[i]}</div>
                 ))}
-                {identity.habits.map(habit=>(
+                {[...identity.habits].sort(byHabitTime).map(habit=>(
                   <Fragment key={habit.id}>
                     <div style={S.weekHabitLabel}>{habit.label}</div>
                     {weekDates.map(d=>{
@@ -2696,7 +2710,7 @@ const StreaksView = memo(function StreaksView({ getStreak, identities }) {
           </div>
           {identity.habits.length===0
             ? <div style={{fontSize:13,color:T.muted,textAlign:"center",padding:"8px 0"}}>No habits yet</div>
-            : identity.habits.map(habit=>{
+            : [...identity.habits].sort(byHabitTime).map(habit=>{
               const streak=getStreak(habit.id, habit.frequency);
               const milestone=getMilestone(streak);
               const next=getNextMilestone(streak);
