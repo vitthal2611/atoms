@@ -403,10 +403,16 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
         {identities.map(i=><option key={i.id} value={i.id}>{i.icon} {i.label}</option>)}
       </select>
 
-      <label htmlFor={ids.trigger} style={S.fieldLabel}><span aria-hidden="true">⚡</span> Trigger (what cues this habit?)</label>
+      {/* ── Law 1 · Make it obvious — cue, time, place, schedule ── */}
+      <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:24 }}>
+        <span aria-hidden="true" style={{ width:19, height:19, borderRadius:"50%", background:T.primary, color:"#fff", fontSize:11, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>1</span>
+        <span style={{ fontSize:12, fontWeight:800, letterSpacing:"0.07em", textTransform:"uppercase", color:T.primary }}>Make it obvious</span>
+      </div>
+
+      <label htmlFor={ids.trigger} style={S.fieldLabel}><span aria-hidden="true">⚡</span> After what? (cue)</label>
       <input id={ids.trigger} style={S.input} value={form.trigger} onChange={e=>set("trigger",e.target.value)} placeholder="e.g. After morning coffee" maxLength={120} />
 
-      {/* Habit stacking — tap an existing habit to chain onto it (Law 1: obvious) */}
+      {/* Habit stacking — tap an existing habit to chain onto it */}
       {(() => {
         const options = identities
           .flatMap(i => i.habits.map(h => h.label))
@@ -431,31 +437,48 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
         );
       })()}
 
-      {/* ── Four Laws — optional, shown on the habit card as an expandable "Four Laws" section ── */}
-      <div style={{ marginTop:18, marginBottom:2, fontSize:12, letterSpacing:"0.08em", color:T.primary, fontWeight:700, textTransform:"uppercase" }}>
-        Four Laws of Behavior Change <span style={{ color:T.muted, fontWeight:500, textTransform:"none", letterSpacing:"normal" }}>(optional)</span>
+      <div style={{ display:"flex", gap:10 }}>
+        <div style={{ flex:1, minWidth:0 }}>
+          <label htmlFor={ids.time} style={S.fieldLabel}><span aria-hidden="true">🕐</span> Time</label>
+          <input id={ids.time} style={S.input} type="time" value={form.time} onChange={e=>set("time",e.target.value)} />
+        </div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <label htmlFor={ids.location} style={S.fieldLabel}><span aria-hidden="true">📍</span> Where</label>
+          <input id={ids.location} style={S.input} value={form.location} onChange={e=>set("location",e.target.value)} placeholder="e.g. Kitchen" maxLength={50} />
+        </div>
       </div>
-
-      <label htmlFor={ids.attractive} style={S.fieldLabel}>Make it attractive</label>
-      <input id={ids.attractive} style={S.input} value={form.attractive} onChange={e=>set("attractive",e.target.value)} placeholder="e.g. Pair with my morning coffee" maxLength={140} />
-
-      <label htmlFor={ids.easy} style={S.fieldLabel}>Make it easy</label>
-      <input id={ids.easy} style={S.input} value={form.easy} onChange={e=>set("easy",e.target.value)} placeholder="e.g. Book stays on the counter" maxLength={140} />
-
-      <label htmlFor={ids.starter} style={S.fieldLabel}><span aria-hidden="true">⏱</span> Two-minute starter</label>
-      <input id={ids.starter} style={S.input} value={form.starter} onChange={e=>set("starter",e.target.value)} placeholder="e.g. Just read 2 pages" maxLength={100} />
-
-      <label htmlFor={ids.satisfying} style={S.fieldLabel}>Make it satisfying</label>
-      <input id={ids.satisfying} style={S.input} value={form.satisfying} onChange={e=>set("satisfying",e.target.value)} placeholder="e.g. Move a bead on the reading jar" maxLength={140} />
-
-      <label htmlFor={ids.time} style={S.fieldLabel}><span aria-hidden="true">🕐</span> Time</label>
-      <input id={ids.time} style={S.input} type="time" value={form.time} onChange={e=>set("time",e.target.value)} />
-
-      <label htmlFor={ids.location} style={S.fieldLabel}><span aria-hidden="true">📍</span> Location</label>
-      <input id={ids.location} style={S.input} value={form.location} onChange={e=>set("location",e.target.value)} placeholder="e.g. Kitchen" maxLength={50} />
 
       <label style={S.fieldLabel}><span aria-hidden="true">🔁</span> Frequency</label>
       <FrequencyPicker value={form.frequency} onChange={v=>set("frequency",v)} />
+
+      {/* ── Law 2 · Make it attractive — temptation bundle ── */}
+      <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:24 }}>
+        <span aria-hidden="true" style={{ width:19, height:19, borderRadius:"50%", background:"#534AB7", color:"#fff", fontSize:11, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>2</span>
+        <span style={{ fontSize:12, fontWeight:800, letterSpacing:"0.07em", textTransform:"uppercase", color:"#534AB7" }}>Make it attractive</span>
+        <span style={{ fontSize:11, color:T.muted }}>optional</span>
+      </div>
+      <div style={{ marginTop:10 }}>
+        <input id={ids.attractive} aria-label="Temptation bundle — pair it with something you enjoy" style={S.input} value={form.attractive} onChange={e=>set("attractive",e.target.value)} placeholder="✨ Pair it with… e.g. evening chai" maxLength={140} />
+      </div>
+
+      {/* ── Law 3 · Make it easy — two-minute starter ── */}
+      <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:24 }}>
+        <span aria-hidden="true" style={{ width:19, height:19, borderRadius:"50%", background:"#0F6E56", color:"#fff", fontSize:11, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>3</span>
+        <span style={{ fontSize:12, fontWeight:800, letterSpacing:"0.07em", textTransform:"uppercase", color:"#0F6E56" }}>Make it easy</span>
+        <span style={{ fontSize:11, color:T.muted }}>optional</span>
+      </div>
+      <div style={{ marginTop:10 }}>
+        <input id={ids.starter} aria-label="Two-minute starter version" style={S.input} value={form.starter} onChange={e=>set("starter",e.target.value)} placeholder="⏱ 2-min version… e.g. just read 2 pages" maxLength={100} />
+      </div>
+
+      {/* ── Law 4 · Make it satisfying — automatic, nothing to fill ── */}
+      <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:24 }}>
+        <span aria-hidden="true" style={{ width:19, height:19, borderRadius:"50%", background:"#854F0B", color:"#fff", fontSize:11, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>4</span>
+        <span style={{ fontSize:12, fontWeight:800, letterSpacing:"0.07em", textTransform:"uppercase", color:"#854F0B" }}>Make it satisfying</span>
+      </div>
+      <div style={{ marginTop:8, fontSize:12.5, color:T.text2, lineHeight:1.5, background:T.gold+"12", border:`1px solid ${T.gold}33`, borderRadius:10, padding:"9px 12px" }}>
+        Automatic <span aria-hidden="true">🗳️</span> — every check earns a vote for your identity, grows your streak, and moves you toward the next badge.
+      </div>
 
       <div style={{ display:"flex", gap:8, marginTop:20 }}>
         <button type="button" style={S.btnSecondary} onClick={onCancel}>Cancel</button>
