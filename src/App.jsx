@@ -2071,20 +2071,70 @@ function taskPriority(t) {
 const taskRank = (t) => (t.big ? -1 : PRIORITY_ORDER[taskPriority(t)]);
 const BIG5_LIMIT = 5;
 
+// ─── QUICK ADD TASK — always-visible one-row composer ─────────────────────────
+function QuickAddTask({ dateKey, onAdd }) {
+  const [val, setVal] = useState("");
+  const [priority, setPriority] = useState("M");
+  const inputRef = useRef(null);
+  useEffect(() => { setVal(""); setPriority("M"); }, [dateKey]);
+  const add = () => {
+    const t = val.trim();
+    if (!t) return;
+    onAdd(dateKey, t, priority);
+    setVal("");
+    inputRef.current?.focus();
+  };
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:5, background:T.bg, borderRadius:10, padding:"5px 6px 5px 10px", marginBottom:8 }}>
+      <input
+        ref={inputRef}
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === "Enter")  add();
+          if (e.key === "Escape") setVal("");
+        }}
+        placeholder="Add a task…"
+        maxLength={80}
+        aria-label="New task text"
+        style={{ flex:1, minWidth:0, border:"none", background:"transparent", fontSize:16, color:T.text, outline:"none", fontFamily:"inherit", padding:"6px 0" }}
+      />
+      {PRIORITIES.map(p => (
+        <button key={p.key} onClick={() => setPriority(p.key)} aria-pressed={priority === p.key}
+          aria-label={`${p.label} priority`}
+          style={{
+            flexShrink:0, fontSize:11.5, fontWeight:800, padding:"5px 8px", borderRadius:8,
+            border: priority === p.key ? `1.5px solid ${p.dark}` : "1.5px solid transparent",
+            background: p.bg, color: p.dark, cursor:"pointer", fontFamily:"inherit",
+            WebkitTapHighlightColor:"transparent", transition:"border 0.1s",
+          }}
+        >{p.key === "M" ? "Med" : p.label}</button>
+      ))}
+      <button
+        onClick={add}
+        aria-label="Add task"
+        style={{
+          flexShrink:0, width:30, height:30, borderRadius:8, border:"none",
+          background: val.trim() ? T.primary : T.border,
+          color:"#fff", fontSize:17, fontWeight:800, lineHeight:1,
+          cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"background 0.15s",
+        }}
+      >
+        <span aria-hidden="true">+</span>
+      </button>
+    </div>
+  );
+}
+
 const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd, onToggle, onDelete, onEdit, onPriority, onBig, onDefer }) {
-  const [inputVal,     setInputVal]     = useState("");
-  const [inputPriority, setInputPriority] = useState("M");
   const [editingId,    setEditingId]    = useState(null);
   const [editVal,      setEditVal]      = useState("");
   const [completedOpen, setCompletedOpen] = useState(false);
   const [sheetTask,    setSheetTask]    = useState(null); // task with its action sheet open
-  const inputRef = useRef(null);
   const editRef  = useRef(null);
 
   // Reset input state when navigating to a different date
   useEffect(() => {
-    setInputVal("");
-    setInputPriority("M");
     setEditingId(null);
     setEditVal("");
     setCompletedOpen(false);
@@ -2094,14 +2144,6 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
   useEffect(() => {
     if (editingId && editRef.current) editRef.current.focus();
   }, [editingId]);
-
-  const handleAdd = () => {
-    const t = inputVal.trim();
-    if (!t) return;
-    onAdd(dateKey, t, inputPriority);
-    setInputVal("");
-    inputRef.current?.focus();
-  };
 
   const startEdit = (task) => {
     setEditingId(task.id);
@@ -2122,48 +2164,6 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
 
   return (
     <div>
-      {/* Quick add — one row: text, priority chips, add */}
-      {isToday && (
-        <div style={{ display:"flex", alignItems:"center", gap:5, background:T.bg, borderRadius:10, padding:"5px 6px 5px 10px", marginBottom:8 }}>
-          <input
-            ref={inputRef}
-            value={inputVal}
-            onChange={e => setInputVal(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === "Enter")  handleAdd();
-              if (e.key === "Escape") setInputVal("");
-            }}
-            placeholder="Add a task…"
-            maxLength={80}
-            aria-label="New task text"
-            style={{ flex:1, minWidth:0, border:"none", background:"transparent", fontSize:16, color:T.text, outline:"none", fontFamily:"inherit", padding:"6px 0" }}
-          />
-          {PRIORITIES.map(p => (
-            <button key={p.key} onClick={() => setInputPriority(p.key)} aria-pressed={inputPriority === p.key}
-              aria-label={`${p.label} priority`}
-              style={{
-                flexShrink:0, fontSize:11.5, fontWeight:800, padding:"5px 8px", borderRadius:8,
-                border: inputPriority === p.key ? `1.5px solid ${p.dark}` : "1.5px solid transparent",
-                background: p.bg, color: p.dark, cursor:"pointer", fontFamily:"inherit",
-                WebkitTapHighlightColor:"transparent", transition:"border 0.1s",
-              }}
-            >{p.key === "M" ? "Med" : p.label}</button>
-          ))}
-          <button
-            onClick={handleAdd}
-            aria-label="Add task"
-            style={{
-              flexShrink:0, width:30, height:30, borderRadius:8, border:"none",
-              background: inputVal.trim() ? T.primary : T.border,
-              color:"#fff", fontSize:17, fontWeight:800, lineHeight:1,
-              cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"background 0.15s",
-            }}
-          >
-            <span aria-hidden="true">+</span>
-          </button>
-        </div>
-      )}
-
       {/* Open tasks — one simple list, Big 5 → High → Medium → Low; long lists scroll */}
       {(() => {
         const openTasks = activeTasks
@@ -2513,6 +2513,9 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
             </button>
           )}
         </div>
+
+        {/* Quick add — always visible, collapsed or expanded */}
+        {selectedDate >= todayKey && <QuickAddTask dateKey={selectedDate} onAdd={addTask} />}
 
         {matrixExpanded ? (
           <TopTasksCard
