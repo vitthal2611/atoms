@@ -1560,6 +1560,10 @@ const IC_PATHS = {
   warn:   <><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></>,
   pencil: <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>,
   trash:  <><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></>,
+  play:   <polygon points="7 4 20 12 7 20 7 4"/>,
+  skip:   <><polygon points="5 4 15 12 5 20 5 4"/><path d="M19 5v14"/></>,
+  rows:   <><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></>,
+  rail:   <><path d="M7 4v16"/><path d="M11 7h9"/><path d="M11 12h9"/><path d="M11 17h9"/><circle cx="7" cy="7" r="1.6" fill="currentColor" stroke="none"/><circle cx="7" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="7" cy="17" r="1.6" fill="currentColor" stroke="none"/></>,
 };
 const Ic = ({ name, size = 13, color = "currentColor", style }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color}
@@ -1569,9 +1573,54 @@ const Ic = ({ name, size = 13, color = "currentColor", style }) => (
   </svg>
 );
 
+// ─── RING CHECKBOX — the circle IS the milestone bar ──────────────────────────
+// Pending: ring fills with streak/next-milestone progress in the identity color.
+// Checked: solid disc with a check. Missed: red-tinted ring with an x.
+function HabitRing({ checked, missed, color, streak, next, onClick, label, size = 28 }) {
+  const r = (size / 2) - 2;
+  const c = 2 * Math.PI * r;
+  const pct = next ? Math.min(1, streak / next.days) : (streak > 0 ? 1 : 0);
+  const mid = size / 2;
+  return (
+    <button
+      className="habit-toggle"
+      onClick={onClick}
+      aria-pressed={checked}
+      aria-label={label}
+      style={{
+        width: size, height: size, flexShrink: 0, background: "transparent",
+        border: "none", padding: 0, cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        WebkitTapHighlightColor: "transparent",
+      }}
+    >
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+        {checked ? (
+          <>
+            <circle cx={mid} cy={mid} r={r + 1} fill={color} />
+            <path d={`M${size*0.3} ${size*0.52}l${size*0.13} ${size*0.13} ${size*0.27} -${size*0.27}`} fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="check-pop" />
+          </>
+        ) : (
+          <>
+            <circle cx={mid} cy={mid} r={r} fill="none" stroke={missed ? T.red + "44" : T.surf2} strokeWidth="3" />
+            {!missed && pct > 0 && (
+              <circle cx={mid} cy={mid} r={r} fill="none" stroke={color} strokeWidth="3"
+                strokeDasharray={`${pct * c} ${c}`} strokeLinecap="round"
+                transform={`rotate(-90 ${mid} ${mid})`} style={{ transition: "stroke-dasharray 0.4s ease" }} />
+            )}
+            {missed && (
+              <path d={`M${mid-4} ${mid-4}l8 8M${mid+4} ${mid-4}l-8 8`} stroke={T.red} strokeWidth="2.2" strokeLinecap="round" />
+            )}
+          </>
+        )}
+      </svg>
+    </button>
+  );
+}
+
 // ─── HABIT ROW ────────────────────────────────────────────────────────────────
 // One habit inside an IdentityGroupCard: trigger cue → action row → meta.
-function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, onMiss, openEditHabit, openDeleteHabit, first }) {
+function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, onMiss, openEditHabit, openDeleteHabit, first, showIdentity }) {
   const next = getNextMilestone(streak);
   const [menuOpen, setMenuOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -1645,23 +1694,15 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
       {/* ── Resting row: circle checks, text opens the detail sheet ── */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 40px 9px 12px" }}>
-        <button
-          className="habit-toggle"
+        <HabitRing
+          checked={checked}
+          missed={missed}
+          color={identity.color}
+          streak={streak}
+          next={next}
           onClick={() => toggle(habit.id, habit.frequency, identity)}
-          aria-pressed={checked}
-          aria-label={checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
-          style={{
-            width: 24, height: 24, borderRadius: "50%", flexShrink: 0, boxSizing: "border-box",
-            border: `2px solid ${missed ? T.red : identity.color}`,
-            background: checked ? identity.color : "transparent",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: "pointer", padding: 0, WebkitTapHighlightColor: "transparent",
-            transition: "all 0.2s",
-          }}
-        >
-          {checked && <span className="check-pop" style={{ display:"inline-flex" }}><Ic name="check" size={12} color="#fff" /></span>}
-          {missed && <Ic name="x" size={11} color={T.red} />}
-        </button>
+          label={checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
+        />
 
         <div
           onClick={() => setDetailOpen(true)}
@@ -1680,9 +1721,9 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           }}>
             {habit.label}
           </div>
-          {!checked && cueParts.length > 0 && (
+          {!checked && (showIdentity || cueParts.length > 0) && (
             <div style={{ fontSize:12, color: T.muted, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {cueParts.join(" · ")}
+              {[showIdentity && `${identity.icon} ${shortLabel(identity.label)}`, ...cueParts].filter(Boolean).join(" · ")}
             </div>
           )}
         </div>
@@ -1841,6 +1882,102 @@ const IdentityGroupCard = memo(function IdentityGroupCard({ identity, items, tod
     </div>
   );
 });
+
+// ─── FOCUS MODE — one habit at a time, full screen ────────────────────────────
+// A slot's worth of habits as a flow instead of a list: Skip / Done / 2-min.
+function FocusMode({ items, toggle, onClose }) {
+  const [i, setI] = useState(0);
+  const [states, setStates] = useState(() => items.map(() => null)); // 'done' | 'skip'
+  const doneCount = states.filter(s => s === "done").length;
+  const cur = items[i];
+  const advance = (status) => {
+    setStates(prev => prev.map((s, idx) => (idx === i ? status : s)));
+    setI(n => n + 1);
+  };
+  const doDone = () => { toggle(cur.habit.id, cur.habit.frequency, cur.identity); advance("done"); };
+
+  return (
+    <div role="dialog" aria-label="Focus mode" style={{
+      position: "fixed", inset: 0, zIndex: 300, background: T.bg,
+      display: "flex", flexDirection: "column", alignItems: "center",
+      padding: "calc(env(safe-area-inset-top,0px) + 16px) 20px calc(env(safe-area-inset-bottom,0px) + 24px)",
+    }}>
+      <div style={{ width: "100%", maxWidth: 430, flex: 1, display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span style={{ fontSize:12, fontWeight:800, letterSpacing:"0.08em", textTransform:"uppercase", color:T.accent }}>Focus</span>
+          <button onClick={onClose} aria-label="Close focus mode" style={{ background:T.surf2, border:"none", borderRadius:"50%", width:34, height:34, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
+            <Ic name="x" size={15} color={T.muted} />
+          </button>
+        </div>
+
+        {cur ? (
+          <div style={{ flex:1, display:"flex", flexDirection:"column", justifyContent:"center", textAlign:"center" }}>
+            <div style={{ fontSize:12, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color: cur.identity.colorDim || T.text2 }}>
+              <span aria-hidden="true">{cur.identity.icon}</span> {shortLabel(cur.identity.label)} · {i + 1} of {items.length}
+            </div>
+            <div style={{ fontSize:22, fontWeight:800, color:T.text, lineHeight:1.3, margin:"14px 0 6px" }}>
+              {cur.habit.label}
+            </div>
+            {(cur.habit.trigger || cur.habit.time || cur.habit.location) && (
+              <div style={{ fontSize:13, color:T.muted }}>
+                <Ic name="bolt" size={12} color={T.muted} style={{ verticalAlign:"-1px" }} /> {[cur.habit.trigger, cur.habit.time && to24h(cur.habit.time), cur.habit.location].filter(Boolean).join(" · ")}
+              </div>
+            )}
+            {cur.habit.attractive && (
+              <div style={{ fontSize:13, color:"#534AB7", fontWeight:600, marginTop:5 }}>
+                <Ic name="spark" size={13} color="#534AB7" style={{ verticalAlign:"-2px" }} /> {cur.habit.attractive}
+              </div>
+            )}
+            {cur.habit.satisfying && (
+              <div style={{ fontSize:13, color:"#854F0B", fontWeight:600, marginTop:5 }}>
+                <Ic name="gift" size={13} color="#854F0B" style={{ verticalAlign:"-2px" }} /> then: {cur.habit.satisfying}
+              </div>
+            )}
+
+            <div style={{ display:"flex", gap:9, justifyContent:"center", flexWrap:"wrap", marginTop:26 }}>
+              <button onClick={() => advance("skip")} style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:13.5, fontWeight:700, color:T.muted, background:T.surf2, border:"none", borderRadius:24, padding:"12px 18px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
+                <Ic name="skip" size={14} color={T.muted} /> Skip
+              </button>
+              <button onClick={doDone} style={{ display:"inline-flex", alignItems:"center", gap:8, fontSize:15, fontWeight:800, color:"#fff", background:cur.identity.color, border:"none", borderRadius:24, padding:"12px 24px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
+                <Ic name="check" size={16} color="#fff" /> Done · +1 vote
+              </button>
+              {cur.habit.starter && (
+                <button onClick={doDone} aria-label={`Two-minute version: ${cur.habit.starter}`} style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:13.5, fontWeight:700, color:"#085041", background:"#E1F5EE", border:"none", borderRadius:24, padding:"12px 16px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
+                  <Ic name="clock" size={14} color="#085041" /> 2-min
+                </button>
+              )}
+            </div>
+            {cur.habit.starter && (
+              <div style={{ fontSize:12.5, color:T.muted, marginTop:12 }}>2-min version: {cur.habit.starter}</div>
+            )}
+          </div>
+        ) : (
+          <div style={{ flex:1, display:"flex", flexDirection:"column", justifyContent:"center", alignItems:"center", textAlign:"center", gap:10 }}>
+            <div style={{ fontSize:44 }} aria-hidden="true">🎉</div>
+            <div style={{ fontSize:19, fontWeight:800, color:T.text }}>{doneCount} vote{doneCount !== 1 ? "s" : ""} cast</div>
+            <div style={{ fontSize:14, color:T.muted, lineHeight:1.6 }}>
+              {doneCount === items.length ? "Every habit done — the system works." : `${items.length - doneCount} skipped — they'll be waiting on the list.`}
+            </div>
+            <button onClick={onClose} style={{ ...S.btnPrimary, flex:"none", width:"100%", maxWidth:260, marginTop:12 }}>Back to Today</button>
+          </div>
+        )}
+
+        {/* Session progress dots */}
+        <div style={{ display:"flex", gap:4, justifyContent:"center", flexWrap:"wrap", paddingTop:12 }} aria-label={`${doneCount} of ${items.length} done`}>
+          {items.map((it, idx) => (
+            <span key={it.habit.id} aria-hidden="true" style={{
+              width:16, height:4, borderRadius:99,
+              background: states[idx] === "done" ? "#1D9E75"
+                : states[idx] === "skip" ? T.border2
+                : idx === i ? it.identity.color
+                : T.surf2,
+            }} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── DAY NAVIGATOR ────────────────────────────────────────────────────────────
 function formatNavDate(dateKey) {
@@ -2246,6 +2383,22 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
   const notTodayListId = useId();
   const [matrixExpanded, setMatrixExpanded] = useState(false);
 
+  // Layout: identity groups vs. time rail — remembered across sessions
+  const [layoutMode, setLayoutModeState] = useState(() => {
+    try { return localStorage.getItem("atoms-layout") || "groups"; } catch { return "groups"; }
+  });
+  const setLayoutMode = (m) => {
+    setLayoutModeState(m);
+    try { localStorage.setItem("atoms-layout", m); } catch { /* private mode */ }
+  };
+
+  // Focus mode — snapshot of pending habits taken when the session starts
+  const [focusItems, setFocusItems] = useState(null);
+  const startFocus = () => {
+    const pending = scheduledHabits.filter(({ habit }) => todayData[habit.id] == null);
+    if (pending.length > 0) setFocusItems(pending);
+  };
+
   // Build enriched habit list with identity ref, time slot, and sort key
   // (habitSortMinutes handles HH:MM and legacy am/pm formats, minutes included)
   const enrichedHabits  = useMemo(() =>
@@ -2520,8 +2673,34 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
         </div>
       )}
 
+      {/* Focus entry + layout toggle */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", margin:"0 2px" }}>
+        {selectedDate === todayKey && scheduledHabits.some(({ habit }) => todayData[habit.id] == null) ? (
+          <button onClick={startFocus} style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12.5, fontWeight:800, color:"#fff", background:T.primary, border:"none", borderRadius:20, padding:"7px 15px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
+            <Ic name="play" size={12} color="#fff" /> Focus
+          </button>
+        ) : <span />}
+        <div style={{ display:"inline-flex", background:T.surf2, borderRadius:10, padding:2, gap:2 }} role="group" aria-label="Layout">
+          <button onClick={() => setLayoutMode("groups")} aria-pressed={layoutMode === "groups"} aria-label="Group by identity"
+            style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:12, fontWeight:700, padding:"5px 11px", borderRadius:8, border:"none", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
+              background: layoutMode === "groups" ? T.surface : "transparent", color: layoutMode === "groups" ? T.primary : T.muted }}>
+            <Ic name="rows" size={13} color={layoutMode === "groups" ? T.primary : T.muted} /> Groups
+          </button>
+          <button onClick={() => setLayoutMode("rail")} aria-pressed={layoutMode === "rail"} aria-label="Timeline view"
+            style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:12, fontWeight:700, padding:"5px 11px", borderRadius:8, border:"none", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
+              background: layoutMode === "rail" ? T.surface : "transparent", color: layoutMode === "rail" ? T.primary : T.muted }}>
+            <Ic name="rail" size={13} color={layoutMode === "rail" ? T.primary : T.muted} /> Timeline
+          </button>
+        </div>
+      </div>
+
+      {/* Focus mode overlay */}
+      {focusItems && (
+        <FocusMode items={focusItems} toggle={toggle} onClose={() => setFocusItems(null)} />
+      )}
+
       {/* "Up next" hero — the single next pending habit by time (Law 1: one clear cue) */}
-      {selectedDate === todayKey && (() => {
+      {selectedDate === todayKey && layoutMode === "groups" && (() => {
         const nextUp = scheduledHabits.find(({ habit }) => todayData[habit.id] == null);
         if (!nextUp) return null;
         const { habit, identity } = nextUp;
@@ -2545,10 +2724,15 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                 </div>
               )}
               <div style={{ display:"flex", alignItems:"center", gap:11 }}>
-                <button
+                <HabitRing
+                  checked={false}
+                  missed={false}
+                  color={identity.color}
+                  streak={streak}
+                  next={nextMs}
                   onClick={check}
-                  aria-label={`Check: ${habit.label}`}
-                  style={{ width:30, height:30, borderRadius:"50%", flexShrink:0, boxSizing:"border-box", border:`2.5px solid ${identity.color}`, background:"transparent", cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent" }}
+                  label={`Check: ${habit.label}`}
+                  size={30}
                 />
                 <span onClick={check} style={{ flex:1, minWidth:0, fontSize:16, fontWeight:700, color:T.text, lineHeight:1.3, cursor:"pointer" }}>
                   {habit.label}
@@ -2599,8 +2783,40 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
         );
       })()}
 
-      {/* Time slot sections */}
-      {TIME_SLOTS.map(slot => {
+      {/* Time slot sections (groups) or time rail */}
+      {layoutMode === "rail" ? (() => {
+        const visible = scheduledHabits.filter(({ habit }) => todayData[habit.id] !== true || habit.id === justChecked);
+        if (visible.length === 0) return null;
+        const firstPending = scheduledHabits.find(({ habit }) => todayData[habit.id] == null);
+        const firstPendingId = firstPending ? firstPending.habit.id : null;
+        return (
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {visible.map(({ habit, identity }) => (
+              <div key={habit.id} className={justChecked === habit.id ? "row-leaving" : ""} style={{ display:"flex", gap:9, alignItems:"stretch" }}>
+                <div style={{ width:42, flexShrink:0, textAlign:"right", paddingTop:13, fontSize:11.5, fontWeight:700, fontVariantNumeric:"tabular-nums", color: habit.id === firstPendingId ? T.primary : T.muted }}>
+                  {habit.time ? to24h(habit.time) : "—"}
+                </div>
+                <div style={{ flex:1, minWidth:0, background:T.surface, borderRadius:12, border: habit.id === firstPendingId ? `2px solid ${identity.color}` : `1px solid ${identity.color}44`, overflow:"hidden" }}>
+                  <HabitRow
+                    habit={habit}
+                    identity={identity}
+                    checked={todayData[habit.id] === true}
+                    missed={todayData[habit.id] === "miss"}
+                    warnMissedYesterday={selectedDate === todayKey && missedYesterdayIds.has(habit.id) && todayData[habit.id] == null}
+                    streak={getStreakForHabit(habit.id, habit.frequency)}
+                    toggle={toggle}
+                    onMiss={markMiss}
+                    openEditHabit={openEditHabit}
+                    openDeleteHabit={openDeleteHabit}
+                    first={true}
+                    showIdentity={true}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })() : TIME_SLOTS.map(slot => {
         const slotAll     = scheduledHabits.filter(h => h.slotId === slot.id);
         const slotVisible = slotAll.filter(({habit}) => todayData[habit.id] !== true || habit.id === justChecked);
         if (slotVisible.length === 0) return null;
