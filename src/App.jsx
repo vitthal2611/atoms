@@ -479,9 +479,14 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
       <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:24 }}>
         <span aria-hidden="true" style={{ width:19, height:19, borderRadius:"50%", background:"#854F0B", color:"#fff", fontSize:12, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>4</span>
         <span style={{ fontSize:12, fontWeight:800, letterSpacing:"0.07em", textTransform:"uppercase", color:"#854F0B" }}>Make it satisfying</span>
+        <span style={{ fontSize:12, color:T.muted }}>optional</span>
+      </div>
+      {/* Immediate reward — stored in the legacy `satisfying` field so old data resurfaces */}
+      <div style={{ marginTop:10 }}>
+        <input id={ids.satisfying} aria-label="Immediate reward after the habit" style={S.input} value={form.satisfying} onChange={e=>set("satisfying",e.target.value)} placeholder="🎁 Reward right after… e.g. chai after workout" maxLength={140} />
       </div>
       <div style={{ marginTop:8, fontSize:12.5, color:T.text2, lineHeight:1.5, background:T.gold+"12", border:`1px solid ${T.gold}33`, borderRadius:10, padding:"9px 12px" }}>
-        Automatic <span aria-hidden="true">🗳️</span> — every check earns a vote for your identity, grows your streak, and moves you toward the next badge.
+        Plus automatic <span aria-hidden="true">🗳️</span> — every check earns a vote for your identity, grows your streak, and moves you toward the next badge.
       </div>
 
       <div style={{ display:"flex", gap:8, marginTop:20 }}>
@@ -1708,13 +1713,23 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           </div>
         )}
 
-        {/* Reward strip (Law 4) — instant payoff shown the moment it's checked */}
+        {/* Reward strip (Law 4) — instant payoff the moment it's checked, plus the user's own reward */}
         {checked && (
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:8, width:"100%", boxSizing:"border-box", background:"#fff", border:"1px solid #9FE1CB", borderRadius:12, padding:"9px 12px", minWidth:0 }}>
-            <span style={{ flexShrink:0, fontSize:15 }} aria-hidden="true">🗳️</span>
-            <span style={{ fontSize:12.5, fontWeight:600, color:"#085041", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", minWidth:0 }}>
-              +1 vote for {shortLabel(identity.label)} · {streak}d streak{next ? ` · ${next.days - streak}d to ${next.label}` : ""}
-            </span>
+          <div style={{ display:"flex", flexDirection:"column", gap:5, marginTop:8, width:"100%", boxSizing:"border-box", background:"#fff", border:"1px solid #9FE1CB", borderRadius:12, padding:"9px 12px", minWidth:0 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
+              <span style={{ flexShrink:0, fontSize:15 }} aria-hidden="true">🗳️</span>
+              <span style={{ fontSize:12.5, fontWeight:600, color:"#085041", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", minWidth:0 }}>
+                +1 vote for {shortLabel(identity.label)} · {streak}d streak{next ? ` · ${next.days - streak}d to ${next.label}` : ""}
+              </span>
+            </div>
+            {habit.satisfying && (
+              <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
+                <span style={{ flexShrink:0, fontSize:14 }} aria-hidden="true">🎁</span>
+                <span style={{ fontSize:12.5, fontWeight:700, color:"#854F0B", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", minWidth:0 }}>
+                  Claim your reward: {habit.satisfying}
+                </span>
+              </div>
+            )}
           </div>
         )}
 
