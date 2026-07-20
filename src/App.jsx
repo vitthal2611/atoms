@@ -1880,7 +1880,6 @@ const taskRank = (t) => (t.big ? -1 : PRIORITY_ORDER[taskPriority(t)]);
 const BIG5_LIMIT = 5;
 
 const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd, onToggle, onDelete, onEdit, onPriority, onBig, onDefer }) {
-  const [inputVisible, setInputVisible] = useState(false);
   const [inputVal,     setInputVal]     = useState("");
   const [inputPriority, setInputPriority] = useState("M");
   const [editingId,    setEditingId]    = useState(null);
@@ -1890,13 +1889,8 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
   const inputRef = useRef(null);
   const editRef  = useRef(null);
 
-  useEffect(() => {
-    if (inputVisible && inputRef.current) inputRef.current.focus();
-  }, [inputVisible]);
-
   // Reset input state when navigating to a different date
   useEffect(() => {
-    setInputVisible(false);
     setInputVal("");
     setInputPriority("M");
     setEditingId(null);
@@ -1913,7 +1907,8 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
     const t = inputVal.trim();
     if (!t) return;
     onAdd(dateKey, t, inputPriority);
-    setInputVal(""); setInputPriority("M"); setInputVisible(false);
+    setInputVal("");
+    inputRef.current?.focus();
   };
 
   const startEdit = (task) => {
@@ -1935,6 +1930,48 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
 
   return (
     <div>
+      {/* Quick add — one row: text, priority chips, add */}
+      {isToday && (
+        <div style={{ display:"flex", alignItems:"center", gap:5, background:T.bg, borderRadius:10, padding:"5px 6px 5px 10px", marginBottom:8 }}>
+          <input
+            ref={inputRef}
+            value={inputVal}
+            onChange={e => setInputVal(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter")  handleAdd();
+              if (e.key === "Escape") setInputVal("");
+            }}
+            placeholder="Add a task…"
+            maxLength={80}
+            aria-label="New task text"
+            style={{ flex:1, minWidth:0, border:"none", background:"transparent", fontSize:16, color:T.text, outline:"none", fontFamily:"inherit", padding:"6px 0" }}
+          />
+          {PRIORITIES.map(p => (
+            <button key={p.key} onClick={() => setInputPriority(p.key)} aria-pressed={inputPriority === p.key}
+              aria-label={`${p.label} priority`}
+              style={{
+                flexShrink:0, fontSize:10.5, fontWeight:800, padding:"5px 8px", borderRadius:8,
+                border: inputPriority === p.key ? `1.5px solid ${p.dark}` : "1.5px solid transparent",
+                background: p.bg, color: p.dark, cursor:"pointer", fontFamily:"inherit",
+                WebkitTapHighlightColor:"transparent", transition:"border 0.1s",
+              }}
+            >{p.key === "M" ? "Med" : p.label}</button>
+          ))}
+          <button
+            onClick={handleAdd}
+            aria-label="Add task"
+            style={{
+              flexShrink:0, width:30, height:30, borderRadius:8, border:"none",
+              background: inputVal.trim() ? T.primary : T.border,
+              color:"#fff", fontSize:17, fontWeight:800, lineHeight:1,
+              cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"background 0.15s",
+            }}
+          >
+            <span aria-hidden="true">+</span>
+          </button>
+        </div>
+      )}
+
       {/* Open tasks — one simple list, Big 5 → High → Medium → Low; long lists scroll */}
       {(() => {
         const openTasks = activeTasks
@@ -2062,61 +2099,8 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
         );
       })()}
 
-      {/* Add row / inline input */}
-      {isToday && (
-        inputVisible ? (
-          <div style={{ display:"flex", flexDirection:"column", gap:6, padding:"8px 12px", background:T.bg, borderTop:`1px solid ${T.surf2}` }}>
-            {/* Row 1: text + Add — never competes with the quadrant picker for width */}
-            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-              <input
-                ref={inputRef}
-                value={inputVal}
-                onChange={e => setInputVal(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === "Enter")  handleAdd();
-                  if (e.key === "Escape") { setInputVisible(false); setInputVal(""); setInputPriority("M"); }
-                }}
-                placeholder="What needs to get done?"
-                maxLength={80}
-                aria-label="New task text"
-                style={{ flex:1, minWidth:0, border:`1px solid ${T.accent}`, borderRadius:8, padding:"8px 10px", fontSize:16, background:"#fff", color:T.text, outline:"none", fontFamily:"inherit" }}
-              />
-              <button
-                onClick={handleAdd}
-                style={{ background:T.primary, color:"#fff", border:"none", borderRadius:8, padding:"7px 14px", fontSize:13, fontWeight:700, cursor:"pointer", flexShrink:0, WebkitTapHighlightColor:"transparent" }}
-              >
-                Add
-              </button>
-            </div>
-            {/* Row 2: priority picker — three equal segments */}
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:4 }}>
-              {PRIORITIES.map(p => (
-                <button key={p.key} onClick={() => setInputPriority(p.key)} aria-pressed={inputPriority === p.key}
-                  aria-label={`${p.label} priority`}
-                  style={{
-                    fontSize:12, fontWeight:700, padding:"8px 4px", borderRadius:9,
-                    border: inputPriority === p.key ? `2px solid ${p.dark}` : "2px solid transparent",
-                    background: p.bg, color: p.dark, cursor:"pointer", fontFamily:"inherit",
-                    WebkitTapHighlightColor:"transparent", transition:"border 0.1s",
-                  }}
-                >{p.label}</button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <button
-            onClick={() => setInputVisible(true)}
-            aria-label="Add a task"
-            style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"10px 14px", width:"100%", background:"transparent", border:"none", borderTop:`1px dashed ${T.border}`, cursor:"pointer", WebkitTapHighlightColor:"transparent" }}
-          >
-            <span aria-hidden="true" style={{ color:T.accent, fontSize:16, lineHeight:1 }}>+</span>
-            <span style={{ fontSize:14, color:T.accent, fontWeight:500 }}>Add task</span>
-          </button>
-        )
-      )}
-
       {/* All-done celebration */}
-      {allDone && !inputVisible && (
+      {allDone && (
         <div style={{ padding:"8px 14px 10px", fontSize:12, color:T.primary, textAlign:"center", fontWeight:600 }}>
           All done — great work! 🎉
         </div>
@@ -2260,20 +2244,10 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
   const nowHour   = new Date().getHours();
   const nowSlotId = (TIME_SLOTS.find(s => s.range && nowHour >= s.range[0] && nowHour < s.range[1]) || { id: "anytime" }).id;
 
-  const pendingTaskCount = useMemo(() =>
-    (dailyTasks[selectedDate] || []).filter(t => !t.carried && !t.done).length,
-    [dailyTasks, selectedDate]
-  );
-
-  // Big 5 and High-priority tasks always show in full in the collapsed
-  // "Today's Focus" preview (Big 5 on top). When there are none, fall back
-  // to the top 2 pending tasks by rank.
-  const previewTasks = useMemo(() => {
-    const pending = (dailyTasks[selectedDate] || []).filter(t => !t.carried && !t.done);
-    const sorted = pending.slice().sort((a, b) => taskRank(a) - taskRank(b));
-    const top = sorted.filter(t => t.big || taskPriority(t) === "H");
-    if (top.length > 0) return top;
-    return sorted.slice(0, 2);
+  // Done/total across the day's active tasks — the Focus card's progress pill
+  const taskCounts = useMemo(() => {
+    const active = (dailyTasks[selectedDate] || []).filter(t => !t.carried);
+    return { done: active.filter(t => t.done).length, total: active.length };
   }, [dailyTasks, selectedDate]);
 
   // ── Empty state — no identities yet ──
@@ -2314,12 +2288,12 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
           <span style={{ fontSize:11, color:T.muted, letterSpacing:"0.1em", fontWeight:700, textTransform:"uppercase" }}>
             <span aria-hidden="true">🎯</span> Today's Focus
           </span>
-          {pendingTaskCount > 0 && (
-            <span aria-label={`${pendingTaskCount} pending tasks`} style={{
-              fontSize:10.5, fontWeight:700, color:"#412402", background:T.gold,
-              borderRadius:8, padding:"1px 6px", lineHeight:1.4,
+          {taskCounts.total > 0 && (
+            <span aria-label={`${taskCounts.done} of ${taskCounts.total} tasks done`} style={{
+              fontSize:11, fontWeight:800, color:"#0F6E56", background:"#E1F5EE",
+              borderRadius:20, padding:"2px 9px", lineHeight:1.4, fontVariantNumeric:"tabular-nums",
             }}>
-              {pendingTaskCount}
+              {taskCounts.done}/{taskCounts.total} done
             </span>
           )}
           {matrixExpanded && (
@@ -2345,58 +2319,125 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
             onBig={toggleTaskBig}
             onDefer={deferTask}
           />
-        ) : previewTasks.length === 0 ? (
-          <div style={{ fontSize:13, color:T.muted, textAlign:"center", padding:"6px 0" }}>
-            Nothing here —{" "}
-            <button onClick={() => setMatrixExpanded(true)} style={{
-              background:"none", border:"none", color:T.primary, fontWeight:700,
-              cursor:"pointer", padding:0, fontSize:13, WebkitTapHighlightColor:"transparent",
-            }}>
-              add a task
+        ) : (() => {
+          const active      = (dailyTasks[selectedDate] || []).filter(t => !t.carried);
+          const bigAll      = active.filter(t => t.big);
+          const bigDone     = bigAll.filter(t => t.done).length;
+          const highPending = active.filter(t => !t.big && !t.done && taskPriority(t) === "H");
+          const pendingCnt  = active.filter(t => !t.done).length;
+          const shownCnt    = bigAll.filter(t => !t.done).length + highPending.length;
+          const remaining   = pendingCnt - shownCnt;
+          const fallback    = bigAll.length === 0 && highPending.length === 0
+            ? active.filter(t => !t.done).slice().sort((a, b) => taskRank(a) - taskRank(b)).slice(0, 2)
+            : [];
+          const rowText = (t) => (
+            <span onClick={() => setMatrixExpanded(true)} title="Tap for options" style={{
+              flex:1, minWidth:0, fontSize:15, lineHeight:1.4, cursor:"pointer",
+              fontWeight: t.done ? 400 : 600,
+              color: t.done ? T.muted : T.text,
+              textDecoration: t.done ? "line-through" : "none",
+              overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+            }}>{t.text}</span>
+          );
+          const circle = (t, color) => (
+            <button
+              onClick={() => toggleTask(selectedDate, t.id)}
+              aria-pressed={t.done}
+              aria-label={(t.done ? "Uncheck: " : "Complete: ") + t.text}
+              style={{
+                width:21, height:21, borderRadius:"50%", flexShrink:0, boxSizing:"border-box",
+                border:`2px solid ${color}`, background: t.done ? color : "transparent",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent",
+              }}
+            >
+              {t.done && <span style={{ fontSize:11, color:"#fff", fontWeight:900, lineHeight:1 }} aria-hidden="true">✓</span>}
             </button>
-          </div>
-        ) : (
-          <>
-            {previewTasks.map((t, i) => {
-              const q = priorityOf(taskPriority(t));
-              return (
-                <div key={t.id} style={{ display:"flex", alignItems:"center", gap:11, padding:"9px 2px", borderTop: i === 0 ? "none" : `1px solid ${T.surf2}` }}>
-                  <button
-                    onClick={() => toggleTask(selectedDate, t.id)}
-                    aria-label={`Complete: ${t.text}`}
-                    style={{
-                      width:22, height:22, borderRadius:"50%", flexShrink:0, boxSizing:"border-box",
-                      border:`2px solid ${q.accent}`, background:"transparent",
-                      cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent",
-                    }}
-                  />
-                  <span
-                    onClick={() => setMatrixExpanded(true)}
-                    title="Tap for options"
-                    style={{
-                      fontSize:16, lineHeight:1.4, color:T.text, flex:1, minWidth:0,
-                      fontWeight: t.big ? 700 : 400, cursor:"pointer",
-                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-                    }}
-                  >
-                    {t.big && <span aria-label="Big 5" style={{ marginRight:5 }}>⭐</span>}
-                    {t.text}
-                  </span>
-                  <span aria-label={`Priority: ${q.label}`} style={{
-                    fontSize:10.5, fontWeight:800, color:q.dark, background:q.bg,
-                    padding:"2px 7px", borderRadius:8, flexShrink:0, whiteSpace:"nowrap", letterSpacing:"0.03em",
-                  }}>{q.label}</span>
-                </div>
-              );
-            })}
-            <button onClick={() => setMatrixExpanded(true)} style={{
-              display:"block", width:"100%", textAlign:"center", background:"none", border:"none",
-              cursor:"pointer", fontSize:13, fontWeight:700, color:T.primary, padding:"9px 0 3px", WebkitTapHighlightColor:"transparent",
-            }}>
-              {pendingTaskCount > previewTasks.length ? `+ ${pendingTaskCount - previewTasks.length} more · ` : ""}view all <span aria-hidden="true">▾</span>
-            </button>
-          </>
-        )}
+          );
+          if (active.length === 0) {
+            return (
+              <div style={{ fontSize:13, color:T.muted, textAlign:"center", padding:"6px 0" }}>
+                Nothing here —{" "}
+                <button onClick={() => setMatrixExpanded(true)} style={{
+                  background:"none", border:"none", color:T.primary, fontWeight:700,
+                  cursor:"pointer", padding:0, fontSize:13, WebkitTapHighlightColor:"transparent",
+                }}>
+                  add a task
+                </button>
+              </div>
+            );
+          }
+          return (
+            <>
+              {/* Big 5 — the day's five most important tasks, done ones stay visible */}
+              <div style={{ display:"flex", alignItems:"center", gap:6, margin:"2px 0 6px" }}>
+                <span aria-hidden="true" style={{ fontSize:12 }}>⭐</span>
+                <span style={{ fontSize:11, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:"#854F0B" }}>Big 5</span>
+                {bigAll.length > 0 && <span style={{ fontSize:11, color:T.muted }}>· {bigDone}/{bigAll.length} done</span>}
+              </div>
+              <div style={{ border:`1px solid ${T.gold}55`, background:T.gold+"0a", borderRadius:12, padding:"2px 10px", marginBottom:10 }}>
+                {bigAll.map((t, i) => {
+                  const p = priorityOf(taskPriority(t));
+                  return (
+                    <div key={t.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 0", borderTop: i === 0 ? "none" : `1px solid ${T.gold}33` }}>
+                      {circle(t, "#B45309")}
+                      {rowText(t)}
+                      {!t.done && (
+                        <span aria-label={`Priority: ${p.label}`} style={{ fontSize:10.5, fontWeight:800, color:p.dark, background:p.bg, borderRadius:8, padding:"2px 7px", flexShrink:0 }}>{p.label}</span>
+                      )}
+                    </div>
+                  );
+                })}
+                {bigAll.length < BIG5_LIMIT && (
+                  <button onClick={() => setMatrixExpanded(true)} style={{
+                    display:"flex", alignItems:"center", gap:10, width:"100%",
+                    background:"transparent", border:"none", cursor:"pointer", textAlign:"left",
+                    padding:"8px 0", borderTop: bigAll.length > 0 ? `1px solid ${T.gold}33` : "none",
+                    fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
+                  }}>
+                    <span aria-hidden="true" style={{ width:21, height:21, borderRadius:"50%", flexShrink:0, boxSizing:"border-box", border:`2px dashed ${T.border2}` }} />
+                    <span style={{ fontSize:13, color:T.muted }}>{BIG5_LIMIT - bigAll.length} slot{BIG5_LIMIT - bigAll.length !== 1 ? "s" : ""} open — star a task</span>
+                  </button>
+                )}
+              </div>
+
+              {/* High priority — pending, non-Big-5 */}
+              {highPending.length > 0 && (
+                <>
+                  <div style={{ display:"flex", alignItems:"center", gap:6, margin:"2px 0 2px" }}>
+                    <span aria-hidden="true" style={{ width:8, height:8, borderRadius:"50%", background:T.red, flexShrink:0 }} />
+                    <span style={{ fontSize:11, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:"#A32D2D" }}>High priority</span>
+                  </div>
+                  {highPending.map((t, i) => (
+                    <div key={t.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 2px", borderTop: i === 0 ? "none" : `1px solid ${T.surf2}` }}>
+                      {circle(t, T.red)}
+                      {rowText(t)}
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {/* Fallback — no Big 5, no High: top 2 pending by rank */}
+              {fallback.map((t, i) => {
+                const p = priorityOf(taskPriority(t));
+                return (
+                  <div key={t.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 2px", borderTop: i === 0 ? "none" : `1px solid ${T.surf2}` }}>
+                    {circle(t, p.accent)}
+                    {rowText(t)}
+                    <span aria-label={`Priority: ${p.label}`} style={{ fontSize:10.5, fontWeight:800, color:p.dark, background:p.bg, borderRadius:8, padding:"2px 7px", flexShrink:0 }}>{p.label}</span>
+                  </div>
+                );
+              })}
+
+              <button onClick={() => setMatrixExpanded(true)} style={{
+                display:"block", width:"100%", textAlign:"center", background:"none", border:"none",
+                cursor:"pointer", fontSize:13, fontWeight:700, color:T.primary, padding:"9px 0 3px", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
+              }}>
+                {remaining > 0 ? `+ ${remaining} more · ` : ""}view all <span aria-hidden="true">▾</span>
+              </button>
+            </>
+          );
+        })()}
       </div>
 
       {/* Empty-identity nudge — show a contextual CTA for each identity with no habits */}
