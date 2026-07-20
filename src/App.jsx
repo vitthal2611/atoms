@@ -1564,8 +1564,8 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           WebkitTapHighlightColor: "transparent",
         }}
       >
-        {/* Cue line — trigger · time · location · frequency, one muted line */}
-        {cueParts.length > 0 && (
+        {/* Cue line — trigger · time · location · frequency, one muted line (hidden once done) */}
+        {!checked && cueParts.length > 0 && (
           <div style={{
             display: "flex", alignItems: "center", gap: 5, marginBottom: 6,
             fontSize:12, color: T.muted, minWidth: 0, maxWidth: "100%",
@@ -1578,7 +1578,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         {/* Circle + label + streak, single compact row */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%" }}>
           <div aria-hidden="true" style={{
-            width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
+            width: 23, height: 23, borderRadius: "50%", flexShrink: 0,
             border: `2px solid ${missed ? T.red : identity.color}`,
             background: checked ? identity.color : "transparent",
             display: "flex", alignItems: "center", justifyContent: "center",
@@ -1590,7 +1590,9 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
           <div style={{
             flex: 1, minWidth: 0, fontSize:15, fontWeight: 600, lineHeight: 1.25,
-            color: missed ? T.muted : T.text,
+            color: checked ? T.text2 : missed ? T.muted : T.text,
+            textDecoration: checked ? "line-through" : "none",
+            textDecorationColor: identity.color + "88",
             transition: "color 0.2s",
           }}>
             {habit.label}
@@ -1635,18 +1637,21 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
         {/* Reward strip (Law 4) — instant payoff shown the moment it's checked */}
         {checked && (
-          <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:6, marginLeft:30, fontSize:12, fontWeight:700, color:"#0F6E56", minWidth:0, maxWidth:"100%" }}>
-            <span style={{ flexShrink:0 }} aria-hidden="true">🗳️</span>
-            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:8, width:"100%", boxSizing:"border-box", background:"#fff", border:"1px solid #9FE1CB", borderRadius:12, padding:"9px 12px", minWidth:0 }}>
+            <span style={{ flexShrink:0, fontSize:15 }} aria-hidden="true">🗳️</span>
+            <span style={{ fontSize:12.5, fontWeight:600, color:"#085041", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", minWidth:0 }}>
               +1 vote for {shortLabel(identity.label)} · {streak}d streak{next ? ` · ${next.days - streak}d to ${next.label}` : ""}
             </span>
           </div>
         )}
 
-        {/* Milestone micro-bar — progress toward the next streak badge */}
-        {next && streak > 0 && (
-          <div aria-hidden="true" style={{ height: 3, borderRadius: 99, background: T.surf2, marginTop: 6, marginLeft: 30, width: "calc(100% - 30px)", overflow: "hidden" }}>
-            <div style={{ height: "100%", width: `${Math.min(100, (streak / next.days) * 100)}%`, background: identity.color, borderRadius: 99, transition: "width 0.4s ease" }} />
+        {/* Milestone bar + count — progress toward the next streak badge */}
+        {!checked && next && streak > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 7, marginLeft: 30 }} aria-label={`${streak} of ${next.days} days to ${next.label}`}>
+            <div aria-hidden="true" style={{ flex: 1, height: 3.5, borderRadius: 99, background: T.surf2, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${Math.min(100, (streak / next.days) * 100)}%`, background: identity.color, borderRadius: 99, transition: "width 0.4s ease" }} />
+            </div>
+            <span aria-hidden="true" style={{ fontSize:10.5, color: T.muted, fontWeight: 600, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{streak}/{next.days}</span>
           </div>
         )}
 
