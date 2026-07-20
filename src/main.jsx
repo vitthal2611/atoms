@@ -16,7 +16,7 @@ class ErrorBoundary extends Component {
   render() {
     if (this.state.error) return (
       <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-        minHeight:'100dvh', fontFamily:"'Plus Jakarta Sans',-apple-system,sans-serif",
+        minHeight:'100dvh', fontFamily:"'Nunito',-apple-system,sans-serif",
         padding:32, background:EB.bg, color:EB.text }}>
         <div style={{ fontSize:48, marginBottom:16 }} aria-hidden="true">⚠️</div>
         <h2 style={{ margin:'0 0 8px', fontWeight:800 }}>Something went wrong</h2>

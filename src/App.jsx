@@ -2919,8 +2919,8 @@ function getDailyQuote() {
 }
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
-const FONT_DISPLAY = "'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,sans-serif";
-const FONT_BODY    = "'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,sans-serif";
+const FONT_DISPLAY = "'Nunito',-apple-system,BlinkMacSystemFont,sans-serif";
+const FONT_BODY    = "'Nunito',-apple-system,BlinkMacSystemFont,sans-serif";
 
 const S = {
   root:{minHeight:"100dvh",background:T.bg,fontFamily:FONT_BODY,color:T.text,width:"100%",maxWidth:430,margin:"0 auto",display:"flex",flexDirection:"column"},
