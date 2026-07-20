@@ -1713,6 +1713,14 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           </div>
         )}
 
+        {/* Reward preview (Law 4) — what's waiting on the other side of the check */}
+        {!checked && !missed && habit.satisfying && (
+          <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:5, marginLeft:30, fontSize:12, fontWeight:600, color:"#854F0B", minWidth:0, maxWidth:"100%" }}>
+            <span style={{ flexShrink:0 }} aria-hidden="true">🎁</span>
+            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.satisfying}</span>
+          </div>
+        )}
+
         {/* Reward strip (Law 4) — instant payoff the moment it's checked, plus the user's own reward */}
         {checked && (
           <div style={{ display:"flex", flexDirection:"column", gap:5, marginTop:8, width:"100%", boxSizing:"border-box", background:"#fff", border:"1px solid #9FE1CB", borderRadius:12, padding:"9px 12px", minWidth:0 }}>
@@ -2643,6 +2651,11 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ fontSize:15, fontWeight:600, color:T.primary, textDecoration:"line-through", textDecorationColor:T.primary+"77", lineHeight:1.2 }}>{habit.label}</div>
                       <div style={{ fontSize:12, color:T.muted, marginTop:2 }}><span aria-hidden="true">{identity.icon}</span> {shortLabel(identity.label)}</div>
+                      {habit.satisfying && (
+                        <div style={{ fontSize:12, color:"#854F0B", fontWeight:600, marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                          <span aria-hidden="true">🎁</span> {habit.satisfying}
+                        </div>
+                      )}
                     </div>
                     {streak >= 2 && (
                       <span style={{ fontSize:12, fontWeight:800, color:T.gold, background:T.gold+"20", padding:"2px 8px", borderRadius:20, flexShrink:0 }} aria-label={`${streak} day streak`}>
