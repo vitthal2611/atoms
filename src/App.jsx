@@ -1922,7 +1922,6 @@ const PRIORITIES = [
   { key: "L", label: "Low",    accent: "#64748B", dark: "#334155", bg: "#E2E8F0" },
 ];
 const PRIORITY_ORDER = { H: 0, M: 1, L: 2 };
-const NEXT_PRIORITY  = { H: "M", M: "L", L: "H" }; // tap a chip to cycle
 const priorityOf = (key) => PRIORITIES.find(p => p.key === key) || PRIORITIES[1];
 
 // ─── SWIPE ROW — swipe right to complete, left to delete ──────────────────────
@@ -2052,6 +2051,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
   const [editVal,      setEditVal]      = useState("");
   const [completedOpen, setCompletedOpen] = useState(false);
   const [sheetTask,    setSheetTask]    = useState(null); // task with its action sheet open
+  const [pickId,       setPickId]       = useState(null); // task whose priority picker is open
   const editRef  = useRef(null);
 
   // Reset input state when navigating to a different date
@@ -2146,18 +2146,34 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
                     </span>
                   )}
 
-                  {/* Priority chip — tap to cycle High → Med → Low */}
-                  <button
-                    onClick={() => isToday && onPriority(dateKey, task.id, NEXT_PRIORITY[taskPriority(task)])}
-                    aria-label={`Priority: ${p.label}. Tap to change.`}
-                    style={{
-                      flexShrink:0, fontSize:11.5, fontWeight:800, color:p.dark, background:p.bg,
-                      border:"none", borderRadius:8, padding:"3px 8px", letterSpacing:"0.03em",
-                      cursor: isToday ? "pointer" : "default", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
-                    }}
-                  >
-                    {p.label}
-                  </button>
+                  {/* Priority — tap the chip to open a direct High / Med / Low picker */}
+                  {isToday && pickId === task.id ? (
+                    <div style={{ display:"flex", gap:4, flexShrink:0 }}>
+                      {PRIORITIES.map(pr => (
+                        <button key={pr.key}
+                          onClick={() => { onPriority(dateKey, task.id, pr.key); setPickId(null); }}
+                          aria-label={`Set ${pr.label} priority`}
+                          style={{
+                            fontSize:11, fontWeight:800, padding:"3px 7px", borderRadius:7,
+                            border: taskPriority(task) === pr.key ? `1.5px solid ${pr.dark}` : "1.5px solid transparent",
+                            background:pr.bg, color:pr.dark, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
+                          }}
+                        >{pr.key === "M" ? "Med" : pr.label}</button>
+                      ))}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => isToday && setPickId(task.id)}
+                      aria-label={`Priority: ${p.label}. Tap to change.`}
+                      style={{
+                        flexShrink:0, fontSize:11.5, fontWeight:800, color:p.dark, background:p.bg,
+                        border:"none", borderRadius:8, padding:"3px 8px", letterSpacing:"0.03em",
+                        cursor: isToday ? "pointer" : "default", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
+                      }}
+                    >
+                      {p.label}
+                    </button>
+                  )}
                 </div>
               );
               return (
@@ -2292,6 +2308,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
   const [matrixExpanded, setMatrixExpanded] = useState(false);
+  const [previewPickId, setPreviewPickId] = useState(null); // preview task whose priority picker is open
   const [doneOpen, setDoneOpen] = useState(false); // Completed section — collapsed by default
 
   // Focus mode — snapshot of pending habits taken when the session starts
@@ -2453,11 +2470,23 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                       flex:1, minWidth:0, fontSize:15, lineHeight:1.4, fontWeight:600, color:T.text, cursor:"pointer",
                       overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
                     }}>{t.text}</span>
-                    <button
-                      onClick={() => selectedDate >= todayKey && setTaskPriority(selectedDate, t.id, NEXT_PRIORITY[taskPriority(t)])}
-                      aria-label={`Priority: ${p.label}. Tap to change.`}
-                      style={{ fontSize:11.5, fontWeight:800, color:p.dark, background:p.bg, border:"none", borderRadius:8, padding:"3px 8px", flexShrink:0, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}
-                    >{p.label}</button>
+                    {selectedDate >= todayKey && previewPickId === t.id ? (
+                      <div style={{ display:"flex", gap:4, flexShrink:0 }}>
+                        {PRIORITIES.map(pr => (
+                          <button key={pr.key}
+                            onClick={() => { setTaskPriority(selectedDate, t.id, pr.key); setPreviewPickId(null); }}
+                            aria-label={`Set ${pr.label} priority`}
+                            style={{ fontSize:11, fontWeight:800, padding:"3px 7px", borderRadius:7, border: taskPriority(t) === pr.key ? `1.5px solid ${pr.dark}` : "1.5px solid transparent", background:pr.bg, color:pr.dark, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}
+                          >{pr.key === "M" ? "Med" : pr.label}</button>
+                        ))}
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => selectedDate >= todayKey && setPreviewPickId(t.id)}
+                        aria-label={`Priority: ${p.label}. Tap to change.`}
+                        style={{ fontSize:11.5, fontWeight:800, color:p.dark, background:p.bg, border:"none", borderRadius:8, padding:"3px 8px", flexShrink:0, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}
+                      >{p.label}</button>
+                    )}
                   </div>
                 );
               })}
