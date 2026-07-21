@@ -2759,7 +2759,17 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                 <div style={{ width:42, flexShrink:0, textAlign:"right", paddingTop:13, fontSize:11.5, fontWeight:700, fontVariantNumeric:"tabular-nums", color: habit.id === firstPendingId ? T.primary : T.muted }}>
                   {habit.time ? to24h(habit.time) : "—"}
                 </div>
-                <div style={{ flex:1, minWidth:0, background:T.surface, borderRadius:12, border: habit.id === firstPendingId ? `2px solid ${identity.color}` : `1px solid ${identity.color}44`, overflow:"hidden" }}>
+                <div style={{ flex:1, minWidth:0, background:T.surface, borderRadius:14, border: habit.id === firstPendingId ? `2px solid ${identity.color}` : `1px solid ${identity.color}55`, overflow:"hidden" }}>
+                  {/* Identity band — matches the groups-view card header */}
+                  <div style={{ display:"flex", alignItems:"center", gap:7, background:identity.color+"26", padding:"5px 10px 5px 12px" }}>
+                    <span style={{ fontSize:14, flexShrink:0 }} aria-hidden="true">{identity.icon}</span>
+                    <span style={{ flex:1, minWidth:0, fontSize:12, fontWeight:800, letterSpacing:"0.07em", textTransform:"uppercase", color:identity.colorDim || T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      {shortLabel(identity.label)}
+                    </span>
+                    {habit.id === firstPendingId && (
+                      <span style={{ flexShrink:0, fontSize:10.5, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:identity.colorDim || T.text, background:"rgba(255,255,255,0.6)", borderRadius:10, padding:"2px 8px" }}>Now</span>
+                    )}
+                  </div>
                   <HabitRow
                     habit={habit}
                     identity={identity}
@@ -2772,7 +2782,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                     openEditHabit={openEditHabit}
                     openDeleteHabit={openDeleteHabit}
                     first={true}
-                    showIdentity={true}
+                    showIdentity={false}
                   />
                 </div>
               </div>
