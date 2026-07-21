@@ -1572,7 +1572,7 @@ function HabitRing({ checked, missed, color, streak, next, onClick, label, size 
 
 // ─── HABIT ROW ────────────────────────────────────────────────────────────────
 // One habit on the timeline: identity band above, then cue → action → coaching.
-function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, onMiss, openEditHabit, openDeleteHabit, first, showIdentity }) {
+function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, onMiss, openEditHabit, openDeleteHabit, first, showIdentity, hideTime }) {
   const next = getNextMilestone(streak);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuItem = {
@@ -1589,7 +1589,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
   const isEveryDay = freq && freq.cadence === "weekly" && (freq.days || []).length === 7;
   const cueParts = [
     habit.trigger,
-    habit.time && to24h(habit.time),
+    !hideTime && habit.time && to24h(habit.time),
     habit.location,
     freq && !isEveryDay && getFreqLabel(freq),
   ].filter(Boolean);
@@ -2563,41 +2563,42 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
         return (
           <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
             {visible.map(({ habit, identity }) => (
-              <div key={habit.id} className={justChecked === habit.id ? "row-leaving" : ""} style={{ display:"flex", gap:9, alignItems:"stretch" }}>
-                <div style={{ width:42, flexShrink:0, textAlign:"right", paddingTop:13, fontSize:11.5, fontWeight:700, fontVariantNumeric:"tabular-nums", color: habit.id === firstPendingId ? T.primary : T.muted }}>
-                  {habit.time ? to24h(habit.time) : "—"}
-                </div>
-                <div style={{
-                  flex:1, minWidth:0, background:T.surface, borderRadius:14,
-                  border: habit.id === firstPendingId ? `1.5px solid ${identity.color}` : `1px solid ${T.border}`,
-                  boxShadow: habit.id === firstPendingId ? `0 6px 20px ${identity.color}22` : "0 4px 16px rgba(2,80,130,0.05)",
-                  overflow:"hidden",
-                }}>
-                  {/* Identity label — a quiet colored dot + neutral name, not a filled band */}
-                  <div style={{ display:"flex", alignItems:"center", gap:7, padding:"9px 10px 0 13px" }}>
-                    <span style={{ width:8, height:8, borderRadius:"50%", background:identity.color, flexShrink:0 }} aria-hidden="true" />
-                    <span style={{ flex:1, minWidth:0, fontSize:11, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.muted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                      <span aria-hidden="true">{identity.icon}</span> {shortLabel(identity.label)}
+              <div key={habit.id} className={justChecked === habit.id ? "row-leaving" : ""} style={{
+                background:T.surface, borderRadius:14,
+                border: habit.id === firstPendingId ? `1.5px solid ${identity.color}` : `1px solid ${T.border}`,
+                boxShadow: habit.id === firstPendingId ? `0 6px 20px ${identity.color}22` : "0 4px 16px rgba(2,80,130,0.05)",
+                overflow:"hidden",
+              }}>
+                {/* Identity + time — dot, name, and a right-aligned time so no left gutter is needed */}
+                <div style={{ display:"flex", alignItems:"center", gap:7, padding:"9px 12px 0 13px" }}>
+                  <span style={{ width:8, height:8, borderRadius:"50%", background:identity.color, flexShrink:0 }} aria-hidden="true" />
+                  <span style={{ flex:1, minWidth:0, fontSize:11, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.muted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    <span aria-hidden="true">{identity.icon}</span> {shortLabel(identity.label)}
+                  </span>
+                  {habit.time && (
+                    <span style={{ flexShrink:0, fontSize:11, fontWeight:700, fontVariantNumeric:"tabular-nums", color: habit.id === firstPendingId ? T.primary : T.muted }}>
+                      {to24h(habit.time)}
                     </span>
-                    {habit.id === firstPendingId && (
-                      <span style={{ flexShrink:0, fontSize:10, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.primary, background:T.primary+"14", borderRadius:10, padding:"2px 8px" }}>Now</span>
-                    )}
-                  </div>
-                  <HabitRow
-                    habit={habit}
-                    identity={identity}
-                    checked={todayData[habit.id] === true}
-                    missed={todayData[habit.id] === "miss"}
-                    warnMissedYesterday={selectedDate === todayKey && missedYesterdayIds.has(habit.id) && todayData[habit.id] == null}
-                    streak={getStreakForHabit(habit.id, habit.frequency)}
-                    toggle={toggle}
-                    onMiss={markMiss}
-                    openEditHabit={openEditHabit}
-                    openDeleteHabit={openDeleteHabit}
-                    first={true}
-                    showIdentity={false}
-                  />
+                  )}
+                  {habit.id === firstPendingId && (
+                    <span style={{ flexShrink:0, fontSize:10, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.primary, background:T.primary+"14", borderRadius:10, padding:"2px 8px" }}>Now</span>
+                  )}
                 </div>
+                <HabitRow
+                  habit={habit}
+                  identity={identity}
+                  checked={todayData[habit.id] === true}
+                  missed={todayData[habit.id] === "miss"}
+                  warnMissedYesterday={selectedDate === todayKey && missedYesterdayIds.has(habit.id) && todayData[habit.id] == null}
+                  streak={getStreakForHabit(habit.id, habit.frequency)}
+                  toggle={toggle}
+                  onMiss={markMiss}
+                  openEditHabit={openEditHabit}
+                  openDeleteHabit={openDeleteHabit}
+                  first={true}
+                  showIdentity={false}
+                  hideTime={true}
+                />
               </div>
             ))}
           </div>
