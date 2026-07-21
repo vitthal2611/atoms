@@ -2005,7 +2005,7 @@ function QuickAddTask({ dateKey, onAdd }) {
     inputRef.current?.focus();
   };
   return (
-    <div style={{ display:"flex", alignItems:"center", gap:5, background:T.bg, borderRadius:10, padding:"5px 6px 5px 10px", marginBottom:8 }}>
+    <div style={{ display:"flex", alignItems:"center", gap:5, background:T.bg, borderRadius:10, padding:"5px 6px 5px 10px" }}>
       <input
         ref={inputRef}
         value={val}
@@ -2418,9 +2418,6 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
           )}
         </div>
 
-        {/* Quick add — always visible, collapsed or expanded */}
-        {selectedDate >= todayKey && <QuickAddTask dateKey={selectedDate} onAdd={addTask} />}
-
         {matrixExpanded ? (
           <TopTasksCard
             tasks={dailyTasks[selectedDate] || []}
@@ -2502,6 +2499,13 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
             </>
           );
         })()}
+
+        {/* Quick add — pinned at the bottom of the card */}
+        {selectedDate >= todayKey && (
+          <div style={{ borderTop:`1px solid ${T.surf2}`, marginTop:10, paddingTop:10 }}>
+            <QuickAddTask dateKey={selectedDate} onAdd={addTask} />
+          </div>
+        )}
       </div>
 
       {/* Empty-identity nudge — show a contextual CTA for each identity with no habits */}
