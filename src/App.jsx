@@ -1922,7 +1922,64 @@ const PRIORITIES = [
   { key: "L", label: "Low",    accent: "#64748B", dark: "#334155", bg: "#E2E8F0" },
 ];
 const PRIORITY_ORDER = { H: 0, M: 1, L: 2 };
+const NEXT_PRIORITY  = { H: "M", M: "L", L: "H" }; // tap a chip to cycle
 const priorityOf = (key) => PRIORITIES.find(p => p.key === key) || PRIORITIES[1];
+
+// ─── SWIPE ROW — swipe right to complete, left to delete ──────────────────────
+function SwipeRow({ onRight, onLeft, radius = 0, children }) {
+  const [dx, setDx] = useState(0);
+  const start = useRef({ x: 0, y: 0, active: false, horiz: false });
+  const THRESHOLD = 72;
+  const onStart = e => {
+    const t = e.touches[0];
+    start.current = { x: t.clientX, y: t.clientY, active: true, horiz: false };
+  };
+  const onMove = e => {
+    if (!start.current.active) return;
+    const t = e.touches[0];
+    const mx = t.clientX - start.current.x;
+    const my = t.clientY - start.current.y;
+    if (!start.current.horiz) {
+      if (Math.abs(mx) > 8 && Math.abs(mx) > Math.abs(my)) start.current.horiz = true;
+      else if (Math.abs(my) > 8) { start.current.active = false; return; }
+      else return;
+    }
+    setDx(Math.max(-120, Math.min(120, mx)));
+  };
+  const onEnd = () => {
+    if (dx > THRESHOLD && onRight) onRight();
+    else if (dx < -THRESHOLD && onLeft) onLeft();
+    setDx(0);
+    start.current.active = false;
+  };
+  const revealRight = dx > 0; // finger moved right → "Done" shown on the left
+  return (
+    <div style={{ position: "relative", overflow: "hidden", borderRadius: radius }}>
+      <div aria-hidden="true" style={{
+        position: "absolute", inset: 0, display: "flex", alignItems: "center",
+        justifyContent: revealRight ? "flex-start" : "flex-end", padding: "0 16px",
+        background: revealRight ? "#E1F5EE" : "#FEE2E2",
+        color: revealRight ? "#0F6E56" : "#A32D2D", fontSize: 13, fontWeight: 800,
+        opacity: Math.min(1, Math.abs(dx) / THRESHOLD),
+      }}>
+        {revealRight ? <span><Ic name="check" size={15} color="#0F6E56" style={{ verticalAlign: "-2px" }} /> Done</span>
+                     : <span>Delete <Ic name="trash" size={14} color="#A32D2D" style={{ verticalAlign: "-2px" }} /></span>}
+      </div>
+      <div
+        onTouchStart={onStart}
+        onTouchMove={onMove}
+        onTouchEnd={onEnd}
+        style={{
+          transform: `translateX(${dx}px)`,
+          transition: dx === 0 ? "transform 0.2s ease" : "none",
+          background: T.surface, position: "relative", touchAction: "pan-y",
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
 // Back-compat: tasks created during the Eisenhower-matrix era carry a
 // `quadrant` field instead of `priority`. Map them over so old data still
 // lands somewhere sensible; anything unrecognized falls back to Medium.
@@ -2046,8 +2103,8 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
             {openTasks.map((task, i) => {
               const p = priorityOf(taskPriority(task));
               const isEditing = editingId === task.id;
-              return (
-                <div key={task.id} style={{ display:"flex", alignItems:"center", gap:11, padding:"9px 2px", borderTop: i === 0 ? "none" : `1px solid ${T.surf2}` }}>
+              const row = (
+                <div style={{ display:"flex", alignItems:"center", gap:11, padding:"9px 2px" }}>
                   {/* Check circle */}
                   <button
                     onClick={() => onToggle(dateKey, task.id)}
@@ -2089,13 +2146,25 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
                     </span>
                   )}
 
-                  {/* Priority chip */}
-                  <span aria-label={`Priority: ${p.label}`} style={{
-                    flexShrink:0, fontSize:11.5, fontWeight:800, color:p.dark, background:p.bg,
-                    borderRadius:8, padding:"2px 7px", letterSpacing:"0.03em",
-                  }}>
+                  {/* Priority chip — tap to cycle High → Med → Low */}
+                  <button
+                    onClick={() => isToday && onPriority(dateKey, task.id, NEXT_PRIORITY[taskPriority(task)])}
+                    aria-label={`Priority: ${p.label}. Tap to change.`}
+                    style={{
+                      flexShrink:0, fontSize:11.5, fontWeight:800, color:p.dark, background:p.bg,
+                      border:"none", borderRadius:8, padding:"3px 8px", letterSpacing:"0.03em",
+                      cursor: isToday ? "pointer" : "default", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
+                    }}
+                  >
                     {p.label}
-                  </span>
+                  </button>
+                </div>
+              );
+              return (
+                <div key={task.id} style={{ borderTop: i === 0 ? "none" : `1px solid ${T.surf2}` }}>
+                  {isToday && !isEditing
+                    ? <SwipeRow onRight={() => onToggle(dateKey, task.id)} onLeft={() => onDelete(dateKey, task.id)}>{row}</SwipeRow>
+                    : row}
                 </div>
               );
             })}
@@ -2384,7 +2453,11 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                       flex:1, minWidth:0, fontSize:15, lineHeight:1.4, fontWeight:600, color:T.text, cursor:"pointer",
                       overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
                     }}>{t.text}</span>
-                    <span aria-label={`Priority: ${p.label}`} style={{ fontSize:11.5, fontWeight:800, color:p.dark, background:p.bg, borderRadius:8, padding:"2px 7px", flexShrink:0 }}>{p.label}</span>
+                    <button
+                      onClick={() => selectedDate >= todayKey && setTaskPriority(selectedDate, t.id, NEXT_PRIORITY[taskPriority(t)])}
+                      aria-label={`Priority: ${p.label}. Tap to change.`}
+                      style={{ fontSize:11.5, fontWeight:800, color:p.dark, background:p.bg, border:"none", borderRadius:8, padding:"3px 8px", flexShrink:0, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}
+                    >{p.label}</button>
                   </div>
                 );
               })}
