@@ -2382,6 +2382,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
   const [matrixExpanded, setMatrixExpanded] = useState(false);
+  const [doneOpen, setDoneOpen] = useState(false); // Completed section — collapsed by default
 
   // Layout: time rail by default; identity groups opt-in — remembered across sessions.
   // Key is versioned (-v2) so the switch to a rail default overrides any stored "groups".
@@ -2863,17 +2864,28 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
         );
       })}
 
-      {/* Completed section */}
+      {/* Completed section — collapsed by default, tap the header to expand */}
       {(() => {
         const done = scheduledHabits.filter(({habit}) => todayData[habit.id] === true && habit.id !== justChecked);
         if (done.length === 0) return null;
         return (
           <div style={{ marginTop:8 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8, margin:"4px 0 10px", paddingLeft:2 }}>
+            <button
+              onClick={() => setDoneOpen(o => !o)}
+              aria-expanded={doneOpen}
+              style={{
+                display:"flex", alignItems:"center", gap:8, width:"100%",
+                margin:"4px 0 10px", padding:"9px 12px",
+                background:T.primary+"0e", border:"none", borderRadius:14,
+                cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
+              }}
+            >
               <span style={{ fontSize:16 }} aria-hidden="true">✅</span>
               <span style={{ fontSize:14, fontWeight:700, color:T.primary, fontFamily:FONT_DISPLAY }}>Completed</span>
               <span style={{ fontSize:12, color:T.primary, marginLeft:"auto", fontWeight:700, background:T.primary+"18", borderRadius:20, padding:"2px 9px" }} aria-label={`${done.length} completed`}>{done.length}</span>
-            </div>
+              <span aria-hidden="true" style={{ fontSize:11, color:T.primary, transition:"transform 0.2s", display:"inline-block", transform: doneOpen ? "rotate(180deg)" : "none" }}>▼</span>
+            </button>
+            {doneOpen && (
             <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
               {done.map(({ habit, identity }) => {
                 const streak = getStreakForHabit(habit.id, habit.frequency);
@@ -2915,6 +2927,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                 );
               })}
             </div>
+            )}
           </div>
         );
       })()}
