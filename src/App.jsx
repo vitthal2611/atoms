@@ -586,7 +586,6 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
   const [justChecked,  setJustChecked]  = useState(null);
   const [celebrationHabit, setCelebrationHabit] = useState(null);
-  const [identityVote, setIdentityVote] = useState(null); // { label, color, icon } — shown after each non-milestone completion
   const [syncing,      setSyncing]     = useState(false);
   const [saveError,    setSaveError]   = useState(false);
   const [signInError,  setSignInError] = useState(null);
@@ -631,7 +630,6 @@ export default function App() {
   // ── Timers stored in refs so they can be cleared on re-fire or unmount ──
   const celebrationTimerRef = useRef(null);
   const justCheckedTimerRef = useRef(null);
-  const identityVoteTimerRef = useRef(null);
   const undoTimerRef        = useRef(null);
   const dtTimer             = useRef(null);
   const isFirstDt           = useRef(true);
@@ -789,13 +787,6 @@ export default function App() {
       setCelebrationHabit({habitId,milestone});
       celebrationTimerRef.current = setTimeout(()=>setCelebrationHabit(null),3500);
     }
-    if (!wasChecked && identity) {
-      // Every check-in is a vote for the identity — surface that every time,
-      // even alongside a milestone toast (they're stacked, not exclusive).
-      clearTimeout(identityVoteTimerRef.current);
-      setIdentityVote({ label: identity.label, color: identity.color, icon: identity.icon });
-      identityVoteTimerRef.current = setTimeout(()=>setIdentityVote(null), 1800);
-    }
   }, [selectedDate, getStreakForHabit]);
 
   // ── Mark a habit as missed (tap again to clear) — "miss" breaks the streak
@@ -814,7 +805,6 @@ export default function App() {
   useEffect(() => () => {
     clearTimeout(celebrationTimerRef.current);
     clearTimeout(justCheckedTimerRef.current);
-    clearTimeout(identityVoteTimerRef.current);
     clearTimeout(undoTimerRef.current);
   }, []);
 
@@ -1168,10 +1158,11 @@ export default function App() {
       )}
 
       {/* ── Celebration Toast — dead center of the screen; shifts up a touch if the vote toast is also showing ── */}
+      {/* Milestone celebration — a brief center card only on hitting a streak badge */}
       {celebrationHabit && (
         <div style={{
           position: "fixed",
-          top: identityVote ? "calc(50% - 48px)" : "50%",
+          top: "50%",
           left: "50%",
           transform: "translate(-50%, -50%)",
           width: "calc(100% - 48px)",
@@ -1190,33 +1181,6 @@ export default function App() {
           <div>
             <div style={{fontWeight:700,fontSize:15,color:T.text}}>{celebrationHabit.milestone.label}!</div>
             <div style={{fontSize:13,color:T.muted}}>{celebrationHabit.milestone.days}-day streak achieved 🎉</div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Identity Vote Toast — dead center of the screen; shifts down a touch if the milestone toast is also showing ── */}
-      {identityVote && (
-        <div style={{
-          position: "fixed",
-          top: celebrationHabit ? "calc(50% + 48px)" : "50%",
-          left: "50%",
-          transform: "translate(-50%, -50%)",
-          width: "calc(100% - 48px)",
-          maxWidth: 360,
-          background: T.surface,
-          border: `2px solid ${identityVote.color}`,
-          borderRadius: 18,
-          padding: "16px 20px",
-          display: "flex",
-          alignItems: "center",
-          gap: 14,
-          zIndex: 999,
-          boxShadow: "0 12px 40px #00000030",
-        }} className="toast-in-center" role="status" aria-live="polite">
-          <span style={{fontSize:24}} aria-hidden="true">{identityVote.icon}</span>
-          <div>
-            <div style={{fontWeight:700,fontSize:15,color:T.text}}>Vote cast <span aria-hidden="true">🗳️</span></div>
-            <div style={{fontSize:13,color:identityVote.color,fontWeight:600}}>for becoming {shortLabel(identityVote.label)}</div>
           </div>
         </div>
       )}
