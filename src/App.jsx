@@ -2569,17 +2569,17 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                 boxShadow: habit.id === firstPendingId ? `0 6px 20px ${identity.color}22` : "0 4px 16px rgba(2,80,130,0.05)",
                 overflow:"hidden",
               }}>
-                {/* Identity + time — dot, name, and a right-aligned time so no left gutter is needed */}
+                {/* Time (left) · dot · identity name · Now — no separate left gutter needed */}
                 <div style={{ display:"flex", alignItems:"center", gap:7, padding:"9px 12px 0 13px" }}>
+                  {habit.time && (
+                    <span style={{ flexShrink:0, fontSize:11, fontWeight:800, fontVariantNumeric:"tabular-nums", color: habit.id === firstPendingId ? T.primary : T.muted }}>
+                      {to24h(habit.time)}
+                    </span>
+                  )}
                   <span style={{ width:8, height:8, borderRadius:"50%", background:identity.color, flexShrink:0 }} aria-hidden="true" />
                   <span style={{ flex:1, minWidth:0, fontSize:11, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.muted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                     <span aria-hidden="true">{identity.icon}</span> {shortLabel(identity.label)}
                   </span>
-                  {habit.time && (
-                    <span style={{ flexShrink:0, fontSize:11, fontWeight:700, fontVariantNumeric:"tabular-nums", color: habit.id === firstPendingId ? T.primary : T.muted }}>
-                      {to24h(habit.time)}
-                    </span>
-                  )}
                   {habit.id === firstPendingId && (
                     <span style={{ flexShrink:0, fontSize:10, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.primary, background:T.primary+"14", borderRadius:10, padding:"2px 8px" }}>Now</span>
                   )}
