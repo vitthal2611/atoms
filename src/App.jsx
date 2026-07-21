@@ -1992,20 +1992,21 @@ function taskPriority(t) {
 const taskRank = (t) => PRIORITY_ORDER[taskPriority(t)];
 
 // ─── QUICK ADD TASK — always-visible one-row composer ─────────────────────────
+// Dead-simple add: a roomy full-width field + Add button. New tasks default to
+// Medium priority — set it later by tapping the chip on the row.
 function QuickAddTask({ dateKey, onAdd }) {
   const [val, setVal] = useState("");
-  const [priority, setPriority] = useState("M");
   const inputRef = useRef(null);
-  useEffect(() => { setVal(""); setPriority("M"); }, [dateKey]);
+  useEffect(() => { setVal(""); }, [dateKey]);
   const add = () => {
     const t = val.trim();
     if (!t) return;
-    onAdd(dateKey, t, priority);
+    onAdd(dateKey, t, "M");
     setVal("");
     inputRef.current?.focus();
   };
   return (
-    <div style={{ display:"flex", alignItems:"center", gap:5, background:T.bg, borderRadius:10, padding:"5px 6px 5px 10px" }}>
+    <div style={{ display:"flex", alignItems:"center", gap:10, background:T.bg, borderRadius:12, padding:"6px 6px 6px 14px" }}>
       <input
         ref={inputRef}
         value={val}
@@ -2017,26 +2018,16 @@ function QuickAddTask({ dateKey, onAdd }) {
         placeholder="Add a task…"
         maxLength={80}
         aria-label="New task text"
-        style={{ flex:1, minWidth:0, border:"none", background:"transparent", fontSize:16, color:T.text, outline:"none", fontFamily:"inherit", padding:"6px 0" }}
+        style={{ flex:1, minWidth:0, border:"none", background:"transparent", fontSize:16, color:T.text, outline:"none", fontFamily:"inherit", padding:"7px 0" }}
       />
-      {PRIORITIES.map(p => (
-        <button key={p.key} onClick={() => setPriority(p.key)} aria-pressed={priority === p.key}
-          aria-label={`${p.label} priority`}
-          style={{
-            flexShrink:0, fontSize:11.5, fontWeight:800, padding:"5px 8px", borderRadius:8,
-            border: priority === p.key ? `1.5px solid ${p.dark}` : "1.5px solid transparent",
-            background: p.bg, color: p.dark, cursor:"pointer", fontFamily:"inherit",
-            WebkitTapHighlightColor:"transparent", transition:"border 0.1s",
-          }}
-        >{p.key === "M" ? "Med" : p.label}</button>
-      ))}
       <button
         onClick={add}
         aria-label="Add task"
         style={{
-          flexShrink:0, width:30, height:30, borderRadius:8, border:"none",
-          background: val.trim() ? T.primary : T.border,
-          color:"#fff", fontSize:17, fontWeight:800, lineHeight:1,
+          flexShrink:0, width:34, height:34, borderRadius:10, border:"none",
+          background: val.trim() ? T.primary : T.border2,
+          color:"#fff", fontSize:20, fontWeight:800, lineHeight:1,
+          display:"flex", alignItems:"center", justifyContent:"center",
           cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"background 0.15s",
         }}
       >
