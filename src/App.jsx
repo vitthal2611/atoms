@@ -1623,7 +1623,6 @@ function HabitRing({ checked, missed, color, streak, next, onClick, label, size 
 function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, onMiss, openEditHabit, openDeleteHabit, first, showIdentity }) {
   const next = getNextMilestone(streak);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [detailOpen, setDetailOpen] = useState(false);
   const menuItem = {
     display: "flex", alignItems: "center", gap: 10, width: "100%",
     padding: "13px 8px", background: "transparent", border: "none",
@@ -1705,11 +1704,11 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         />
 
         <div
-          onClick={() => setDetailOpen(true)}
+          onClick={() => toggle(habit.id, habit.frequency, identity)}
           role="button"
           tabIndex={0}
-          onKeyDown={e => { if (e.key === "Enter") setDetailOpen(true); }}
-          aria-label={`Details: ${habit.label}`}
+          onKeyDown={e => { if (e.key === "Enter") toggle(habit.id, habit.frequency, identity); }}
+          aria-label={checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
           style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
         >
           <div style={{
@@ -1769,55 +1768,6 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             </div>
           )}
         </div>
-      )}
-
-      {/* ── Detail sheet — all Four Laws data for this habit, on demand ── */}
-      {detailOpen && (
-        <Modal title={habit.label} onClose={() => setDetailOpen(false)}>
-          <div style={{ padding: "0 20px 20px" }}>
-            <div style={{ fontSize:13, color:T.muted, margin:"4px 0 10px" }}>
-              <span aria-hidden="true">{identity.icon}</span> {shortLabel(identity.label)}
-              {streak > 0 && <> · <Ic name="flame" size={12} color="#B45309" style={{ verticalAlign:"-1px" }} /> {streak}d streak</>}
-            </div>
-            {(() => {
-              const rows = [
-                { icon:"bolt",  color:T.primary, label:"Cue",         value: cueParts.join(" · ") },
-                { icon:"home",  color:T.primary, label:"Environment", value: habit.easy },
-                { icon:"spark", color:"#534AB7", label:"Bundle",      value: habit.attractive },
-                { icon:"clock", color:"#0F6E56", label:"2-min",       value: habit.starter },
-                { icon:"gift",  color:"#854F0B", label:"Reward",      value: habit.satisfying },
-              ].filter(r => r.value);
-              if (rows.length === 0) {
-                return <div style={{ fontSize:13, color:T.muted, padding:"8px 0" }}>No cues or rewards yet — add them via Edit habit.</div>;
-              }
-              return rows.map(r => (
-                <div key={r.label} style={{ display:"flex", gap:11, alignItems:"flex-start", padding:"9px 0", borderBottom:`1px solid ${T.surf2}` }}>
-                  <Ic name={r.icon} size={15} color={r.color} style={{ marginTop:3 }} />
-                  <div style={{ minWidth:0, flex:1 }}>
-                    <div style={{ fontSize:11.5, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.muted, marginBottom:1 }}>{r.label}</div>
-                    <div style={{ fontSize:14, color:T.text, lineHeight:1.5 }}>{r.value}</div>
-                  </div>
-                </div>
-              ));
-            })()}
-            {next && streak > 0 && (
-              <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:14 }} aria-label={`${streak} of ${next.days} days to ${next.label}`}>
-                <div aria-hidden="true" style={{ flex:1, height:5, borderRadius:99, background:T.surf2, overflow:"hidden" }}>
-                  <div style={{ height:"100%", width:`${Math.min(100, (streak / next.days) * 100)}%`, background:identity.color, borderRadius:99 }} />
-                </div>
-                <span style={{ fontSize:12, color:T.muted, fontWeight:700, flexShrink:0, fontVariantNumeric:"tabular-nums" }}>{streak}/{next.days} · {next.label}</span>
-              </div>
-            )}
-            {!checked && !missed && habit.starter && (
-              <button
-                onClick={() => { setDetailOpen(false); toggle(habit.id, habit.frequency, identity); }}
-                style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:7, width:"100%", marginTop:16, padding:"13px 10px", background:"#E1F5EE", border:"none", borderRadius:12, fontSize:14, fontWeight:700, color:"#085041", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}
-              >
-                <Ic name="clock" size={15} color="#085041" /> Did the 2-min version <Ic name="check" size={13} color="#085041" />
-              </button>
-            )}
-          </div>
-        </Modal>
       )}
 
     </div>
