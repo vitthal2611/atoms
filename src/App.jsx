@@ -31,11 +31,11 @@ const T = {
   bg:      "#F0F9FF",
   surface: "#FFFFFF",
   surf2:   "#E0F2FE",
-  border:  "#BAE6FD",
+  border:  "#D6E9F2",   // softer hairline than the old cyan #BAE6FD
   border2: "#7DD3FC",
-  text:    "#0C4A6E",
-  text2:   "#0369A1",
-  muted:   "#3B7EA6",   // darkened from #5B9EC9 → WCAG AA contrast on #F0F9FF
+  text:    "#26333B",   // warm charcoal — calmer than the old ocean blue #0C4A6E
+  text2:   "#4A6572",   // muted slate for secondary text
+  muted:   "#7C8A94",   // neutral gray for tertiary/meta text
   accent:  "#0EA5E9",
   primary: "#0284C7",   // was called "green" — renamed for semantic clarity
   green:   "#0284C7",   // alias kept for any legacy references
@@ -2567,15 +2567,20 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                 <div style={{ width:42, flexShrink:0, textAlign:"right", paddingTop:13, fontSize:11.5, fontWeight:700, fontVariantNumeric:"tabular-nums", color: habit.id === firstPendingId ? T.primary : T.muted }}>
                   {habit.time ? to24h(habit.time) : "—"}
                 </div>
-                <div style={{ flex:1, minWidth:0, background:T.surface, borderRadius:14, border: habit.id === firstPendingId ? `2px solid ${identity.color}` : `1px solid ${identity.color}55`, overflow:"hidden" }}>
-                  {/* Identity band — matches the groups-view card header */}
-                  <div style={{ display:"flex", alignItems:"center", gap:7, background:identity.color+"26", padding:"5px 10px 5px 12px" }}>
-                    <span style={{ fontSize:14, flexShrink:0 }} aria-hidden="true">{identity.icon}</span>
-                    <span style={{ flex:1, minWidth:0, fontSize:12, fontWeight:800, letterSpacing:"0.07em", textTransform:"uppercase", color:identity.colorDim || T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                      {shortLabel(identity.label)}
+                <div style={{
+                  flex:1, minWidth:0, background:T.surface, borderRadius:14,
+                  border: habit.id === firstPendingId ? `1.5px solid ${identity.color}` : `1px solid ${T.border}`,
+                  boxShadow: habit.id === firstPendingId ? `0 6px 20px ${identity.color}22` : "0 4px 16px rgba(2,80,130,0.05)",
+                  overflow:"hidden",
+                }}>
+                  {/* Identity label — a quiet colored dot + neutral name, not a filled band */}
+                  <div style={{ display:"flex", alignItems:"center", gap:7, padding:"9px 10px 0 13px" }}>
+                    <span style={{ width:8, height:8, borderRadius:"50%", background:identity.color, flexShrink:0 }} aria-hidden="true" />
+                    <span style={{ flex:1, minWidth:0, fontSize:11, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.muted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      <span aria-hidden="true">{identity.icon}</span> {shortLabel(identity.label)}
                     </span>
                     {habit.id === firstPendingId && (
-                      <span style={{ flexShrink:0, fontSize:10.5, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:identity.colorDim || T.text, background:"rgba(255,255,255,0.6)", borderRadius:10, padding:"2px 8px" }}>Now</span>
+                      <span style={{ flexShrink:0, fontSize:10, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.primary, background:T.primary+"14", borderRadius:10, padding:"2px 8px" }}>Now</span>
                     )}
                   </div>
                   <HabitRow
