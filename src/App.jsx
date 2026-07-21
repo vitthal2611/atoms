@@ -1655,84 +1655,128 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         </Modal>
       )}
 
-      {/* ── Resting row: circle checks, text opens the detail sheet ── */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 40px 9px 12px" }}>
-        <HabitRing
-          checked={checked}
-          missed={missed}
-          color={identity.color}
-          streak={streak}
-          next={next}
-          onClick={() => toggle(habit.id, habit.frequency, identity)}
-          label={checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
-        />
-
-        <div
-          onClick={() => toggle(habit.id, habit.frequency, identity)}
-          role="button"
-          tabIndex={0}
-          onKeyDown={e => { if (e.key === "Enter") toggle(habit.id, habit.frequency, identity); }}
-          aria-label={checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
-          style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
-        >
-          <div style={{
-            fontSize:15, fontWeight: 600, lineHeight: 1.3,
-            color: checked ? T.text2 : missed ? T.muted : T.text,
-            textDecoration: checked ? "line-through" : "none",
-            textDecorationColor: identity.color + "88",
-            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          }}>
-            {habit.label}
-          </div>
-          {!checked && (showIdentity || cueParts.length > 0) && (
-            <div style={{ fontSize:12, color: T.muted, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      {/* ── Card body — cue, action, coaching (same layout as the Up Next hero) ── */}
+      <div style={{ padding: "11px 40px 12px 12px" }}>
+        {/* Cue line */}
+        {!checked && (showIdentity || cueParts.length > 0) && (
+          <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:7, fontSize:12, color:T.muted, minWidth:0, maxWidth:"100%" }}>
+            {habit.trigger && <Ic name="bolt" size={12} color={T.muted} />}
+            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
               {[showIdentity && `${identity.icon} ${shortLabel(identity.label)}`, ...cueParts].filter(Boolean).join(" · ")}
-            </div>
-          )}
-        </div>
-
-        {missed && (
-          <span style={{
-            fontSize:12, fontWeight: 800, color: T.red, flexShrink: 0, whiteSpace: "nowrap",
-            background: T.red + "14", padding: "2px 8px", borderRadius: 20,
-          }}>
-            Missed
-          </span>
-        )}
-
-        {streak >= 2 && !checked && (
-          <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:700, color:"#B45309", flexShrink:0, whiteSpace:"nowrap" }} aria-label={`${streak} day streak`}>
-            <Ic name="flame" size={12} color="#B45309" /> {streak}
-          </span>
-        )}
-      </div>
-
-      {/* Never-miss-twice nudge — this habit was missed yesterday */}
-      {warnMissedYesterday && !checked && !missed && (
-        <div style={{ display: "flex", alignItems: "center", gap: 5, margin: "0 12px 8px 46px", fontSize:12, fontWeight: 700, color: "#B45309" }}>
-          <Ic name="warn" size={13} color="#B45309" /> Missed yesterday — never miss twice!
-        </div>
-      )}
-
-      {/* Reward strip (Law 4) — instant payoff the moment it's checked */}
-      {checked && (
-        <div style={{ display:"flex", flexDirection:"column", gap:5, margin:"0 12px 10px 46px", boxSizing:"border-box", background:"#fff", border:"1px solid #9FE1CB", borderRadius:12, padding:"9px 12px", minWidth:0 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
-            <Ic name="vote" size={14} color="#0F6E56" />
-            <span style={{ fontSize:12.5, fontWeight:600, color:"#085041", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", minWidth:0 }}>
-              +1 vote for {shortLabel(identity.label)} · {streak}d streak{next ? ` · ${next.days - streak}d to ${next.label}` : ""}
             </span>
           </div>
-          {habit.satisfying && (
-            <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
-              <Ic name="gift" size={14} color="#854F0B" />
-              <span style={{ fontSize:12.5, fontWeight:700, color:"#854F0B", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", minWidth:0 }}>
-                Claim your reward: {habit.satisfying}
-              </span>
-            </div>
+        )}
+
+        {/* Ring + label + streak */}
+        <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+          <HabitRing
+            checked={checked}
+            missed={missed}
+            color={identity.color}
+            streak={streak}
+            next={next}
+            onClick={() => toggle(habit.id, habit.frequency, identity)}
+            label={checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
+          />
+          <span
+            onClick={() => toggle(habit.id, habit.frequency, identity)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={e => { if (e.key === "Enter") toggle(habit.id, habit.frequency, identity); }}
+            aria-label={checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
+            style={{
+              flex: 1, minWidth: 0, fontSize:15.5, fontWeight: 700, lineHeight: 1.3, cursor: "pointer",
+              color: checked ? T.text2 : missed ? T.muted : T.text,
+              textDecoration: checked ? "line-through" : "none",
+              textDecorationColor: identity.color + "88",
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }}
+          >
+            {habit.label}
+          </span>
+          {missed && (
+            <span style={{
+              fontSize:12, fontWeight: 800, color: T.red, flexShrink: 0, whiteSpace: "nowrap",
+              background: T.red + "14", padding: "2px 8px", borderRadius: 20,
+            }}>
+              Missed
+            </span>
+          )}
+          {streak >= 2 && !checked && (
+            <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:700, color:"#B45309", flexShrink:0, whiteSpace:"nowrap", background:T.gold+"1f", padding:"2px 8px", borderRadius:20 }} aria-label={`${streak} day streak`}>
+              <Ic name="flame" size={11} color="#B45309" /> {streak}d
+            </span>
           )}
         </div>
-      )}
+
+        {/* Attractive bundle (Law 2) */}
+        {!checked && !missed && habit.attractive && (
+          <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:9, marginLeft:39, fontSize:12.5, fontWeight:600, color:"#534AB7", minWidth:0 }}>
+            <Ic name="spark" size={13} color="#534AB7" />
+            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.attractive}</span>
+          </div>
+        )}
+
+        {/* 2-min chip (Law 3) + then: reward */}
+        {!checked && !missed && (habit.starter || habit.satisfying) && (
+          <div style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:8, marginTop:9, marginLeft:39 }}>
+            {habit.starter && (
+              <button
+                onClick={() => toggle(habit.id, habit.frequency, identity)}
+                aria-label={`Do the two-minute version: ${habit.starter}`}
+                style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12.5, fontWeight:700, color:"#085041", background:"#E1F5EE", border:"1px solid #9FE1CB", borderRadius:20, padding:"6px 13px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", maxWidth:"100%" }}
+              >
+                <Ic name="clock" size={13} color="#085041" />
+                <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>2-min: {habit.starter}</span>
+                <Ic name="check" size={12} color="#085041" />
+              </button>
+            )}
+            {habit.satisfying && (
+              <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:12, fontWeight:600, color:"#854F0B", minWidth:0, maxWidth:"100%" }}>
+                <Ic name="gift" size={13} color="#854F0B" />
+                <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>then: {habit.satisfying}</span>
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Milestone bar + count — progress toward the next streak badge */}
+        {!checked && next && streak > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 10, marginLeft: 39 }} aria-label={`${streak} of ${next.days} days to ${next.label}`}>
+            <div aria-hidden="true" style={{ flex: 1, height: 4, borderRadius: 99, background: T.surf2, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${Math.min(100, (streak / next.days) * 100)}%`, background: identity.color, borderRadius: 99, transition: "width 0.4s ease" }} />
+            </div>
+            <span aria-hidden="true" style={{ fontSize:11.5, color: T.muted, fontWeight: 600, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{streak}/{next.days}</span>
+          </div>
+        )}
+
+        {/* Never-miss-twice nudge — this habit was missed yesterday */}
+        {warnMissedYesterday && !checked && !missed && (
+          <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 9, marginLeft: 39, fontSize:12, fontWeight: 700, color: "#B45309" }}>
+            <Ic name="warn" size={13} color="#B45309" /> Missed yesterday — never miss twice!
+          </div>
+        )}
+
+        {/* Reward strip (Law 4) — instant payoff the moment it's checked */}
+        {checked && (
+          <div style={{ display:"flex", flexDirection:"column", gap:5, marginTop:9, marginLeft:39, boxSizing:"border-box", background:"#fff", border:"1px solid #9FE1CB", borderRadius:12, padding:"9px 12px", minWidth:0 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
+              <Ic name="vote" size={14} color="#0F6E56" />
+              <span style={{ fontSize:12.5, fontWeight:600, color:"#085041", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", minWidth:0 }}>
+                +1 vote for {shortLabel(identity.label)} · {streak}d streak{next ? ` · ${next.days - streak}d to ${next.label}` : ""}
+              </span>
+            </div>
+            {habit.satisfying && (
+              <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
+                <Ic name="gift" size={14} color="#854F0B" />
+                <span style={{ fontSize:12.5, fontWeight:700, color:"#854F0B", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", minWidth:0 }}>
+                  Claim your reward: {habit.satisfying}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
     </div>
   );
