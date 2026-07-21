@@ -2383,13 +2383,14 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
   const notTodayListId = useId();
   const [matrixExpanded, setMatrixExpanded] = useState(false);
 
-  // Layout: identity groups vs. time rail — remembered across sessions
+  // Layout: time rail by default; identity groups opt-in — remembered across sessions.
+  // Key is versioned (-v2) so the switch to a rail default overrides any stored "groups".
   const [layoutMode, setLayoutModeState] = useState(() => {
-    try { return localStorage.getItem("atoms-layout") || "groups"; } catch { return "groups"; }
+    try { return localStorage.getItem("atoms-layout-v2") || "rail"; } catch { return "rail"; }
   });
   const setLayoutMode = (m) => {
     setLayoutModeState(m);
-    try { localStorage.setItem("atoms-layout", m); } catch { /* private mode */ }
+    try { localStorage.setItem("atoms-layout-v2", m); } catch { /* private mode */ }
   };
 
   // Focus mode — snapshot of pending habits taken when the session starts
