@@ -1570,11 +1570,9 @@ function HabitRing({ checked, missed, color, streak, next, onClick, label, size 
   );
 }
 
-// ─── HABIT ROW ────────────────────────────────────────────────────────────────
-// One habit on the timeline: identity band above, then cue → action → coaching.
-function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, onMiss, openEditHabit, openDeleteHabit, first, showIdentity, hideTime }) {
-  const next = getNextMilestone(streak);
-  const [menuOpen, setMenuOpen] = useState(false);
+// ─── ROW MENU — miss / edit / delete behind one ⋯ button ──────────────────────
+function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHabit }) {
+  const [open, setOpen] = useState(false);
   const menuItem = {
     display: "flex", alignItems: "center", gap: 10, width: "100%",
     padding: "13px 8px", background: "transparent", border: "none",
@@ -1582,6 +1580,40 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
     fontSize: 14, fontWeight: 600, color: T.text, fontFamily: "inherit",
     WebkitTapHighlightColor: "transparent",
   };
+  return (
+    <>
+      <button
+        onClick={e => { e.stopPropagation(); setOpen(true); }}
+        aria-label={`Options for ${habit.label}`}
+        aria-haspopup="menu"
+        style={{ background: "transparent", border: "none", cursor: "pointer", padding: "3px 4px", lineHeight: 1, WebkitTapHighlightColor: "transparent" }}
+      >
+        <Ic name="dots" size={17} color={missed ? T.red : T.muted} />
+      </button>
+      {open && (
+        <Modal title={habit.label} onClose={() => setOpen(false)}>
+          <div style={{ padding: "0 20px 16px" }}>
+            <button onClick={() => { setOpen(false); onMiss(habit.id); }} style={menuItem}>
+              <Ic name="x" size={15} color={T.red} />
+              {missed ? "Clear missed" : "Mark as missed"}
+            </button>
+            <button onClick={() => { setOpen(false); openEditHabit(identity.id, habit); }} style={menuItem}>
+              <Ic name="pencil" size={15} color={T.text2} /> Edit habit
+            </button>
+            <button onClick={() => { setOpen(false); openDeleteHabit(identity.id, habit); }} style={{ ...menuItem, color: T.red, borderBottom: "none" }}>
+              <Ic name="trash" size={15} color={T.red} /> Delete habit
+            </button>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
+// ─── HABIT ROW ────────────────────────────────────────────────────────────────
+// One habit on the timeline: cue → action → coaching (identity header is above).
+function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, first, showIdentity, hideTime }) {
+  const next = getNextMilestone(streak);
 
   // One cue line above the label: trigger · time · location · frequency.
   // The milestone countdown lives in the micro-bar, not as text.
@@ -1596,55 +1628,13 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
   return (
     <div style={{
-      position: "relative",
       background: checked ? identity.color + "1f" : missed ? T.red + "10" : "transparent",
       borderTop: first ? "none" : `1px solid ${identity.color}22`,
       transition: "background 0.2s ease",
     }}>
 
-      {/* ── Row menu — miss / edit / delete behind one button ── */}
-      <button
-        onClick={e => { e.stopPropagation(); setMenuOpen(true); }}
-        aria-label={`Options for ${habit.label}`}
-        aria-haspopup="menu"
-        style={{
-          position: "absolute", top: 2, right: 0, zIndex: 1,
-          background: "transparent", border: "none",
-          fontSize:15, fontWeight: 800, color: missed ? T.red : T.muted, letterSpacing: "1px",
-          cursor: "pointer", padding: "8px 12px", lineHeight: 1, WebkitTapHighlightColor: "transparent",
-        }}
-      >
-        <Ic name="dots" size={17} color={missed ? T.red : T.muted} />
-      </button>
-
-      {menuOpen && (
-        <Modal title={habit.label} onClose={() => setMenuOpen(false)}>
-          <div style={{ padding: "0 20px 16px" }}>
-            <button
-              onClick={() => { setMenuOpen(false); onMiss(habit.id); }}
-              style={menuItem}
-            >
-              <Ic name="x" size={15} color={T.red} />
-              {missed ? "Clear missed" : "Mark as missed"}
-            </button>
-            <button
-              onClick={() => { setMenuOpen(false); openEditHabit(identity.id, habit); }}
-              style={menuItem}
-            >
-              <Ic name="pencil" size={15} color={T.text2} /> Edit habit
-            </button>
-            <button
-              onClick={() => { setMenuOpen(false); openDeleteHabit(identity.id, habit); }}
-              style={{ ...menuItem, color: T.red, borderBottom: "none" }}
-            >
-              <Ic name="trash" size={15} color={T.red} /> Delete habit
-            </button>
-          </div>
-        </Modal>
-      )}
-
       {/* ── Card body — cue, action, coaching (same layout as the Up Next hero) ── */}
-      <div style={{ padding: "11px 40px 12px 12px" }}>
+      <div style={{ padding: "10px 12px 12px" }}>
         {/* Cue line */}
         {!checked && (showIdentity || cueParts.length > 0) && (
           <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:7, fontSize:12, color:T.muted, minWidth:0, maxWidth:"100%" }}>
@@ -2569,20 +2559,27 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                 boxShadow: habit.id === firstPendingId ? `0 6px 20px ${identity.color}22` : "0 4px 16px rgba(2,80,130,0.05)",
                 overflow:"hidden",
               }}>
-                {/* Time (left) · dot · identity name · Now — no separate left gutter needed */}
-                <div style={{ display:"flex", alignItems:"center", gap:7, padding:"9px 12px 0 13px" }}>
-                  {habit.time && (
-                    <span style={{ flexShrink:0, fontSize:11, fontWeight:800, fontVariantNumeric:"tabular-nums", color: habit.id === firstPendingId ? T.primary : T.muted }}>
-                      {to24h(habit.time)}
+                {/* Header — time (left) · identity (center) · ⋯ menu (right) */}
+                <div style={{ display:"flex", alignItems:"center", padding:"8px 8px 0 13px" }}>
+                  <div style={{ flex:1, minWidth:0, display:"flex", alignItems:"center", gap:6 }}>
+                    {habit.time && (
+                      <span style={{ flexShrink:0, fontSize:11, fontWeight:800, fontVariantNumeric:"tabular-nums", color: habit.id === firstPendingId ? T.primary : T.muted }}>
+                        {to24h(habit.time)}
+                      </span>
+                    )}
+                    {habit.id === firstPendingId && (
+                      <span style={{ flexShrink:0, fontSize:10, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.primary, background:T.primary+"14", borderRadius:10, padding:"2px 8px" }}>Now</span>
+                    )}
+                  </div>
+                  <div style={{ display:"flex", alignItems:"center", gap:6, minWidth:0, flexShrink:1 }}>
+                    <span style={{ width:8, height:8, borderRadius:"50%", background:identity.color, flexShrink:0 }} aria-hidden="true" />
+                    <span style={{ minWidth:0, fontSize:11, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.muted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      <span aria-hidden="true">{identity.icon}</span> {shortLabel(identity.label)}
                     </span>
-                  )}
-                  <span style={{ width:8, height:8, borderRadius:"50%", background:identity.color, flexShrink:0 }} aria-hidden="true" />
-                  <span style={{ flex:1, minWidth:0, fontSize:11, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.muted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                    <span aria-hidden="true">{identity.icon}</span> {shortLabel(identity.label)}
-                  </span>
-                  {habit.id === firstPendingId && (
-                    <span style={{ flexShrink:0, fontSize:10, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.primary, background:T.primary+"14", borderRadius:10, padding:"2px 8px" }}>Now</span>
-                  )}
+                  </div>
+                  <div style={{ flex:1, minWidth:0, display:"flex", justifyContent:"flex-end" }}>
+                    <RowMenu habit={habit} identity={identity} missed={todayData[habit.id] === "miss"} onMiss={markMiss} openEditHabit={openEditHabit} openDeleteHabit={openDeleteHabit} />
+                  </div>
                 </div>
                 <HabitRow
                   habit={habit}
@@ -2592,9 +2589,6 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                   warnMissedYesterday={selectedDate === todayKey && missedYesterdayIds.has(habit.id) && todayData[habit.id] == null}
                   streak={getStreakForHabit(habit.id, habit.frequency)}
                   toggle={toggle}
-                  onMiss={markMiss}
-                  openEditHabit={openEditHabit}
-                  openDeleteHabit={openDeleteHabit}
                   first={true}
                   showIdentity={false}
                   hideTime={true}
