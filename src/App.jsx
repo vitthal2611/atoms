@@ -2037,7 +2037,7 @@ function QuickAddTask({ dateKey, onAdd }) {
   );
 }
 
-const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd, onToggle, onDelete, onEdit, onPriority, onDefer }) {
+const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd, onToggle, onDelete, onEdit, onPriority, onDefer, addBar }) {
   const [editingId,    setEditingId]    = useState(null);
   const [editVal,      setEditVal]      = useState("");
   const [completedOpen, setCompletedOpen] = useState(false);
@@ -2178,6 +2178,9 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
           </div>
         );
       })()}
+
+      {/* Add bar — sits between open tasks and the completed strip */}
+      {addBar}
 
       {/* Completed strip — collapsed by default, tap a row to send it back to its quadrant */}
       {(() => {
@@ -2420,6 +2423,11 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
             onEdit={editTask}
             onPriority={setTaskPriority}
             onDefer={deferTask}
+            addBar={selectedDate >= todayKey ? (
+              <div style={{ borderTop:`1px solid ${T.surf2}`, marginTop:10, paddingTop:10 }}>
+                <QuickAddTask dateKey={selectedDate} onAdd={addTask} />
+              </div>
+            ) : null}
           />
         ) : (() => {
           const active   = (dailyTasks[selectedDate] || []).filter(t => !t.carried);
@@ -2491,8 +2499,8 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
           );
         })()}
 
-        {/* Quick add — pinned at the bottom of the card */}
-        {selectedDate >= todayKey && (
+        {/* Quick add — pinned at the bottom when collapsed (expanded gets it inside the card, above Completed) */}
+        {!matrixExpanded && selectedDate >= todayKey && (
           <div style={{ borderTop:`1px solid ${T.surf2}`, marginTop:10, paddingTop:10 }}>
             <QuickAddTask dateKey={selectedDate} onAdd={addTask} />
           </div>
