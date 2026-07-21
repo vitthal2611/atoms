@@ -1497,18 +1497,6 @@ function habitSortMinutes(habit) {
 }
 const byHabitTime = (a, b) => habitSortMinutes(a) - habitSortMinutes(b);
 
-// Collapse a time-sorted habit list into runs of consecutive same-identity
-// habits — each run renders as one IdentityGroupCard with a shared band
-function groupByIdentityRuns(items) {
-  const groups = [];
-  for (const item of items) {
-    const last = groups[groups.length - 1];
-    if (last && last.identity.id === item.identity.id) last.items.push(item);
-    else groups.push({ identity: item.identity, items: [item] });
-  }
-  return groups;
-}
-
 // ─── ICONS — crisp inline SVG strokes, consistent across devices ──────────────
 const IC_PATHS = {
   bolt:   <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>,
@@ -1583,7 +1571,7 @@ function HabitRing({ checked, missed, color, streak, next, onClick, label, size 
 }
 
 // ─── HABIT ROW ────────────────────────────────────────────────────────────────
-// One habit inside an IdentityGroupCard: trigger cue → action row → meta.
+// One habit on the timeline: identity band above, then cue → action → coaching.
 function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, onMiss, openEditHabit, openDeleteHabit, first, showIdentity }) {
   const next = getNextMilestone(streak);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1781,65 +1769,6 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
     </div>
   );
 }
-
-// ─── IDENTITY GROUP CARD ──────────────────────────────────────────────────────
-// One card per run of consecutive same-identity habits in a time slot: a single
-// identity band on top (with the identity's done-today count), then one
-// HabitRow per habit — hierarchy reads identity → trigger → action.
-const IdentityGroupCard = memo(function IdentityGroupCard({ identity, items, todayData, justChecked, getStreakForHabit, toggle, markMiss, warnIds, openEditHabit, openDeleteHabit, doneToday, totalToday }) {
-  const dim = identity.colorDim || T.text;
-  return (
-    <div style={{
-      borderRadius: 14, marginBottom: 8,
-      background: T.surface,
-      border: `1px solid ${identity.color}55`,
-      overflow: "hidden",
-    }}>
-      {/* ── Identity band — who these habits are a vote for ── */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 7,
-        background: identity.color + "26", padding: "5px 10px 5px 12px",
-      }}>
-        <span style={{ fontSize:14, flexShrink: 0 }} aria-hidden="true">{identity.icon}</span>
-        <span style={{
-          flex: 1, minWidth: 0, fontSize:12, fontWeight: 800,
-          letterSpacing: "0.07em", textTransform: "uppercase", color: dim,
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-        }}>
-          {shortLabel(identity.label)}
-        </span>
-        <span
-          aria-label={`${doneToday} of ${totalToday} habits done today for ${shortLabel(identity.label)}`}
-          style={{
-            flexShrink: 0, fontSize:12, fontWeight: 800, color: dim,
-            background: "rgba(255,255,255,0.6)", borderRadius: 10, padding: "2px 8px",
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          {doneToday}/{totalToday}
-        </span>
-      </div>
-
-      {items.map(({ habit }, i) => (
-        <div key={habit.id} className={justChecked === habit.id ? "row-leaving" : ""}>
-          <HabitRow
-            habit={habit}
-            identity={identity}
-            checked={todayData[habit.id] === true}
-            missed={todayData[habit.id] === "miss"}
-            warnMissedYesterday={!!warnIds && warnIds.has(habit.id) && todayData[habit.id] == null}
-            streak={getStreakForHabit(habit.id, habit.frequency)}
-            toggle={toggle}
-            onMiss={markMiss}
-            openEditHabit={openEditHabit}
-            openDeleteHabit={openDeleteHabit}
-            first={i === 0}
-          />
-        </div>
-      ))}
-    </div>
-  );
-});
 
 // ─── FOCUS MODE — one habit at a time, full screen ────────────────────────────
 // A slot's worth of habits as a flow instead of a list: Skip / Done / 2-min.
@@ -2342,16 +2271,6 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
   const [matrixExpanded, setMatrixExpanded] = useState(false);
   const [doneOpen, setDoneOpen] = useState(false); // Completed section — collapsed by default
 
-  // Layout: time rail by default; identity groups opt-in — remembered across sessions.
-  // Key is versioned (-v2) so the switch to a rail default overrides any stored "groups".
-  const [layoutMode, setLayoutModeState] = useState(() => {
-    try { return localStorage.getItem("atoms-layout-v2") || "rail"; } catch { return "rail"; }
-  });
-  const setLayoutMode = (m) => {
-    setLayoutModeState(m);
-    try { localStorage.setItem("atoms-layout-v2", m); } catch { /* private mode */ }
-  };
-
   // Focus mode — snapshot of pending habits taken when the session starts
   const [focusItems, setFocusItems] = useState(null);
   const startFocus = () => {
@@ -2378,17 +2297,6 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
 
   const quote = useMemo(() => getDailyQuote(), []);
 
-  // Done/total per identity for the selected day — feeds the band's count pill
-  const identityDayCounts = useMemo(() => {
-    const m = {};
-    for (const { habit, identity } of scheduledHabits) {
-      const c = m[identity.id] || (m[identity.id] = { done: 0, total: 0 });
-      c.total += 1;
-      if (todayData[habit.id] === true) c.done += 1;
-    }
-    return m;
-  }, [scheduledHabits, todayData]);
-
   // Habits scheduled both today and yesterday that were NOT done yesterday —
   // fuels the "never miss twice" warning (Atomic Habits rule)
   const missedYesterdayIds = useMemo(() => {
@@ -2407,10 +2315,6 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
       ? scheduledHabits.filter(({ habit }) => missedYesterdayIds.has(habit.id) && todayData[habit.id] == null).length
       : 0,
     [selectedDate, todayKey, scheduledHabits, missedYesterdayIds, todayData]);
-
-  // Slot the clock is currently in — used to mark "Now" on today's section headers
-  const nowHour   = new Date().getHours();
-  const nowSlotId = (TIME_SLOTS.find(s => s.range && nowHour >= s.range[0] && nowHour < s.range[1]) || { id: "anytime" }).id;
 
   // Done/total across the day's active tasks — the Focus card's progress pill
   const taskCounts = useMemo(() => {
@@ -2636,118 +2540,22 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
         </div>
       )}
 
-      {/* Focus entry + layout toggle */}
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", margin:"0 2px" }}>
-        {selectedDate === todayKey && scheduledHabits.some(({ habit }) => todayData[habit.id] == null) ? (
+      {/* Focus entry */}
+      {selectedDate === todayKey && scheduledHabits.some(({ habit }) => todayData[habit.id] == null) && (
+        <div style={{ margin:"0 2px" }}>
           <button onClick={startFocus} style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12.5, fontWeight:800, color:"#fff", background:T.primary, border:"none", borderRadius:20, padding:"7px 15px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
             <Ic name="play" size={12} color="#fff" /> Focus
           </button>
-        ) : <span />}
-        <div style={{ display:"inline-flex", background:T.surf2, borderRadius:10, padding:2, gap:2 }} role="group" aria-label="Layout">
-          <button onClick={() => setLayoutMode("groups")} aria-pressed={layoutMode === "groups"} aria-label="Group by identity"
-            style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:12, fontWeight:700, padding:"5px 11px", borderRadius:8, border:"none", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
-              background: layoutMode === "groups" ? T.surface : "transparent", color: layoutMode === "groups" ? T.primary : T.muted }}>
-            <Ic name="rows" size={13} color={layoutMode === "groups" ? T.primary : T.muted} /> Groups
-          </button>
-          <button onClick={() => setLayoutMode("rail")} aria-pressed={layoutMode === "rail"} aria-label="Timeline view"
-            style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:12, fontWeight:700, padding:"5px 11px", borderRadius:8, border:"none", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
-              background: layoutMode === "rail" ? T.surface : "transparent", color: layoutMode === "rail" ? T.primary : T.muted }}>
-            <Ic name="rail" size={13} color={layoutMode === "rail" ? T.primary : T.muted} /> Timeline
-          </button>
         </div>
-      </div>
+      )}
 
       {/* Focus mode overlay */}
       {focusItems && (
         <FocusMode items={focusItems} toggle={toggle} onClose={() => setFocusItems(null)} />
       )}
 
-      {/* "Up next" hero — the single next pending habit by time (Law 1: one clear cue) */}
-      {selectedDate === todayKey && layoutMode === "groups" && (() => {
-        const nextUp = scheduledHabits.find(({ habit }) => todayData[habit.id] == null);
-        if (!nextUp) return null;
-        const { habit, identity } = nextUp;
-        const dim = identity.colorDim || T.text;
-        const streak = getStreakForHabit(habit.id, habit.frequency);
-        const nextMs = getNextMilestone(streak);
-        const cue = [habit.trigger, habit.time && to24h(habit.time), habit.location].filter(Boolean).join(" · ");
-        const check = () => toggle(habit.id, habit.frequency, identity);
-        return (
-          <div style={{ border:`2px solid ${identity.color}`, borderRadius:16, overflow:"hidden", background:T.surface }}>
-            <div style={{ display:"flex", alignItems:"center", gap:7, background:identity.color+"26", padding:"6px 12px" }}>
-              <span style={{ fontSize:11.5, fontWeight:800, letterSpacing:"0.09em", textTransform:"uppercase", color:dim }}>Up next</span>
-              <span style={{ flex:1 }} />
-              <span style={{ fontSize:13 }} aria-hidden="true">{identity.icon}</span>
-              <span style={{ fontSize:11.5, fontWeight:800, letterSpacing:"0.05em", textTransform:"uppercase", color:dim, maxWidth:180, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{shortLabel(identity.label)}</span>
-            </div>
-            <div style={{ padding:"12px 14px 13px" }}>
-              {cue && (
-                <div style={{ fontSize:12, color:T.muted, marginBottom:7, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                  <Ic name="bolt" size={12} color={T.muted} style={{ verticalAlign:"-2px" }} /> {cue}
-                </div>
-              )}
-              <div style={{ display:"flex", alignItems:"center", gap:11 }}>
-                <HabitRing
-                  checked={false}
-                  missed={false}
-                  color={identity.color}
-                  streak={streak}
-                  next={nextMs}
-                  onClick={check}
-                  label={`Check: ${habit.label}`}
-                  size={30}
-                />
-                <span onClick={check} style={{ flex:1, minWidth:0, fontSize:16, fontWeight:700, color:T.text, lineHeight:1.3, cursor:"pointer" }}>
-                  {habit.label}
-                </span>
-                {streak >= 2 && (
-                  <span style={{ fontSize:12, fontWeight:700, color:"#B45309", flexShrink:0, whiteSpace:"nowrap", background:T.gold+"1f", padding:"2px 8px", borderRadius:20 }} aria-label={`${streak} day streak`}>
-                    <Ic name="flame" size={11} color="#B45309" style={{ verticalAlign:"-1px" }} /> {streak}d
-                  </span>
-                )}
-              </div>
-              {habit.attractive && (
-                <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:9, marginLeft:41, fontSize:12.5, fontWeight:600, color:"#534AB7", minWidth:0 }}>
-                  <Ic name="spark" size={13} color="#534AB7" />
-                  <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.attractive}</span>
-                </div>
-              )}
-              {(habit.starter || habit.satisfying) && (
-                <div style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:8, marginTop:9, marginLeft:41 }}>
-                  {habit.starter && (
-                    <button
-                      onClick={check}
-                      aria-label={`Do the two-minute version: ${habit.starter}`}
-                      style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12.5, fontWeight:700, color:"#085041", background:"#E1F5EE", border:"1px solid #9FE1CB", borderRadius:20, padding:"7px 14px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", maxWidth:"100%" }}
-                    >
-                      <Ic name="clock" size={13} color="#085041" />
-                      <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>2-min: {habit.starter}</span>
-                      <Ic name="check" size={12} color="#085041" />
-                    </button>
-                  )}
-                  {habit.satisfying && (
-                    <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:12, fontWeight:600, color:"#854F0B", minWidth:0, maxWidth:"100%" }}>
-                      <Ic name="gift" size={13} color="#854F0B" />
-                      <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>then: {habit.satisfying}</span>
-                    </span>
-                  )}
-                </div>
-              )}
-              {nextMs && streak > 0 && (
-                <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:10, marginLeft:41 }} aria-label={`${streak} of ${nextMs.days} days to ${nextMs.label}`}>
-                  <div aria-hidden="true" style={{ flex:1, height:4, borderRadius:99, background:T.surf2, overflow:"hidden" }}>
-                    <div style={{ height:"100%", width:`${Math.min(100, (streak / nextMs.days) * 100)}%`, background:identity.color, borderRadius:99 }} />
-                  </div>
-                  <span aria-hidden="true" style={{ fontSize:12, color:T.muted, fontWeight:600, flexShrink:0, fontVariantNumeric:"tabular-nums" }}>{streak}/{nextMs.days}</span>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Time slot sections (groups) or time rail */}
-      {layoutMode === "rail" ? (() => {
+      {/* Timeline — habits on a time rail */}
+      {(() => {
         const visible = scheduledHabits.filter(({ habit }) => todayData[habit.id] !== true || habit.id === justChecked);
         if (visible.length === 0) return null;
         const firstPending = scheduledHabits.find(({ habit }) => todayData[habit.id] == null);
@@ -2789,48 +2597,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
             ))}
           </div>
         );
-      })() : TIME_SLOTS.map(slot => {
-        const slotAll     = scheduledHabits.filter(h => h.slotId === slot.id);
-        const slotVisible = slotAll.filter(({habit}) => todayData[habit.id] !== true || habit.id === justChecked);
-        if (slotVisible.length === 0) return null;
-        const pendingCnt  = slotAll.filter(({habit}) => todayData[habit.id] == null).length;
-        return (
-          <div key={slot.id}>
-            <div style={{ display:"flex", alignItems:"center", gap:8, margin:"4px 0 8px", paddingLeft:2 }}>
-              <span style={{ fontSize:16 }} aria-hidden="true">{slot.emoji}</span>
-              <span style={{ fontSize:14, fontWeight:700, color:T.text, fontFamily:FONT_DISPLAY, letterSpacing:"-0.01em" }}>{slot.label}</span>
-              {selectedDate === todayKey && slot.id === nowSlotId && (
-                <span style={{ fontSize:11.5, fontWeight:800, color:T.primary, background:T.primary+"14", border:`1px solid ${T.primary}44`, borderRadius:8, padding:"1px 7px", letterSpacing:"0.08em", textTransform:"uppercase" }}>
-                  Now
-                </span>
-              )}
-              {pendingCnt > 0 && (
-                <span style={{ fontSize:12, color:T.muted, marginLeft:"auto", fontWeight:600 }} aria-label={`${pendingCnt} habits remaining`}>
-                  {pendingCnt} left
-                </span>
-              )}
-            </div>
-
-            {groupByIdentityRuns(slotVisible).map(g => (
-              <IdentityGroupCard
-                key={g.items[0].habit.id}
-                identity={g.identity}
-                items={g.items}
-                todayData={todayData}
-                justChecked={justChecked}
-                getStreakForHabit={getStreakForHabit}
-                toggle={toggle}
-                markMiss={markMiss}
-                warnIds={selectedDate === todayKey ? missedYesterdayIds : null}
-                openEditHabit={openEditHabit}
-                openDeleteHabit={openDeleteHabit}
-                doneToday={(identityDayCounts[g.identity.id] || {}).done || 0}
-                totalToday={(identityDayCounts[g.identity.id] || {}).total || 0}
-              />
-            ))}
-          </div>
-        );
-      })}
+      })()}
 
       {/* Completed section — collapsed by default, tap the header to expand */}
       {(() => {
