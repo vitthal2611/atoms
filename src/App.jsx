@@ -1504,6 +1504,7 @@ const IC_PATHS = {
   skip:   <><polygon points="5 4 15 12 5 20 5 4"/><path d="M19 5v14"/></>,
   rows:   <><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></>,
   rail:   <><path d="M7 4v16"/><path d="M11 7h9"/><path d="M11 12h9"/><path d="M11 17h9"/><circle cx="7" cy="7" r="1.6" fill="currentColor" stroke="none"/><circle cx="7" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="7" cy="17" r="1.6" fill="currentColor" stroke="none"/></>,
+  info:   <><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.6h.01"/></>,
 };
 const Ic = ({ name, size = 13, color = "currentColor", style }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color}
@@ -1602,6 +1603,7 @@ function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHab
 // One habit on the timeline: cue → action → coaching (identity header is above).
 function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, first, showIdentity, hideTime }) {
   const next = getNextMilestone(streak);
+  const [showAttr, setShowAttr] = useState(false);
 
   // One cue line above the label: trigger · time · location · frequency.
   // The milestone countdown lives in the micro-bar, not as text.
@@ -1668,6 +1670,21 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               Missed
             </span>
           )}
+          {!checked && !missed && habit.attractive && (
+            <button
+              onClick={e => { e.stopPropagation(); setShowAttr(s => !s); }}
+              aria-label={showAttr ? "Hide why it's attractive" : "Why it's attractive"}
+              aria-expanded={showAttr}
+              style={{
+                flexShrink:0, width:26, height:26, borderRadius:"50%", border:"none",
+                background: showAttr ? "#534AB7" : "#EEEDFE", cursor:"pointer",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                WebkitTapHighlightColor:"transparent", transition:"background 0.15s",
+              }}
+            >
+              <Ic name="info" size={14} color={showAttr ? "#fff" : "#534AB7"} />
+            </button>
+          )}
           {streak >= 2 && !checked && (
             <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:700, color:"#B45309", flexShrink:0, whiteSpace:"nowrap", background:T.gold+"1f", padding:"2px 8px", borderRadius:20 }} aria-label={`${streak} day streak`}>
               <Ic name="flame" size={11} color="#B45309" /> {streak}d
@@ -1675,13 +1692,11 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           )}
         </div>
 
-        {/* Attractive bundle (Law 2) — revealed on hover (desktop); always shown on touch */}
-        {!checked && !missed && habit.attractive && (
-          <div className="attr-line" style={{ marginLeft:39, minWidth:0 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:9, fontSize:12.5, fontWeight:600, color:"#534AB7", minWidth:0 }}>
-              <Ic name="spark" size={13} color="#534AB7" />
-              <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.attractive}</span>
-            </div>
+        {/* Attractive bundle (Law 2) — revealed by tapping the info button */}
+        {!checked && !missed && habit.attractive && showAttr && (
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:9, marginLeft:39, fontSize:12.5, fontWeight:600, color:"#534AB7", background:"#EEEDFE", borderRadius:10, padding:"7px 11px", minWidth:0 }}>
+            <Ic name="spark" size={13} color="#534AB7" />
+            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.attractive}</span>
           </div>
         )}
 
@@ -3013,10 +3028,6 @@ html, body, #root { height: 100%; }
 #root ::-webkit-scrollbar { display: none; }
 #root * { scrollbar-width: none; }
 .habit-toggle:active { opacity: 0.7; transform: scale(0.98); }
-@media (hover: hover) {
-  .attr-line { max-height: 0; opacity: 0; overflow: hidden; transition: max-height 0.25s ease, opacity 0.25s ease; }
-  .habit-card:hover .attr-line { max-height: 44px; opacity: 1; }
-}
 .check-pop { animation: pop 0.25s cubic-bezier(0.34,1.56,0.64,1) both; }
 .card-leaving { animation: fadeOut 0.3s ease forwards; }
 .row-leaving { animation: fadeOut 0.35s ease 1.15s forwards; }
