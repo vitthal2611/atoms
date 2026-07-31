@@ -1623,10 +1623,10 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
       {/* ── Card body — cue, action, coaching (same layout as the Up Next hero) ── */}
       <div style={{ padding: "10px 12px 12px" }}>
-        {/* Cue line */}
+        {/* Cue line (Law 1 · make it obvious) — highlighted so the trigger stands out */}
         {!checked && (showIdentity || cueParts.length > 0) && (
-          <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:7, fontSize:12, color:T.muted, minWidth:0, maxWidth:"100%" }}>
-            {habit.trigger && <Ic name="bolt" size={12} color={T.muted} />}
+          <div style={{ display:"inline-flex", alignItems:"center", gap:5, marginBottom:8, maxWidth:"100%", fontSize:12, fontWeight:700, color:T.primary, background:T.primary+"14", border:`1px solid ${T.primary}22`, borderRadius:8, padding:"3px 9px", boxSizing:"border-box" }}>
+            {habit.trigger && <Ic name="bolt" size={12} color={T.primary} />}
             <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
               {[showIdentity && `${identity.icon} ${shortLabel(identity.label)}`, ...cueParts].filter(Boolean).join(" · ")}
             </span>
