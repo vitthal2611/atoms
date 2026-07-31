@@ -1603,7 +1603,8 @@ function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHab
 // One habit on the timeline: cue → action → coaching (identity header is above).
 function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, first, showIdentity, hideTime }) {
   const next = getNextMilestone(streak);
-  const [showAttr, setShowAttr] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
+  const hasCoaching = !!(habit.easy || habit.attractive || habit.starter || habit.satisfying);
 
   // One cue line above the label: trigger · time · location · frequency.
   // The milestone countdown lives in the micro-bar, not as text.
@@ -1670,19 +1671,19 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               Missed
             </span>
           )}
-          {!checked && !missed && habit.attractive && (
+          {!checked && !missed && hasCoaching && (
             <button
-              onClick={e => { e.stopPropagation(); setShowAttr(s => !s); }}
-              aria-label={showAttr ? "Hide why it's attractive" : "Why it's attractive"}
-              aria-expanded={showAttr}
+              onClick={e => { e.stopPropagation(); setShowInfo(s => !s); }}
+              aria-label={showInfo ? "Hide details" : "Show cue, bundle, and reward"}
+              aria-expanded={showInfo}
               style={{
                 flexShrink:0, width:26, height:26, borderRadius:"50%", border:"none",
-                background: showAttr ? "#534AB7" : "#EEEDFE", cursor:"pointer",
+                background: showInfo ? T.primary : T.primary+"14", cursor:"pointer",
                 display:"flex", alignItems:"center", justifyContent:"center",
                 WebkitTapHighlightColor:"transparent", transition:"background 0.15s",
               }}
             >
-              <Ic name="info" size={14} color={showAttr ? "#fff" : "#534AB7"} />
+              <Ic name="info" size={14} color={showInfo ? "#fff" : T.primary} />
             </button>
           )}
           {streak >= 2 && !checked && (
@@ -1692,22 +1693,26 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           )}
         </div>
 
-        {/* Attractive bundle (Law 2) — revealed by tapping the info button */}
-        {!checked && !missed && habit.attractive && showAttr && (
-          <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:9, marginLeft:39, fontSize:12.5, fontWeight:600, color:"#534AB7", background:"#EEEDFE", borderRadius:10, padding:"7px 11px", minWidth:0 }}>
-            <Ic name="spark" size={13} color="#534AB7" />
-            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.attractive}</span>
-          </div>
-        )}
-
-        {/* 2-min chip (Law 3) + then: reward */}
-        {!checked && !missed && (habit.starter || habit.satisfying) && (
-          <div style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:8, marginTop:9, marginLeft:39 }}>
+        {/* Coaching panel — environment, bundle, 2-min, reward; behind the info button */}
+        {!checked && !missed && hasCoaching && showInfo && (
+          <div style={{ display:"flex", flexDirection:"column", gap:8, marginTop:9, marginLeft:39, background:T.bg, borderRadius:10, padding:"9px 11px" }}>
+            {habit.easy && (
+              <div style={{ display:"flex", alignItems:"flex-start", gap:7, fontSize:12.5, color:T.text2, minWidth:0 }}>
+                <Ic name="home" size={13} color={T.primary} style={{ marginTop:2 }} />
+                <span><span style={{ fontWeight:800, color:T.primary }}>Set up: </span>{habit.easy}</span>
+              </div>
+            )}
+            {habit.attractive && (
+              <div style={{ display:"flex", alignItems:"flex-start", gap:7, fontSize:12.5, color:T.text2, minWidth:0 }}>
+                <Ic name="spark" size={13} color="#534AB7" style={{ marginTop:2 }} />
+                <span><span style={{ fontWeight:800, color:"#534AB7" }}>Attractive: </span>{habit.attractive}</span>
+              </div>
+            )}
             {habit.starter && (
               <button
                 onClick={() => toggle(habit.id, habit.frequency, identity)}
                 aria-label={`Do the two-minute version: ${habit.starter}`}
-                style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12.5, fontWeight:700, color:"#085041", background:"#E1F5EE", border:"1px solid #9FE1CB", borderRadius:20, padding:"6px 13px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", maxWidth:"100%" }}
+                style={{ display:"inline-flex", alignItems:"center", gap:6, alignSelf:"flex-start", maxWidth:"100%", fontSize:12.5, fontWeight:700, color:"#085041", background:"#E1F5EE", border:"1px solid #9FE1CB", borderRadius:20, padding:"6px 13px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}
               >
                 <Ic name="clock" size={13} color="#085041" />
                 <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>2-min: {habit.starter}</span>
@@ -1715,10 +1720,10 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               </button>
             )}
             {habit.satisfying && (
-              <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:12, fontWeight:600, color:"#854F0B", minWidth:0, maxWidth:"100%" }}>
-                <Ic name="gift" size={13} color="#854F0B" />
-                <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>then: {habit.satisfying}</span>
-              </span>
+              <div style={{ display:"flex", alignItems:"flex-start", gap:7, fontSize:12.5, color:T.text2, minWidth:0 }}>
+                <Ic name="gift" size={13} color="#854F0B" style={{ marginTop:2 }} />
+                <span><span style={{ fontWeight:800, color:"#854F0B" }}>Reward: </span>{habit.satisfying}</span>
+              </div>
             )}
           </div>
         )}
