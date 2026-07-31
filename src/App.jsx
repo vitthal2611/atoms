@@ -1604,7 +1604,8 @@ function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHab
 function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, first, showIdentity, hideTime }) {
   const next = getNextMilestone(streak);
   const [showInfo, setShowInfo] = useState(false);
-  const hasCoaching = !!(habit.easy || habit.attractive || habit.starter || habit.satisfying);
+  // 2-min starter stays on the card; the rest hide behind the info button
+  const hasInfo = !!(habit.easy || habit.attractive || habit.satisfying);
 
   // One cue line above the label: trigger · time · location · frequency.
   // The milestone countdown lives in the micro-bar, not as text.
@@ -1671,7 +1672,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               Missed
             </span>
           )}
-          {!checked && !missed && hasCoaching && (
+          {!checked && !missed && hasInfo && (
             <button
               onClick={e => { e.stopPropagation(); setShowInfo(s => !s); }}
               aria-label={showInfo ? "Hide details" : "Show cue, bundle, and reward"}
@@ -1693,8 +1694,23 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           )}
         </div>
 
-        {/* Coaching panel — environment, bundle, 2-min, reward; behind the info button */}
-        {!checked && !missed && hasCoaching && showInfo && (
+        {/* 2-min starter (Law 3 · make it easy) — always on the card, tappable to complete */}
+        {!checked && !missed && habit.starter && (
+          <div style={{ marginTop:9, marginLeft:39 }}>
+            <button
+              onClick={() => toggle(habit.id, habit.frequency, identity)}
+              aria-label={`Do the two-minute version: ${habit.starter}`}
+              style={{ display:"inline-flex", alignItems:"center", gap:6, maxWidth:"100%", fontSize:12.5, fontWeight:700, color:"#085041", background:"#E1F5EE", border:"1px solid #9FE1CB", borderRadius:20, padding:"6px 13px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}
+            >
+              <Ic name="clock" size={13} color="#085041" />
+              <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>2-min: {habit.starter}</span>
+              <Ic name="check" size={12} color="#085041" />
+            </button>
+          </div>
+        )}
+
+        {/* Coaching panel — environment, bundle, reward; behind the info button */}
+        {!checked && !missed && hasInfo && showInfo && (
           <div style={{ display:"flex", flexDirection:"column", gap:8, marginTop:9, marginLeft:39, background:T.bg, borderRadius:10, padding:"9px 11px" }}>
             {habit.easy && (
               <div style={{ display:"flex", alignItems:"flex-start", gap:7, fontSize:12.5, color:T.text2, minWidth:0 }}>
@@ -1707,17 +1723,6 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
                 <Ic name="spark" size={13} color="#534AB7" style={{ marginTop:2 }} />
                 <span><span style={{ fontWeight:800, color:"#534AB7" }}>Attractive: </span>{habit.attractive}</span>
               </div>
-            )}
-            {habit.starter && (
-              <button
-                onClick={() => toggle(habit.id, habit.frequency, identity)}
-                aria-label={`Do the two-minute version: ${habit.starter}`}
-                style={{ display:"inline-flex", alignItems:"center", gap:6, alignSelf:"flex-start", maxWidth:"100%", fontSize:12.5, fontWeight:700, color:"#085041", background:"#E1F5EE", border:"1px solid #9FE1CB", borderRadius:20, padding:"6px 13px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}
-              >
-                <Ic name="clock" size={13} color="#085041" />
-                <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>2-min: {habit.starter}</span>
-                <Ic name="check" size={12} color="#085041" />
-              </button>
             )}
             {habit.satisfying && (
               <div style={{ display:"flex", alignItems:"flex-start", gap:7, fontSize:12.5, color:T.text2, minWidth:0 }}>
