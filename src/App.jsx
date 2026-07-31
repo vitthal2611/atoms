@@ -1615,7 +1615,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
   ].filter(Boolean);
 
   return (
-    <div style={{
+    <div className="habit-card" style={{
       background: checked ? identity.color + "1f" : missed ? T.red + "10" : "transparent",
       borderTop: first ? "none" : `1px solid ${identity.color}22`,
       transition: "background 0.2s ease",
@@ -1675,11 +1675,13 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           )}
         </div>
 
-        {/* Attractive bundle (Law 2) */}
+        {/* Attractive bundle (Law 2) — revealed on hover (desktop); always shown on touch */}
         {!checked && !missed && habit.attractive && (
-          <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:9, marginLeft:39, fontSize:12.5, fontWeight:600, color:"#534AB7", minWidth:0 }}>
-            <Ic name="spark" size={13} color="#534AB7" />
-            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.attractive}</span>
+          <div className="attr-line" style={{ marginLeft:39, minWidth:0 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:9, fontSize:12.5, fontWeight:600, color:"#534AB7", minWidth:0 }}>
+              <Ic name="spark" size={13} color="#534AB7" />
+              <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.attractive}</span>
+            </div>
           </div>
         )}
 
@@ -3011,6 +3013,10 @@ html, body, #root { height: 100%; }
 #root ::-webkit-scrollbar { display: none; }
 #root * { scrollbar-width: none; }
 .habit-toggle:active { opacity: 0.7; transform: scale(0.98); }
+@media (hover: hover) {
+  .attr-line { max-height: 0; opacity: 0; overflow: hidden; transition: max-height 0.25s ease, opacity 0.25s ease; }
+  .habit-card:hover .attr-line { max-height: 44px; opacity: 1; }
+}
 .check-pop { animation: pop 0.25s cubic-bezier(0.34,1.56,0.64,1) both; }
 .card-leaving { animation: fadeOut 0.3s ease forwards; }
 .row-leaving { animation: fadeOut 0.35s ease 1.15s forwards; }
