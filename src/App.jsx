@@ -149,6 +149,181 @@ function getWeekDates() {
 }
 const DAY_LABELS=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 
+// ─── HABIT REVIEW — analytics ─────────────────────────────────────────────────
+// A review is offered only when the data says a habit is genuinely struggling,
+// never on a schedule. Reviewing a habit that's working is how you train someone
+// to dismiss the prompt without reading it.
+const REVIEW_WINDOW    = 14;   // days of history to walk back over
+const REVIEW_MIN_DUE   = 4;    // need at least this many scheduled days to judge
+const REVIEW_MAX_RATE  = 0.5;  // struggling if kept ≤ half its scheduled days
+const REVIEW_SNOOZE    = 14;   // days of silence after "just an unusual week"
+const REVIEW_FOLLOWUP  = 14;   // days before we check whether a fix worked
+const REVIEW_STUCK_AT  = 2;    // failed fixes before offering to pause/archive
+
+function addDaysKey(dateKey, n) {
+  const [y, mo, d] = dateKey.split("-").map(Number);
+  const dt = new Date(y, mo - 1, d);
+  dt.setDate(dt.getDate() + n);
+  return dateToKey(dt);
+}
+function daysBetweenKeys(a, b) {
+  const [y1,m1,d1] = a.split("-").map(Number);
+  const [y2,m2,d2] = b.split("-").map(Number);
+  return Math.round((new Date(y2,m2-1,d2) - new Date(y1,m1-1,d1)) / 86400000);
+}
+
+// Walk back over the window and record every day this habit was actually due.
+// `days` holds the most recent scheduled days, oldest first, each { key, dow, kept }.
+function habitReviewStats(habit, allData, todayKey, window = REVIEW_WINDOW) {
+  const days = [];
+  for (let i = window; i >= 1; i--) {          // yesterday backwards; today is still in play
+    const key = addDaysKey(todayKey, -i);
+    if (!isScheduledOn(habit.frequency, key)) continue;
+    const [y, mo, d] = key.split("-").map(Number);
+    const jsDay = new Date(y, mo - 1, d).getDay();
+    days.push({ key, dow: jsDay === 0 ? 6 : jsDay - 1, kept: (allData[key] || {})[habit.id] === true });
+  }
+  const due  = days.length;
+  const kept = days.filter(d => d.kept).length;
+  return { days, due, kept, rate: due ? kept / due : 1 };
+}
+
+// Which days actually worked? Used both to rank the diagnosis list and to build
+// the "trim to the days you kept it" fix — the schedule change writes itself.
+function missPattern(stats) {
+  const { days } = stats;
+  if (days.length < REVIEW_MIN_DUE) return null;
+  const keptDows = [...new Set(days.filter(d => d.kept).map(d => d.dow))].sort((a,b)=>a-b);
+  const missDows = [...new Set(days.filter(d => !d.kept).map(d => d.dow))].sort((a,b)=>a-b);
+  if (!keptDows.length || !missDows.length) return null;
+  // A day only counts as reliable if it was never missed, and vice versa
+  const cleanKept = keptDows.filter(d => !missDows.includes(d));
+  if (!cleanKept.length) return null;
+
+  const isWeekend = d => d >= 5;
+  const allKeptWeekend  = cleanKept.every(isWeekend);
+  const allMissWeekday  = missDows.every(d => !isWeekend(d));
+  if (allKeptWeekend && allMissWeekday)
+    return { kind: "schedule", days: cleanKept, text: "Missed every weekday, kept the weekend." };
+
+  const allKeptWeekday = cleanKept.every(d => !isWeekend(d));
+  const allMissWeekend = missDows.every(isWeekend);
+  if (allKeptWeekday && allMissWeekend)
+    return { kind: "schedule", days: cleanKept, text: "Kept it on weekdays, missed both weekend days." };
+
+  if (cleanKept.length <= 3)
+    return { kind: "schedule", days: cleanKept,
+             text: `Only stuck on ${cleanKept.map(d => DAY_LABELS[d]).join(", ")}.` };
+  return null;
+}
+
+const reviewLog = (habit) => Array.isArray(habit.reviews) ? habit.reviews : [];
+
+// Fixes that were applied and then didn't lift the habit out of trouble.
+const failedFixCount = (habit) => reviewLog(habit).filter(r => r.field && r.worked === false).length;
+
+// A review already applied, old enough to judge, and not yet reported on.
+function pendingFollowUp(habit, todayKey) {
+  const last = reviewLog(habit).filter(r => r.field && r.worked == null).pop();
+  if (!last) return null;
+  return daysBetweenKeys(last.at, todayKey) >= REVIEW_FOLLOWUP ? last : null;
+}
+
+// Pick at most ONE habit to talk about — the worst offender. A bad week can put
+// several habits in trouble at once, and a stack of prompts reads as a pile-on.
+function pickReviewTarget(identities, allData, todayKey) {
+  let best = null;
+  for (const identity of identities) {
+    for (const habit of identity.habits) {
+      if (habit.archived) continue;
+      if (habit.reviewSnoozeUntil && habit.reviewSnoozeUntil > todayKey) continue;
+      const stats = habitReviewStats(habit, allData, todayKey);
+      if (stats.due < REVIEW_MIN_DUE) continue;
+
+      const followUp = pendingFollowUp(habit, todayKey);
+      if (followUp) {
+        // Follow-ups jump the queue: they're usually good news, and they're
+        // the only way a fix ever gets marked as having worked.
+        return { habit, identity, stats, pattern: missPattern(stats), followUp, mode: "followup" };
+      }
+      if (stats.rate > REVIEW_MAX_RATE) continue;
+      if (!best || stats.rate < best.stats.rate) {
+        best = { habit, identity, stats, pattern: missPattern(stats), followUp: null, mode: "review" };
+      }
+    }
+  }
+  return best;
+}
+
+// ─── HABIT REVIEW — diagnoses ─────────────────────────────────────────────────
+// One answer per Law, plus scheduling. Each maps to exactly one habit field, so
+// the diagnosis decides what gets rewritten — no second question needed.
+// `fallback(habit)` supplies a suggestion when the AI call can't be made.
+const DIAGNOSES = [
+  { id:"forgot", field:"trigger", law:"Law 1 · Obvious", icon:"bulb", text:"I forgot it existed",
+    fieldLabel:"Cue",
+    why:"A habit you forget doesn't need more willpower — it needs a louder cue.",
+    fallback:() => "After I pour my morning coffee" },
+  { id:"unwilling", field:"attractive", law:"Law 2 · Attractive", icon:"spark", text:"Remembered, didn't want to",
+    fieldLabel:"Attractive",
+    why:"Willpower loses to boredom. Tie it to something you already look forward to.",
+    fallback:(h) => `Only listen to my favourite podcast while I ${firstWords(h.label)}` },
+  { id:"toobig", field:"starter", law:"Law 3 · Easy", icon:"mountain", text:"Too big, no time",
+    fieldLabel:"2-minute starter",
+    why:"A habit you skip is too big. Shrink it until it's hard to say no.",
+    fallback:(h) => shrinkLabel(h.label) },
+  { id:"flat", field:"satisfying", law:"Law 4 · Satisfying", icon:"gift", text:"Did it, felt like nothing",
+    fieldLabel:"Reward",
+    why:"Behaviour that isn't rewarded doesn't repeat. Close the loop immediately.",
+    fallback:() => "Tick it off on the wall calendar" },
+  // Scheduling is the odd one out: it rewrites `frequency`, an object, so it
+  // gets a one-tap confirm built from the observed pattern rather than a textarea.
+  { id:"schedule", field:"frequency", law:"Scheduling", icon:"clock", text:"Wrong days or wrong time",
+    fieldLabel:"Frequency",
+    why:"The habit may be fine — the schedule isn't.",
+    fallback:() => "" },
+];
+const diagnosisById = (id) => DIAGNOSES.find(d => d.id === id);
+
+// "Read 10 pages" → "Read 1 page"; "Meditate 20 minutes" → "Meditate 2 minutes".
+// Deliberately dumb — it only has to be sane when the AI is unavailable.
+function shrinkLabel(label = "") {
+  const shrunk = label.replace(/\b(\d+)\s*(pages?|minutes?|mins?|reps?|km|miles?|chapters?)\b/i,
+    (_, n, unit) => {
+      const one = /^(pages?|chapters?|reps?)$/i.test(unit);
+      const singular = one ? unit.replace(/s$/i, "") : unit;
+      return `${one ? 1 : 2} ${singular}`;
+    });
+  return shrunk === label ? `Just start — two minutes of "${label}"` : shrunk;
+}
+const firstWords = (s = "") => s.split(/\s+/).slice(0, 3).join(" ").toLowerCase();
+
+// Ask the Gemini-backed callable for a tailored rewrite of one field. Resolves to
+// { value, note } on success and null on any failure — the caller falls back to a
+// static suggestion, because a struggling habit is the worst moment to dead-end.
+async function fetchFieldSuggestion(habit, identityLabel, field) {
+  try {
+    const { getFunctions, httpsCallable } = await import("firebase/functions");
+    const call = httpsCallable(getFunctions(), "askJamesClear", { timeout: 20000 });
+    const res = await call({
+      mode: "field",
+      field,
+      habit: {
+        label: habit.label, identity: identityLabel,
+        trigger: habit.trigger, attractive: habit.attractive, easy: habit.easy,
+        starter: habit.starter, satisfying: habit.satisfying,
+        time: habit.time, location: habit.location,
+        frequency: getFreqLabel(habit.frequency),
+      },
+    });
+    const value = String(res?.data?.suggestion?.value || "").trim();
+    if (!value) return null;
+    return { value, note: String(res?.data?.suggestion?.note || "").trim() };
+  } catch {
+    return null;   // offline, over quota, cold start — all handled the same way
+  }
+}
+
 // ─── MODAL ────────────────────────────────────────────────────────────────────
 function Modal({ title, onClose, children, descriptionId }) {
   const titleId      = useId();
@@ -606,7 +781,21 @@ export default function App() {
   const [todayKey, setTodayKey] = useState(getTodayKey);
   const todayData    = data[todayKey]    || {};
   const selectedData = data[selectedDate] || {};
-  const allHabits    = useMemo(() => identities.flatMap(i => i.habits), [identities]);
+  // Archived habits stay in storage (history and streaks survive) but drop out
+  // of every tracking surface. Raw `identities` is kept for CRUD by id.
+  const liveIdentities = useMemo(
+    () => identities.map(i => ({ ...i, habits: i.habits.filter(h => !h.archived) })),
+    [identities]
+  );
+  const allHabits    = useMemo(() => liveIdentities.flatMap(i => i.habits), [liveIdentities]);
+
+  // At most one habit is ever up for review — see pickReviewTarget.
+  const reviewTarget = useMemo(
+    () => pickReviewTarget(liveIdentities, data, todayKey),
+    [liveIdentities, data, todayKey]
+  );
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewDismissed, setReviewDismissed] = useState(null); // habit id, this session only
 
   // ── Scores — must be before early returns (Rules of Hooks) ──
   const scheduledToday = useMemo(
@@ -829,22 +1018,98 @@ export default function App() {
   const openAddHabit      = useCallback((defaultIdentityId) => { setModalCtx(defaultIdentityId ? { defaultIdentityId } : null); setModal("addHabit"); }, []);
   const openAddIdentity   = useCallback(() => setModal("addIdentity"), []);
 
+  // ── Habit review mutations ──
+  // Every one writes onto the habit inside `identities`, so it persists with the
+  // rest of the habit — no separate collection to keep in sync.
+  const mutateHabit = useCallback((habitId, identityId, fn) => {
+    setIdentities(prev => prev.map(ident =>
+      ident.id !== identityId ? ident
+        : { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : fn(h)) }
+    ));
+  }, []);
+
+  const applyReviewFix = useCallback((habitId, identityId, entry) => {
+    const at = getTodayKey();
+    mutateHabit(habitId, identityId, h => {
+      const patch = entry.field === "frequency"
+        ? { frequency: entry.frequency }
+        : { [entry.field]: entry.to };
+      return {
+        ...h, ...patch,
+        // `worked: null` marks it as awaiting the two-week verdict
+        reviews: [...reviewLog(h), {
+          at, dx: entry.dx, field: entry.field,
+          from: entry.from, to: entry.to, baseRate: entry.baseRate, worked: null,
+        }],
+      };
+    });
+  }, [mutateHabit]);
+
+  const snoozeReview = useCallback((habitId, identityId, days) => {
+    const until = addDaysKey(getTodayKey(), days);
+    mutateHabit(habitId, identityId, h => ({
+      ...h, reviewSnoozeUntil: until,
+      reviews: [...reviewLog(h), { at: getTodayKey(), dx: "fine", field: null, snoozedTo: until }],
+    }));
+  }, [mutateHabit]);
+
+  // Record the verdict on a past fix and reset the clock either way, so a habit
+  // that's still failing gets a fresh window rather than nagging tomorrow.
+  const resolveFollowUp = useCallback((habitId, identityId, reviewAt, worked) => {
+    mutateHabit(habitId, identityId, h => ({
+      ...h,
+      reviewSnoozeUntil: addDaysKey(getTodayKey(), worked ? REVIEW_SNOOZE : 3),
+      reviews: reviewLog(h).map(r => r.at === reviewAt && r.worked == null ? { ...r, worked } : r),
+    }));
+  }, [mutateHabit]);
+
+  const archiveHabit = useCallback((habitId, identityId) => {
+    mutateHabit(habitId, identityId, h => ({ ...h, archived: true }));
+  }, [mutateHabit]);
+
   // ── Daily task CRUD (stable callbacks — only touch setDailyTasks) ──
-  // Tasks carry a simple `priority`: "H" | "M" | "L" (see PRIORITIES below).
-  const addTask = useCallback((dateKey, text, priority = "M") => {
+  // Tasks carry `star`: true for one of the day's Big 3, false for the backlog.
+  // (Legacy tasks may still carry `priority`/`quadrant` — see migrateStars below.)
+  const addTask = useCallback((dateKey, text, star = false) => {
     setDailyTasks(prev => {
       const existing = prev[dateKey] || [];
-      return { ...prev, [dateKey]: [...existing, { id: uid(), text, done: false, priority }] };
+      // Respect the cap even if a caller asks for a starred task
+      const canStar = star && countStarred(existing) < STAR_LIMIT;
+      return { ...prev, [dateKey]: [...existing, { id: uid(), text, done: false, star: canStar }] };
+    });
+  }, []);
+
+  // Star / unstar a task. Unstarring is always allowed; starring is refused
+  // once the day already has STAR_LIMIT picks — the cap is the whole point.
+  const toggleStar = useCallback((dateKey, taskId) => {
+    setDailyTasks(prev => {
+      const list = prev[dateKey] || [];
+      const target = list.find(t => t.id === taskId);
+      if (!target) return prev;
+      if (!isStarred(target) && countStarred(list) >= STAR_LIMIT) return prev; // at cap — no-op
+      return {
+        ...prev,
+        [dateKey]: list.map(t => t.id === taskId ? { ...t, star: !isStarred(t) } : t),
+      };
     });
   }, []);
 
   const toggleTask = useCallback((dateKey, taskId) => {
-    setDailyTasks(prev => ({
-      ...prev,
-      [dateKey]: (prev[dateKey] || []).map(t =>
-        t.id === taskId ? { ...t, done: !t.done } : t
-      ),
-    }));
+    setDailyTasks(prev => {
+      const list = prev[dateKey] || [];
+      const target = list.find(t => t.id === taskId);
+      if (!target) return prev;
+      // Re-opening a completed star tries to rejoin the Big 3. If its old slot
+      // has since been filled, it comes back unstarred rather than making four.
+      const reopening = target.done && isStarred(target);
+      const noRoom    = reopening && countStarred(list) >= STAR_LIMIT;
+      return {
+        ...prev,
+        [dateKey]: list.map(t =>
+          t.id === taskId ? { ...t, done: !t.done, star: noRoom ? false : t.star } : t
+        ),
+      };
+    });
   }, []);
 
   const deleteTask = useCallback((dateKey, taskId) => {
@@ -879,10 +1144,13 @@ export default function App() {
       const nextKey = dateToKey(d);
       const nextList = prev[nextKey] || [];
       if (nextList.some(t => t.carriedFrom === taskId)) return prev;
+      // The star travels with the task — a starred item you push to tomorrow is
+      // still important tomorrow. Clamped so the destination day can't exceed the cap.
+      const keepStar = isStarred(src) && countStarred(nextList) < STAR_LIMIT;
       return {
         ...prev,
         [dateKey]: list.map(t => t.id === taskId ? { ...t, carried: true } : t),
-        [nextKey]: [...nextList, { ...src, id: uid(), done: false, carried: false, carriedFrom: taskId }],
+        [nextKey]: [...nextList, { ...src, id: uid(), done: false, carried: false, star: keepStar, carriedFrom: taskId }],
       };
     });
   }, []);
@@ -894,11 +1162,28 @@ export default function App() {
     }));
   }, []);
 
-  const setTaskPriority = useCallback((dateKey, taskId, priority) => {
-    setDailyTasks(prev => ({
-      ...prev,
-      [dateKey]: (prev[dateKey] || []).map(t => t.id === taskId ? { ...t, priority } : t),
-    }));
+  // One-time migration: tasks created under the old High/Medium/Low system have
+  // no `star` field. Promote up to STAR_LIMIT of that day's High tasks so the
+  // signal survives the switch, and mark the day migrated by writing `star` on
+  // every task. Runs per day-bucket, and is a no-op once every task has `star`.
+  const migrateStars = useCallback(() => {
+    setDailyTasks(prev => {
+      let changed = false;
+      const next = {};
+      for (const [dateKey, list] of Object.entries(prev)) {
+        if (list.every(t => typeof t.star === "boolean")) { next[dateKey] = list; continue; }
+        let used = countStarred(list); // stars already set on this day count against the cap
+        next[dateKey] = list.map(t => {
+          if (typeof t.star === "boolean") return t;
+          const wasHigh = taskPriority(t) === "H" && !t.done && !t.carried;
+          const star = wasHigh && used < STAR_LIMIT;
+          if (star) used++;
+          return { ...t, star };
+        });
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
   }, []);
 
   // ── Task rollover — runs on every refresh/mount and at midnight.
@@ -921,7 +1206,15 @@ export default function App() {
       const updatedYesterday = (prev[yesterday] || []).map(t =>
         carriedIds.has(t.id) ? { ...t, carried: true } : t
       );
-      const newToday = [...todayTasks, ...toCarry.map(t => ({ ...t, id: uid(), done: false, carriedFrom: t.id }))];
+      // Stars survive the midnight rollover — an unfinished priority is still a
+      // priority today. Fill the day's remaining slots in order; anything past
+      // the cap lands unstarred in the backlog rather than blowing through it.
+      let slots = STAR_LIMIT - countStarred(todayTasks);
+      const newToday = [...todayTasks, ...toCarry.map(t => {
+        const keepStar = isStarred(t) && slots > 0;
+        if (keepStar) slots--;
+        return { ...t, id: uid(), done: false, star: keepStar, carriedFrom: t.id };
+      })];
       return { ...prev, [yesterday]: updatedYesterday, [today]: newToday };
     });
   }, []);
@@ -933,13 +1226,14 @@ export default function App() {
       const now = new Date();
       return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) - now;
     };
+    migrateStars();    // no-op once every task carries a `star` field
     performRollover(); // safe on every mount — carriedFrom dedup prevents duplicates
     let t = setTimeout(function tick() {
       performRollover();
       t = setTimeout(tick, msToMidnight());
     }, msToMidnight());
     return () => clearTimeout(t);
-  }, [user, dataLoading, performRollover]);
+  }, [user, dataLoading, performRollover, migrateStars]);
 
   // ── Online / offline detection ──
   useEffect(() => {
@@ -1175,6 +1469,16 @@ export default function App() {
       )}
 
       {/* ── Modals ── */}
+      {reviewOpen && reviewTarget && (
+        <HabitReview
+          target={reviewTarget}
+          onApply={applyReviewFix}
+          onSnooze={snoozeReview}
+          onFollowUp={resolveFollowUp}
+          onArchive={archiveHabit}
+          onClose={() => setReviewOpen(false)}
+        />
+      )}
       {modal==="addHabit" && (
         <Modal title="Add New Habit" onClose={()=>setModal(null)}>
           <HabitForm
@@ -1279,7 +1583,7 @@ export default function App() {
       <main style={S.scrollArea} ref={scrollRef}>
         {view==="today" && (
           <TodayView
-            identities={identities}
+            identities={liveIdentities}
             allHabits={allHabits}
             todayData={selectedData}
             allData={data}
@@ -1300,16 +1604,19 @@ export default function App() {
             toggleTask={toggleTask}
             deleteTask={deleteTask}
             editTask={editTask}
-            setTaskPriority={setTaskPriority}
+            toggleStar={toggleStar}
             deferTask={deferTask}
+            reviewTarget={reviewTarget && reviewTarget.habit.id !== reviewDismissed ? reviewTarget : null}
+            onOpenReview={() => setReviewOpen(true)}
+            onDismissReview={() => setReviewDismissed(reviewTarget?.habit.id ?? null)}
           />
         )}
 
-        {view==="week"    && <WeekView data={data} todayKey={todayKey} identities={identities}/>}
-        {view==="streaks" && <StreaksView data={data} getStreak={getStreakForHabit} identities={identities}/>}
+        {view==="week"    && <WeekView data={data} todayKey={todayKey} identities={liveIdentities}/>}
+        {view==="streaks" && <StreaksView data={data} getStreak={getStreakForHabit} identities={liveIdentities}/>}
         {view==="manage"  && (
           <ManageView
-            identities={identities}
+            identities={liveIdentities}
             onAddHabit={openAddHabit}
             onEditHabit={openEditHabit}
             onDeleteHabit={openDeleteHabit}
@@ -1504,9 +1811,14 @@ const IC_PATHS = {
   skip:   <><polygon points="5 4 15 12 5 20 5 4"/><path d="M19 5v14"/></>,
   rows:   <><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></>,
   rail:   <><path d="M7 4v16"/><path d="M11 7h9"/><path d="M11 12h9"/><path d="M11 17h9"/><circle cx="7" cy="7" r="1.6" fill="currentColor" stroke="none"/><circle cx="7" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="7" cy="17" r="1.6" fill="currentColor" stroke="none"/></>,
+  star:   <polygon points="12 2.6 15 9 22 9.9 17 14.6 18.3 21.4 12 18.1 5.7 21.4 7 14.6 2 9.9 9 9"/>,
+  bulb:   <><path d="M9 18h6"/><path d="M10 22h4"/><path d="M8 14a6 6 0 1 1 8 0c-.8.7-1.3 1.5-1.5 2.5h-5c-.2-1-.7-1.8-1.5-2.5z"/></>,
+  mountain: <><path d="M3 20h18L14 6l-3.5 7L8 10z"/></>,
+  trend:  <><path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v5h-5"/></>,
 };
-const Ic = ({ name, size = 13, color = "currentColor", style }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color}
+// `fill` lets an outline glyph render solid — used by the Big 3 star toggle
+const Ic = ({ name, size = 13, color = "currentColor", fill = "none", style }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color}
     strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
     aria-hidden="true" style={{ flexShrink: 0, ...style }}>
     {IC_PATHS[name]}
@@ -1623,10 +1935,10 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
       {/* ── Card body — cue, action, coaching (same layout as the Up Next hero) ── */}
       <div style={{ padding: "10px 12px 12px" }}>
-        {/* Cue line */}
+        {/* Cue line (Law 1 · make it obvious) — identity-tinted pill so the trigger stands out */}
         {!checked && (showIdentity || cueParts.length > 0) && (
-          <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:7, fontSize:12, color:T.muted, minWidth:0, maxWidth:"100%" }}>
-            {habit.trigger && <Ic name="bolt" size={12} color={T.muted} />}
+          <div style={{ display:"inline-flex", alignItems:"center", gap:5, marginBottom:8, maxWidth:"100%", fontSize:12, fontWeight:700, color:identity.colorDim || T.text, background:identity.color+"1f", border:`1px solid ${identity.color}44`, borderRadius:8, padding:"3px 9px", boxSizing:"border-box" }}>
+            {habit.trigger && <Ic name="bolt" size={12} color={identity.colorDim || T.text} />}
             <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
               {[showIdentity && `${identity.icon} ${shortLabel(identity.label)}`, ...cueParts].filter(Boolean).join(" · ")}
             </span>
@@ -1784,8 +2096,8 @@ function FocusMode({ items, toggle, onClose }) {
               {cur.habit.label}
             </div>
             {(cur.habit.trigger || cur.habit.time || cur.habit.location) && (
-              <div style={{ fontSize:13, color:T.muted }}>
-                <Ic name="bolt" size={12} color={T.muted} style={{ verticalAlign:"-1px" }} /> {[cur.habit.trigger, cur.habit.time && to24h(cur.habit.time), cur.habit.location].filter(Boolean).join(" · ")}
+              <div style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:13, fontWeight:700, color:cur.identity.colorDim || T.text, background:cur.identity.color+"1f", border:`1px solid ${cur.identity.color}44`, borderRadius:8, padding:"3px 9px", boxSizing:"border-box" }}>
+                <Ic name="bolt" size={12} color={cur.identity.colorDim || T.text} style={{ verticalAlign:"-1px" }} /> {[cur.habit.trigger, cur.habit.time && to24h(cur.habit.time), cur.habit.location].filter(Boolean).join(" · ")}
               </div>
             )}
             {cur.habit.attractive && (
@@ -1914,15 +2226,48 @@ function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
 }
 
 // ─── DAILY TASKS CARD ─────────────────────────────────────────────────────────
-// Simple priority list: each task is High, Medium, or Low.
-// Colors are drawn from the app's Ocean Depth palette (T), not arbitrary hues.
-const PRIORITIES = [
-  { key: "H", label: "High",   accent: T.red,     dark: "#791F1F", bg: "#FEE2E2" },
-  { key: "M", label: "Medium", accent: T.gold,    dark: "#633806", bg: "#FEF3C7" },
-  { key: "L", label: "Low",    accent: "#64748B", dark: "#334155", bg: "#E2E8F0" },
-];
-const PRIORITY_ORDER = { H: 0, M: 1, L: 2 };
-const priorityOf = (key) => PRIORITIES.find(p => p.key === key) || PRIORITIES[1];
+// The Big 3: each day you pick at most three tasks that actually matter.
+// The cap is the feature — an uncapped "important" flag drifts back into
+// everything-is-important, which is exactly what the old H/M/L system did.
+const STAR_LIMIT = 3;
+// Every user-facing label derives from the cap, so changing STAR_LIMIT alone
+// renames the feature everywhere — no stale "Big N" strings left behind.
+const BIG_LABEL  = `Big ${STAR_LIMIT}`;
+const STAR_COLOR = T.gold;                       // amber — reserved for the Big 3
+const STAR_DARK  = "#633806";                    // readable text on an amber tint
+const isStarred  = (t) => t.star === true;
+// The Big 3 is a live commitment, not a tally: a finished task leaves it
+// entirely. Only open stars count, so completing one vacates its slot and the
+// card stops referring to it — the done work lives in the Completed strip.
+const countStarred = (list) => list.reduce((n, t) => n + (isStarred(t) && !t.done && !t.carried ? 1 : 0), 0);
+// Split a day's open tasks into [big3, rest], each keeping insertion order
+const splitByStar = (list) => [list.filter(isStarred), list.filter(t => !isStarred(t))];
+
+// ─── STAR TOGGLE — promote a task into the day's Big 3 ────────────────────────
+// At the cap the button stays visible but inert, so the tradeoff is legible:
+// you can see there's no room left without the control vanishing on you.
+function StarButton({ starred, atCap, onToggle, size = 20, label }) {
+  const blocked = !starred && atCap;
+  return (
+    <button
+      onClick={blocked ? undefined : onToggle}
+      aria-pressed={starred}
+      disabled={blocked}
+      title={blocked ? `${BIG_LABEL} is full — unstar one first` : starred ? `Remove from ${BIG_LABEL}` : `Add to ${BIG_LABEL}`}
+      aria-label={blocked ? `${BIG_LABEL} is full. Unstar another task first.` : starred ? `Remove from ${BIG_LABEL}: ${label}` : `Add to ${BIG_LABEL}: ${label}`}
+      style={{
+        display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+        width:size + 10, height:size + 10, padding:0, borderRadius:8,
+        background:"transparent", border:"none",
+        cursor: blocked ? "default" : "pointer",
+        opacity: blocked ? 0.28 : 1,
+        WebkitTapHighlightColor:"transparent", transition:"opacity 0.15s",
+      }}
+    >
+      <Ic name="star" size={size} color={starred ? STAR_COLOR : T.muted} fill={starred ? STAR_COLOR : "none"} />
+    </button>
+  );
+}
 
 // ─── SWIPE ROW — swipe right to complete, left to delete ──────────────────────
 function SwipeRow({ onRight, onLeft, radius = 0, children }) {
@@ -1979,21 +2324,19 @@ function SwipeRow({ onRight, onLeft, radius = 0, children }) {
     </div>
   );
 }
-// Back-compat: tasks created during the Eisenhower-matrix era carry a
-// `quadrant` field instead of `priority`. Map them over so old data still
-// lands somewhere sensible; anything unrecognized falls back to Medium.
+// Back-compat only — read by migrateStars() to decide which legacy tasks
+// become one of the Big 3. Tasks from the Eisenhower-matrix era carry a
+// `quadrant` instead of `priority`; anything unrecognized falls back to Medium.
 function taskPriority(t) {
   if (t.priority === "H" || t.priority === "M" || t.priority === "L") return t.priority;
   if (t.quadrant === "do") return "H";
   if (t.quadrant === "eliminate") return "L";
   return "M";
 }
-// Sort key: High → Medium → Low
-const taskRank = (t) => PRIORITY_ORDER[taskPriority(t)];
 
 // ─── QUICK ADD TASK — always-visible one-row composer ─────────────────────────
-// Dead-simple add: a roomy full-width field + Add button. New tasks default to
-// Medium priority — set it later by tapping the chip on the row.
+// Dead-simple add: a roomy full-width field + Add button. New tasks land in the
+// backlog unstarred — promoting one into the Big 3 is a deliberate second act.
 function QuickAddTask({ dateKey, onAdd }) {
   const [val, setVal] = useState("");
   const inputRef = useRef(null);
@@ -2001,7 +2344,7 @@ function QuickAddTask({ dateKey, onAdd }) {
   const add = () => {
     const t = val.trim();
     if (!t) return;
-    onAdd(dateKey, t, "M");
+    onAdd(dateKey, t, false);
     setVal("");
     inputRef.current?.focus();
   };
@@ -2037,12 +2380,11 @@ function QuickAddTask({ dateKey, onAdd }) {
   );
 }
 
-const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd, onToggle, onDelete, onEdit, onPriority, onDefer, addBar }) {
+const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd, onToggle, onDelete, onEdit, onStar, onDefer, addBar }) {
   const [editingId,    setEditingId]    = useState(null);
   const [editVal,      setEditVal]      = useState("");
   const [completedOpen, setCompletedOpen] = useState(false);
   const [sheetTask,    setSheetTask]    = useState(null); // task with its action sheet open
-  const [pickId,       setPickId]       = useState(null); // task whose priority picker is open
   const editRef  = useRef(null);
 
   // Reset input state when navigating to a different date
@@ -2073,15 +2415,15 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
   const total   = activeTasks.length;
   const doneCnt = activeTasks.filter(t => t.done).length;
   const allDone = total > 0 && doneCnt === total;
+  const starCount = countStarred(activeTasks);   // open stars — done ones left the Big 3
+  const openSlots = Math.max(0, STAR_LIMIT - starCount);
+  const atCap     = starCount >= STAR_LIMIT;
 
   return (
     <div>
-      {/* Open tasks — one simple list, High → Medium → Low; long lists scroll */}
+      {/* Open tasks — the Big 3 pinned on top, everything else below the divider */}
       {(() => {
-        const openTasks = activeTasks
-          .filter(t => !t.done)
-          .slice()
-          .sort((a, b) => taskRank(a) - taskRank(b));
+        const openTasks = activeTasks.filter(t => !t.done);
         if (openTasks.length === 0) {
           return (
             <div style={{ fontSize:14, color:T.muted, fontStyle:"italic", textAlign:"center", padding:"14px 0" }}>
@@ -2089,12 +2431,11 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
             </div>
           );
         }
-        return (
-          <div style={{ padding:"2px 0", maxHeight:320, overflowY:"auto", WebkitOverflowScrolling:"touch" }}>
-            {openTasks.map((task, i) => {
-              const p = priorityOf(taskPriority(task));
-              const isEditing = editingId === task.id;
-              const row = (
+        const [big3, rest] = splitByStar(openTasks);
+        const renderRow = (task, i) => {
+          const isEditing = editingId === task.id;
+          const starred = isStarred(task);
+          const row = (
                 <div style={{ display:"flex", alignItems:"center", gap:11, padding:"9px 2px" }}>
                   {/* Check circle */}
                   <button
@@ -2103,7 +2444,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
                     aria-label={task.done ? `Uncheck: ${task.text}` : `Check: ${task.text}`}
                     style={{
                       width:22, height:22, borderRadius:"50%", flexShrink:0, boxSizing:"border-box",
-                      border:`2px solid ${p.accent}`, background:"transparent",
+                      border:`2px solid ${starred ? STAR_COLOR : T.border2}`, background:"transparent",
                       cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"all 0.15s",
                     }}
                   />
@@ -2129,7 +2470,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
                       title={isToday ? "Tap for options" : undefined}
                       style={{
                         flex:1, minWidth:0, fontSize:16, lineHeight:1.4, color:T.text,
-                        fontWeight: 400,
+                        fontWeight: starred ? 600 : 400,
                         cursor: isToday ? "pointer" : "default",
                       }}
                     >
@@ -2137,44 +2478,69 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
                     </span>
                   )}
 
-                  {/* Priority — tap the chip to open a direct High / Med / Low picker */}
-                  {isToday && pickId === task.id ? (
-                    <div style={{ display:"flex", gap:4, flexShrink:0 }}>
-                      {PRIORITIES.map(pr => (
-                        <button key={pr.key}
-                          onClick={() => { onPriority(dateKey, task.id, pr.key); setPickId(null); }}
-                          aria-label={`Set ${pr.label} priority`}
-                          style={{
-                            fontSize:11, fontWeight:800, padding:"3px 7px", borderRadius:7,
-                            border: taskPriority(task) === pr.key ? `1.5px solid ${pr.dark}` : "1.5px solid transparent",
-                            background:pr.bg, color:pr.dark, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
-                          }}
-                        >{pr.key === "M" ? "Med" : pr.label}</button>
-                      ))}
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => isToday && setPickId(task.id)}
-                      aria-label={`Priority: ${p.label}. Tap to change.`}
-                      style={{
-                        flexShrink:0, fontSize:11.5, fontWeight:800, color:p.dark, background:p.bg,
-                        border:"none", borderRadius:8, padding:"3px 8px", letterSpacing:"0.03em",
-                        cursor: isToday ? "pointer" : "default", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
-                      }}
-                    >
-                      {p.label}
-                    </button>
+                  {/* Star — one tap to promote into (or drop from) the Big 3 */}
+                  {isToday && (
+                    <StarButton
+                      starred={starred}
+                      atCap={atCap}
+                      label={task.text}
+                      onToggle={() => onStar(dateKey, task.id)}
+                    />
                   )}
                 </div>
               );
-              return (
-                <div key={task.id} style={{ borderTop: i === 0 ? "none" : `1px solid ${T.surf2}` }}>
-                  {isToday && !isEditing
-                    ? <SwipeRow onRight={() => onToggle(dateKey, task.id)} onLeft={() => onDelete(dateKey, task.id)}>{row}</SwipeRow>
-                    : row}
+          return (
+            <div key={task.id} style={{ borderTop: i === 0 ? "none" : `1px solid ${T.surf2}` }}>
+              {isToday && !isEditing
+                ? <SwipeRow onRight={() => onToggle(dateKey, task.id)} onLeft={() => onDelete(dateKey, task.id)}>{row}</SwipeRow>
+                : row}
+            </div>
+          );
+        };
+        return (
+          <div style={{ padding:"2px 0", maxHeight:320, overflowY:"auto", WebkitOverflowScrolling:"touch" }}>
+            {/* ── Big 3 — the day's real commitments ── */}
+            <div style={{
+              background: big3.length ? STAR_COLOR + "0f" : "transparent",
+              border: `1px ${big3.length ? "solid" : "dashed"} ${STAR_COLOR}${big3.length ? "33" : "44"}`,
+              borderRadius:12, padding:"6px 9px", marginBottom:10,
+            }}>
+              <div style={{ display:"flex", alignItems:"center", gap:6, padding:"2px 0 4px" }}>
+                <Ic name="star" size={12} color={STAR_COLOR} fill={STAR_COLOR} />
+                <span style={{ fontSize:11, fontWeight:800, letterSpacing:"0.08em", textTransform:"uppercase", color:STAR_DARK }}>
+                  {BIG_LABEL}
+                </span>
+                <span style={{ marginLeft:"auto", fontSize:11, fontWeight:700, color:STAR_DARK, opacity:0.7, fontVariantNumeric:"tabular-nums" }}>
+                  {starCount}/{STAR_LIMIT}
+                </span>
+              </div>
+              {big3.length === 0 ? (
+                <div style={{ fontSize:12.5, color:T.muted, padding:"4px 0 6px", lineHeight:1.5 }}>
+                  Star up to {STAR_LIMIT} tasks — the ones that would make today a win.
                 </div>
-              );
-            })}
+              ) : big3.map(renderRow)}
+
+              {/* Vacant slots — finishing a star frees its place, so show the room */}
+              {big3.length > 0 && openSlots > 0 && (
+                <div style={{ display:"flex", alignItems:"center", gap:7, padding:"7px 2px 4px", borderTop:`1px dashed ${STAR_COLOR}33`, marginTop:4 }}>
+                  <Ic name="star" size={14} color={STAR_COLOR} style={{ opacity:0.5 }} />
+                  <span style={{ fontSize:12.5, color:T.muted, lineHeight:1.45 }}>
+                    {openSlots === 1 ? "1 slot open" : `${openSlots} slots open`}
+                    {rest.length > 0 ? " — star another task below" : ""}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* ── Everything else ── */}
+            {rest.length > 0 && (
+              <>
+                <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.08em", textTransform:"uppercase", color:T.muted, padding:"0 2px 2px" }}>
+                  Everything else
+                </div>
+                {rest.map(renderRow)}
+              </>
+            )}
           </div>
         );
       })()}
@@ -2209,7 +2575,6 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
             {completedOpen && (
               <div style={{ display:"flex", flexDirection:"column", gap:6, padding:"8px 4px 2px" }}>
                 {completedTasks.map(task => {
-                  const q = priorityOf(taskPriority(task));
                   return (
                     <button
                       key={task.id}
@@ -2220,7 +2585,8 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
                         padding:"2px 0", cursor:"pointer", WebkitTapHighlightColor:"transparent", textAlign:"left",
                       }}
                     >
-                      <span aria-hidden="true" style={{ width:10, height:10, borderRadius:"50%", background:q.accent, flexShrink:0 }} />
+                      {/* No star here — a completed task has left the Big 3 entirely */}
+                      <span aria-hidden="true" style={{ width:10, height:10, borderRadius:"50%", background:T.border2, flexShrink:0 }} />
                       <span style={{ fontSize:13, color:T.muted, textDecoration:"line-through", textDecorationColor:T.muted, lineHeight:1.3 }}>
                         {task.text}
                       </span>
@@ -2244,27 +2610,29 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
       {sheetTask && (
         <Modal title={sheetTask.text} onClose={() => setSheetTask(null)}>
           <div style={{ padding:"4px 20px 20px" }}>
-            <div style={S.fieldLabel}>Priority</div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:10 }}>
-              {PRIORITIES.map(p => {
-                const current = p.key === taskPriority(sheetTask);
-                return (
-                  <button
-                    key={p.key}
-                    onClick={() => { if (!current) onPriority(dateKey, sheetTask.id, p.key); setSheetTask(null); }}
-                    aria-pressed={current}
-                    style={{
-                      padding:"12px 10px", background:p.bg, borderRadius:10,
-                      border: current ? `2px solid ${p.dark}` : "2px solid transparent",
-                      cursor:"pointer", fontSize:14, fontWeight:700, color:p.dark,
-                      fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
-                    }}
-                  >
-                    {p.label}
-                  </button>
-                );
-              })}
-            </div>
+            {(() => {
+              const starred = isStarred(sheetTask);
+              const blocked = !starred && atCap;
+              return (
+                <button
+                  onClick={() => { if (!blocked) onStar(dateKey, sheetTask.id); setSheetTask(null); }}
+                  disabled={blocked}
+                  aria-pressed={starred}
+                  style={{
+                    display:"flex", alignItems:"center", justifyContent:"center", gap:8, width:"100%",
+                    padding:"12px 10px", borderRadius:10, marginBottom:10,
+                    background: starred ? STAR_COLOR + "1f" : T.surf2,
+                    border: starred ? `2px solid ${STAR_COLOR}` : "2px solid transparent",
+                    cursor: blocked ? "default" : "pointer", opacity: blocked ? 0.5 : 1,
+                    fontSize:14, fontWeight:700, color: starred ? STAR_DARK : T.text2,
+                    fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
+                  }}
+                >
+                  <Ic name="star" size={15} color={starred ? STAR_COLOR : T.text2} fill={starred ? STAR_COLOR : "none"} />
+                  {starred ? `Remove from ${BIG_LABEL}` : blocked ? `${BIG_LABEL} is full` : `Add to ${BIG_LABEL}`}
+                </button>
+              );
+            })()}
             <button
               onClick={() => { onDefer(dateKey, sheetTask.id); setSheetTask(null); }}
               style={{
@@ -2297,12 +2665,318 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
   );
 });
 
+// ─── HABIT REVIEW — week strip ────────────────────────────────────────────────
+function ReviewWeekStrip({ days }) {
+  const recent = days.slice(-7);
+  return (
+    <div style={{ display:"flex", gap:5, marginBottom:10 }} aria-label={`${recent.filter(d=>d.kept).length} of ${recent.length} kept`}>
+      {recent.map(d => (
+        <div key={d.key} style={{ flex:1, textAlign:"center" }}>
+          <div style={{
+            height:22, borderRadius:6, display:"flex", alignItems:"center", justifyContent:"center",
+            fontSize:11, fontWeight:700, lineHeight:1,
+            background: d.kept ? "#E1F5EE" : T.red + "12",
+            border: `1px solid ${d.kept ? "#0F6E5644" : T.red + "33"}`,
+            color: d.kept ? "#0F6E56" : T.red,
+          }}>{d.kept ? "✓" : "×"}</div>
+          <div style={{ fontSize:9.5, color:T.muted, marginTop:2 }}>{DAY_LABELS[d.dow]}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── HABIT REVIEW — the flow ──────────────────────────────────────────────────
+// Steps: ask → diagnose → fix → done, with "unusual week" and the stuck/retire
+// branch hanging off diagnose. Follow-ups enter at their own step.
+const HabitReview = memo(function HabitReview({ target, onApply, onSnooze, onFollowUp, onArchive, onClose }) {
+  const { habit, identity, stats, pattern, followUp, mode } = target;
+  const [step, setStep]   = useState(mode === "followup" ? "followup" : "ask");
+  const [dxId, setDxId]   = useState(null);
+  const [value, setValue] = useState("");
+  const [note, setNote]   = useState("");
+  const [busy, setBusy]   = useState(false);
+  const stuck = failedFixCount(habit) >= REVIEW_STUCK_AT;
+  const dx = dxId ? diagnosisById(dxId) : null;
+
+  // Pattern-matched diagnosis floats to the top — the data usually knows
+  // better than a week-old memory does.
+  const ordered = useMemo(() => {
+    if (!pattern) return DIAGNOSES;
+    const hit = DIAGNOSES.find(d => d.id === pattern.kind);
+    return hit ? [hit, ...DIAGNOSES.filter(d => d !== hit)] : DIAGNOSES;
+  }, [pattern]);
+
+  const loadSuggestion = useCallback(async (diag) => {
+    setBusy(true); setNote("");
+    const ai = await fetchFieldSuggestion(habit, identity.label, diag.field);
+    setValue(ai ? ai.value : diag.fallback(habit));
+    setNote(ai ? ai.note : "");
+    setBusy(false);
+  }, [habit, identity.label]);
+
+  const chooseDx = (diag) => {
+    setDxId(diag.id);
+    setStep("fix");
+    if (diag.id !== "schedule") loadSuggestion(diag);
+  };
+
+  const applyFix = () => {
+    if (dx.id === "schedule") {
+      onApply(habit.id, identity.id, {
+        dx: dx.id, field: "frequency",
+        from: getFreqLabel(habit.frequency),
+        to: getFreqLabel({ cadence:"weekly", days: pattern.days }),
+        frequency: { cadence:"weekly", days: pattern.days },
+        baseRate: stats.rate,
+      });
+    } else {
+      const v = value.trim();
+      if (!v) return;
+      onApply(habit.id, identity.id, {
+        dx: dx.id, field: dx.field, from: habit[dx.field] || "", to: v, baseRate: stats.rate,
+      });
+    }
+    setStep("done");
+  };
+
+  const head = (
+    <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:12 }}>
+      <span style={{ width:30, height:30, borderRadius:"50%", background:identity.color+"22", display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, flexShrink:0 }} aria-hidden="true">{identity.icon}</span>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontSize:15, fontWeight:700, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.label}</div>
+        <div style={{ fontSize:11.5, color:T.muted }}>{shortLabel(identity.label)}</div>
+      </div>
+      <span style={{ fontSize:11, fontWeight:700, color:T.muted, background:T.surf2, borderRadius:20, padding:"2px 8px", flexShrink:0 }}>
+        {stats.kept} of {stats.due}
+      </span>
+    </div>
+  );
+
+  const primaryBtn = { width:"100%", background:T.primary, color:"#fff", border:"none", borderRadius:9, padding:"11px", fontSize:14, fontWeight:700, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" };
+  const ghostBtn   = { flex:1, background:"transparent", border:`1px solid ${T.border}`, borderRadius:9, padding:"11px", fontSize:13.5, color:T.text, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" };
+
+  return (
+    <Modal title="Habit review" onClose={onClose}>
+      <div style={{ padding:"4px 20px 20px" }}>
+        {head}
+
+        {step === "ask" && (
+          <>
+            <ReviewWeekStrip days={stats.days} />
+            <div style={{ border:`1px solid ${T.border}`, borderRadius:12, padding:"12px" }}>
+              <div style={{ fontSize:13.5, color:T.text, lineHeight:1.55, marginBottom:4 }}>
+                You kept this {stats.kept} of {stats.due} scheduled days.
+              </div>
+              <div style={{ fontSize:12.5, color:T.muted, lineHeight:1.5, marginBottom:12 }}>
+                Want to adjust how it's set up?
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={() => setStep(stuck ? "stuck" : "diagnose")} style={{ ...primaryBtn, flex:1 }}>Adjust it</button>
+                <button onClick={onClose} style={{ background:"transparent", border:"none", color:T.muted, fontSize:13.5, padding:"11px 12px", cursor:"pointer", fontFamily:"inherit" }}>Not now</button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {step === "stuck" && (
+          <>
+            <div style={{ border:`1px solid ${T.border}`, borderRadius:12, padding:"11px 12px", marginBottom:12 }}>
+              <div style={{ fontSize:11.5, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:8 }}>Already tried</div>
+              {reviewLog(habit).filter(r => r.field && r.worked === false).map((r, i) => (
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:7, padding:"3px 0" }}>
+                  <Ic name="x" size={13} color={T.red} />
+                  <span style={{ fontSize:12.5, color:T.muted }}>
+                    {diagnosisById(r.dx)?.fieldLabel || r.field} — {daysBetweenKeys(r.at, getTodayKey())} days ago
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize:13.5, color:T.text, lineHeight:1.55, marginBottom:14 }}>
+              Two changes haven't moved this. It may be the wrong habit for this season rather than the wrong design.
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              <button onClick={() => setStep("diagnose")} style={primaryBtn}>Try a different angle</button>
+              <button onClick={() => { onSnooze(habit.id, identity.id, 30); onClose(); }} style={{ ...ghostBtn, flex:"none" }}>Pause for a month</button>
+              <button onClick={() => { onArchive(habit.id, identity.id); onClose(); }} style={{ background:"transparent", border:"none", color:T.red, fontSize:13, padding:"8px", cursor:"pointer", fontFamily:"inherit" }}>Archive this habit</button>
+            </div>
+          </>
+        )}
+
+        {step === "diagnose" && (
+          <>
+            <ReviewWeekStrip days={stats.days} />
+            {pattern && (
+              <div style={{ background:T.primary+"0d", border:`1px solid ${T.primary}33`, borderRadius:11, padding:"9px 10px", marginBottom:12, display:"flex", gap:8 }}>
+                <Ic name="rows" size={15} color={T.primary} />
+                <span style={{ fontSize:12.5, color:T.text, lineHeight:1.5 }}>{pattern.text}</span>
+              </div>
+            )}
+            <div style={{ fontSize:14, fontWeight:700, color:T.text, marginBottom:11 }}>
+              On the days you missed it, what happened?
+            </div>
+            {ordered.map((d, i) => {
+              const hinted = pattern && d.id === pattern.kind;
+              return (
+                <button key={d.id} onClick={() => chooseDx(d)} style={{
+                  display:"flex", alignItems:"center", gap:10, width:"100%", textAlign:"left",
+                  background:"transparent", border:`1px solid ${hinted ? T.primary+"55" : T.surf2}`,
+                  borderRadius:11, padding:"10px 11px", marginBottom:7, cursor:"pointer",
+                  fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
+                }}>
+                  <Ic name={d.icon} size={17} color={hinted ? T.primary : T.muted} />
+                  <span style={{ flex:1, minWidth:0 }}>
+                    <span style={{ display:"block", fontSize:13.5, color:T.text }}>{d.text}</span>
+                    {hinted && <span style={{ display:"block", fontSize:10.5, color:T.primary, marginTop:2 }}>matches your pattern</span>}
+                  </span>
+                </button>
+              );
+            })}
+            <button onClick={() => { onSnooze(habit.id, identity.id, REVIEW_SNOOZE); setStep("snoozed"); }} style={{
+              display:"flex", alignItems:"center", gap:10, width:"100%", textAlign:"left",
+              background:"#0F6E560d", border:"1px dashed #0F6E5655", borderRadius:11,
+              padding:"10px 11px", marginTop:3, cursor:"pointer", fontFamily:"inherit",
+            }}>
+              <Ic name="check" size={17} color="#0F6E56" />
+              <span style={{ flex:1, fontSize:13.5, color:"#0F6E56" }}>Nothing — just an unusual week</span>
+            </button>
+          </>
+        )}
+
+        {step === "fix" && dx && (
+          <>
+            <div style={{ marginBottom:10 }}>
+              <span style={{ fontSize:10.5, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:"#633806", background:T.gold+"22", borderRadius:20, padding:"2px 8px" }}>{dx.law}</span>
+            </div>
+            <div style={{ fontSize:13, color:T.text, lineHeight:1.55, marginBottom:13 }}>{dx.why}</div>
+            <div style={{ fontSize:11.5, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:6 }}>{dx.fieldLabel}</div>
+
+            {dx.id === "schedule" ? (
+              pattern ? (
+                <>
+                  <div style={{ fontSize:13, color:T.muted, textDecoration:"line-through", marginBottom:6 }}>{getFreqLabel(habit.frequency)}</div>
+                  <div style={{ border:`1px solid ${T.gold}88`, borderRadius:10, padding:"10px 11px", fontSize:14, color:T.text, fontWeight:700 }}>
+                    {getFreqLabel({ cadence:"weekly", days: pattern.days })}
+                  </div>
+                  <div style={{ fontSize:11.5, color:T.muted, margin:"7px 0 13px", lineHeight:1.5 }}>
+                    Trimmed to the days you actually kept it. Three good days beat seven broken ones.
+                  </div>
+                  <button onClick={applyFix} style={primaryBtn}>Save change</button>
+                </>
+              ) : (
+                <div style={{ fontSize:13, color:T.muted, lineHeight:1.55, padding:"8px 0" }}>
+                  No clear day pattern yet — edit the schedule from the habit menu.
+                </div>
+              )
+            ) : (
+              <>
+                {habit[dx.field]
+                  ? <div style={{ fontSize:13, color:T.muted, textDecoration:"line-through", marginBottom:6 }}>“{habit[dx.field]}”</div>
+                  : <div style={{ fontSize:12.5, color:T.muted, fontStyle:"italic", marginBottom:6 }}>Nothing set yet</div>}
+                {busy ? (
+                  <div style={{ border:`1px solid ${T.surf2}`, borderRadius:10, padding:"16px", textAlign:"center", fontSize:12.5, color:T.muted }}>
+                    Asking for a suggestion…
+                  </div>
+                ) : (
+                  <textarea
+                    value={value}
+                    onChange={e => setValue(e.target.value)}
+                    rows={2}
+                    maxLength={200}
+                    aria-label={`${dx.fieldLabel} — suggested wording`}
+                    style={{ width:"100%", boxSizing:"border-box", fontSize:15, fontFamily:"inherit", color:T.text, border:`1px solid ${T.gold}88`, borderRadius:10, padding:"9px 10px", resize:"none", outline:"none", background:"#fff" }}
+                  />
+                )}
+                <div style={{ display:"flex", alignItems:"flex-start", gap:6, margin:"7px 0 13px" }}>
+                  <Ic name="spark" size={13} color="#633806" style={{ marginTop:2 }} />
+                  <span style={{ fontSize:11.5, color:T.muted, lineHeight:1.5 }}>
+                    {note || "Suggested wording — edit it to fit your day."}{" "}
+                    <button onClick={() => loadSuggestion(dx)} disabled={busy} style={{ border:"none", background:"transparent", color:T.primary, fontSize:11.5, padding:0, cursor:"pointer", textDecoration:"underline", fontFamily:"inherit" }}>try another</button>
+                  </span>
+                </div>
+                <button onClick={applyFix} disabled={busy || !value.trim()} style={{ ...primaryBtn, opacity: busy || !value.trim() ? 0.5 : 1 }}>Save change</button>
+              </>
+            )}
+          </>
+        )}
+
+        {step === "snoozed" && (
+          <>
+            <div style={{ background:"#E1F5EE", borderRadius:12, padding:"12px" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:6 }}>
+                <Ic name="check" size={14} color="#0F6E56" />
+                <span style={{ fontSize:12.5, fontWeight:700, color:"#0F6E56" }}>Left as it is</span>
+              </div>
+              <div style={{ fontSize:13, color:T.text, lineHeight:1.55 }}>
+                Nothing changed. We won't ask about this habit again for two weeks.
+              </div>
+            </div>
+            <button onClick={onClose} style={{ ...primaryBtn, marginTop:13 }}>Done</button>
+          </>
+        )}
+
+        {step === "done" && dx && (
+          <>
+            <div style={{ background:"#E1F5EE", borderRadius:12, padding:"12px", marginBottom:12 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:8 }}>
+                <Ic name="check" size={14} color="#0F6E56" />
+                <span style={{ fontSize:12.5, fontWeight:700, color:"#0F6E56" }}>{dx.fieldLabel} updated</span>
+              </div>
+              {(dx.id === "schedule" ? getFreqLabel(habit.frequency) : habit[dx.field]) && (
+                <div style={{ fontSize:12.5, color:T.muted, textDecoration:"line-through", marginBottom:4 }}>
+                  “{dx.id === "schedule" ? getFreqLabel(habit.frequency) : habit[dx.field]}”
+                </div>
+              )}
+              <div style={{ fontSize:13.5, color:T.text, fontWeight:700 }}>
+                “{dx.id === "schedule" ? getFreqLabel({ cadence:"weekly", days: pattern.days }) : value.trim()}”
+              </div>
+            </div>
+            <div style={{ border:`1px dashed ${T.surf2}`, borderRadius:11, padding:"10px 11px", marginBottom:13, fontSize:11.5, color:T.muted, lineHeight:1.55 }}>
+              Streak and history untouched. We'll check in two weeks to see whether it helped.
+            </div>
+            <button onClick={onClose} style={primaryBtn}>Done</button>
+          </>
+        )}
+
+        {step === "followup" && followUp && (() => {
+          const improved = stats.rate > (followUp.baseRate ?? 0) + 0.15;
+          const then = Math.round((followUp.baseRate ?? 0) * 100);
+          return (
+            <>
+              <ReviewWeekStrip days={stats.days} />
+              <div style={{ background: improved ? "#E1F5EE" : T.surf2, borderRadius:12, padding:"12px", marginBottom:12 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:7 }}>
+                  <Ic name={improved ? "trend" : "rows"} size={15} color={improved ? "#0F6E56" : T.text2} />
+                  <span style={{ fontSize:12.5, fontWeight:700, color: improved ? "#0F6E56" : T.text2 }}>
+                    {improved ? "That worked" : "Still not sticking"}
+                  </span>
+                </div>
+                <div style={{ fontSize:13, color:T.text, lineHeight:1.55 }}>
+                  You changed the {diagnosisById(followUp.dx)?.fieldLabel.toLowerCase() || "habit"} to “{followUp.to}” two weeks ago.
+                  {" "}From {then}% to {Math.round(stats.rate * 100)}%.
+                </div>
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={() => { onFollowUp(habit.id, identity.id, followUp.at, improved); onClose(); }} style={ghostBtn}>
+                  {improved ? "Leave it" : "Not now"}
+                </button>
+                <button onClick={() => { onFollowUp(habit.id, identity.id, followUp.at, improved); improved ? onClose() : setStep("diagnose"); }} style={{ ...primaryBtn, flex:1, width:"auto" }}>
+                  {improved ? "Raise it" : "Try something else"}
+                </button>
+              </div>
+            </>
+          );
+        })()}
+      </div>
+    </Modal>
+  );
+});
+
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
-const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, markMiss, justChecked, getStreakForHabit, openEditHabit, openDeleteHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask, editTask, setTaskPriority, deferTask }) {
+const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, markMiss, justChecked, getStreakForHabit, openEditHabit, openDeleteHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask, editTask, toggleStar, deferTask, reviewTarget, onOpenReview, onDismissReview }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
   const [matrixExpanded, setMatrixExpanded] = useState(false);
-  const [previewPickId, setPreviewPickId] = useState(null); // preview task whose priority picker is open
   const [doneOpen, setDoneOpen] = useState(false); // Completed section — collapsed by default
 
   // Focus mode — snapshot of pending habits taken when the session starts
@@ -2350,10 +3024,14 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
       : 0,
     [selectedDate, todayKey, scheduledHabits, missedYesterdayIds, todayData]);
 
-  // Done/total across the day's active tasks — the Focus card's progress pill
+  // The Focus card's pill shows the live Big 3 commitment — open stars only.
+  // Completed work has left the Big 3 and is counted nowhere here.
   const taskCounts = useMemo(() => {
     const active = (dailyTasks[selectedDate] || []).filter(t => !t.carried);
-    return { done: active.filter(t => t.done).length, total: active.length };
+    return {
+      open: countStarred(active),
+      backlog: active.filter(t => !isStarred(t) && !t.done).length,
+    };
   }, [dailyTasks, selectedDate]);
 
   // ── Empty state — no identities yet ──
@@ -2388,18 +3066,47 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
         {quote.author && <span style={{ fontSize:12,color:T.gold,fontWeight:700,fontStyle:"normal" }}> — {quote.author}</span>}
       </div>
 
+      {/* Habit review nudge — at most one habit, only when the data says so.
+          Neutral by design: this states a fact and offers help, it doesn't scold. */}
+      {reviewTarget && selectedDate === todayKey && (
+        <div style={{ ...S.card, padding:"12px 14px" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:9 }}>
+            <span style={{ width:26, height:26, borderRadius:"50%", background:reviewTarget.identity.color+"22", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, flexShrink:0 }} aria-hidden="true">{reviewTarget.identity.icon}</span>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:14, fontWeight:700, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{reviewTarget.habit.label}</div>
+              <div style={{ fontSize:12, color:T.muted }}>
+                {reviewTarget.mode === "followup"
+                  ? "You changed this two weeks ago"
+                  : `Kept ${reviewTarget.stats.kept} of ${reviewTarget.stats.due} scheduled days`}
+              </div>
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={onOpenReview} style={{ flex:1, background:T.primary, color:"#fff", border:"none", borderRadius:9, padding:"9px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
+              {reviewTarget.mode === "followup" ? "See how it went" : "Adjust it"}
+            </button>
+            <button onClick={onDismissReview} style={{ background:"transparent", border:"none", color:T.muted, fontSize:13, padding:"9px 12px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
+              Not now
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Today's Focus — compact task preview, expands into the full task list */}
       <div style={{ ...S.card, padding:"12px 14px" }}>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom: matrixExpanded ? 10 : 8 }}>
           <span style={{ fontSize:12, color:T.muted, letterSpacing:"0.1em", fontWeight:700, textTransform:"uppercase" }}>
             <span aria-hidden="true">🎯</span> Today's Focus
           </span>
-          {taskCounts.total > 0 && (
-            <span aria-label={`${taskCounts.done} of ${taskCounts.total} tasks done`} style={{
-              fontSize:12, fontWeight:800, color:"#0F6E56", background:"#E1F5EE",
-              borderRadius:20, padding:"2px 9px", lineHeight:1.4, fontVariantNumeric:"tabular-nums",
-            }}>
-              {taskCounts.done}/{taskCounts.total} done
+          {taskCounts.open > 0 && (
+            <span
+              aria-label={`${taskCounts.open} of ${STAR_LIMIT} ${BIG_LABEL} slots in use`}
+              style={{
+                fontSize:12, fontWeight:800, color:STAR_DARK, background:STAR_COLOR + "22",
+                borderRadius:20, padding:"2px 9px", lineHeight:1.4, fontVariantNumeric:"tabular-nums",
+              }}
+            >
+              {taskCounts.open}/{STAR_LIMIT} {BIG_LABEL}
             </span>
           )}
           {matrixExpanded && (
@@ -2421,7 +3128,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
             onToggle={toggleTask}
             onDelete={deleteTask}
             onEdit={editTask}
-            onPriority={setTaskPriority}
+            onStar={toggleStar}
             onDefer={deferTask}
             addBar={selectedDate >= todayKey ? (
               <div style={{ borderTop:`1px solid ${T.surf2}`, marginTop:10, paddingTop:10 }}>
@@ -2430,10 +3137,13 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
             ) : null}
           />
         ) : (() => {
-          const active   = (dailyTasks[selectedDate] || []).filter(t => !t.carried);
-          const pending  = active.filter(t => !t.done).slice().sort((a, b) => taskRank(a) - taskRank(b));
-          const shown    = pending.slice(0, 4);
+          const active    = (dailyTasks[selectedDate] || []).filter(t => !t.carried);
+          const pending   = active.filter(t => !t.done);
+          // Collapsed view is the Big 3 and nothing else — the backlog is one tap away
+          const shown     = pending.filter(isStarred);
           const remaining = pending.length - shown.length;
+          const editable  = selectedDate >= todayKey;
+          const atCap     = countStarred(active) >= STAR_LIMIT;
           if (active.length === 0) {
             return (
               <div style={{ fontSize:13, color:T.muted, textAlign:"center", padding:"6px 0" }}>
@@ -2449,43 +3159,53 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
           }
           return (
             <>
-              {shown.map((t, i) => {
-                const p = priorityOf(taskPriority(t));
-                return (
-                  <div key={t.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 2px", borderTop: i === 0 ? "none" : `1px solid ${T.surf2}` }}>
-                    <button
-                      onClick={() => toggleTask(selectedDate, t.id)}
-                      aria-label={`Complete: ${t.text}`}
-                      style={{
-                        width:21, height:21, borderRadius:"50%", flexShrink:0, boxSizing:"border-box",
-                        border:`2px solid ${p.accent}`, background:"transparent",
-                        cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent",
-                      }}
+              {shown.map((t, i) => (
+                <div key={t.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 2px", borderTop: i === 0 ? "none" : `1px solid ${T.surf2}` }}>
+                  <button
+                    onClick={() => toggleTask(selectedDate, t.id)}
+                    aria-label={`Complete: ${t.text}`}
+                    style={{
+                      width:21, height:21, borderRadius:"50%", flexShrink:0, boxSizing:"border-box",
+                      border:`2px solid ${STAR_COLOR}`, background:"transparent",
+                      cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent",
+                    }}
+                  />
+                  <span onClick={() => setMatrixExpanded(true)} title="Tap for options" style={{
+                    flex:1, minWidth:0, fontSize:15, lineHeight:1.4, fontWeight:600, color:T.text, cursor:"pointer",
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                  }}>{t.text}</span>
+                  {editable && (
+                    <StarButton
+                      starred
+                      atCap={atCap}
+                      label={t.text}
+                      size={17}
+                      onToggle={() => toggleStar(selectedDate, t.id)}
                     />
-                    <span onClick={() => setMatrixExpanded(true)} title="Tap for options" style={{
-                      flex:1, minWidth:0, fontSize:15, lineHeight:1.4, fontWeight:600, color:T.text, cursor:"pointer",
-                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-                    }}>{t.text}</span>
-                    {selectedDate >= todayKey && previewPickId === t.id ? (
-                      <div style={{ display:"flex", gap:4, flexShrink:0 }}>
-                        {PRIORITIES.map(pr => (
-                          <button key={pr.key}
-                            onClick={() => { setTaskPriority(selectedDate, t.id, pr.key); setPreviewPickId(null); }}
-                            aria-label={`Set ${pr.label} priority`}
-                            style={{ fontSize:11, fontWeight:800, padding:"3px 7px", borderRadius:7, border: taskPriority(t) === pr.key ? `1.5px solid ${pr.dark}` : "1.5px solid transparent", background:pr.bg, color:pr.dark, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}
-                          >{pr.key === "M" ? "Med" : pr.label}</button>
-                        ))}
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => selectedDate >= todayKey && setPreviewPickId(t.id)}
-                        aria-label={`Priority: ${p.label}. Tap to change.`}
-                        style={{ fontSize:11.5, fontWeight:800, color:p.dark, background:p.bg, border:"none", borderRadius:8, padding:"3px 8px", flexShrink:0, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}
-                      >{p.label}</button>
-                    )}
-                  </div>
-                );
-              })}
+                  )}
+                </div>
+              ))}
+
+              {/* No picks yet — the card's whole job is getting three chosen */}
+              {shown.length === 0 && pending.length > 0 && (
+                <div style={{
+                  border:`1px dashed ${STAR_COLOR}55`, borderRadius:12, padding:"10px 12px",
+                  display:"flex", alignItems:"center", gap:9,
+                }}>
+                  <Ic name="star" size={15} color={STAR_COLOR} />
+                  <span style={{ flex:1, minWidth:0, fontSize:13, color:T.text2, lineHeight:1.45 }}>
+                    Pick your {BIG_LABEL} for today
+                  </span>
+                  <button onClick={() => setMatrixExpanded(true)} style={{
+                    flexShrink:0, background:STAR_COLOR + "22", border:"none", borderRadius:8,
+                    color:STAR_DARK, fontSize:12, fontWeight:800, padding:"5px 10px",
+                    cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
+                  }}>
+                    Choose
+                  </button>
+                </div>
+              )}
+
               {pending.length === 0 && (
                 <div style={{ fontSize:13, color:T.muted, textAlign:"center", padding:"6px 0" }}>All tasks done <span aria-hidden="true">🎉</span></div>
               )}
