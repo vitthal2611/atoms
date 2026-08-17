@@ -550,10 +550,21 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     location:   initial.location   || "",
     identityId: initial.identityId || identities[0]?.id || "",
     frequency:  initial.frequency  || DEFAULT_FREQUENCY,
+    kind:       initial.kind       || "good",
   });
   const [submitted, setSubmitted] = useState(false);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const valid = form.label.trim().length > 0 && form.identityId;
+  const breaking = form.kind === "bad";
+
+  // Cue suggestions for the combobox — pick one or type a custom cue.
+  const cueOptions = breaking
+    ? ["When I get into bed", "When I feel bored", "When I reach for my phone", "When I sit on the couch", "When I feel stressed", "Late at night"]
+    : [
+        "After I wake up", "After I pour my morning coffee", "After I brush my teeth",
+        "After breakfast", "After lunch", "After I get home from work", "After I sit at my desk", "Before bed",
+        ...identities.flatMap(i => (i.habits || []).map(h => h.label)).filter(l => l && l !== initial.label).slice(0, 6).map(l => `After ${l}`),
+      ];
 
   const fId = useId();
   const ids = {
@@ -568,108 +579,151 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     location:   fId + "-location",
   };
 
+  // ── Draft with James Clear — fills only the EMPTY fields, never overwrites you ──
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiErr, setAiErr] = useState("");
+  const parseTime = (s) => {
+    const m = (s || "").trim().match(/^(\d{1,2})(?::(\d{2}))?\s*([ap]\.?m\.?)?$/i);
+    if (!m) return "";
+    let h = parseInt(m[1], 10); const min = m[2] || "00";
+    const ap = (m[3] || "").toLowerCase().replace(/\./g, "");
+    if (ap === "pm" && h < 12) h += 12;
+    if (ap === "am" && h === 12) h = 0;
+    if (h < 0 || h > 23 || +min > 59) return "";
+    return String(h).padStart(2, "0") + ":" + min;
+  };
+  const draftWithJames = async () => {
+    if (!form.label.trim()) { setSubmitted(true); return; }
+    setAiLoading(true); setAiErr("");
+    try {
+      const { getFunctions, httpsCallable } = await import("firebase/functions");
+      const call = httpsCallable(getFunctions(), "askJamesClear", { timeout: 20000 });
+      const identityLabel = identities.find(i => i.id === form.identityId)?.label || "";
+      const filled = ["trigger","attractive","easy","starter","satisfying"].some(k => form[k].trim());
+      const res = await call({ mode: filled ? "review" : "create", habit: {
+        label: form.label, identity: identityLabel, kind: form.kind,
+        trigger: form.trigger, attractive: form.attractive, easy: form.easy,
+        starter: form.starter, satisfying: form.satisfying,
+        time: form.time, location: form.location, frequency: getFreqLabel(form.frequency),
+      }});
+      const s = res?.data?.suggestion;
+      if (!s) { setAiErr("Couldn't draft that — please try again."); return; }
+      const keep = (cur, next) => (cur && cur.trim() ? cur : (next || cur));
+      setForm(f => ({ ...f,
+        trigger:    keep(f.trigger,    s.trigger),
+        attractive: keep(f.attractive, s.attractive),
+        easy:       keep(f.easy,       s.easy),
+        starter:    keep(f.starter,    s.starter),
+        satisfying: keep(f.satisfying, s.satisfying),
+        location:   keep(f.location,   s.location),
+        time:       (f.time && f.time.trim()) ? f.time : (parseTime(s.time) || f.time),
+      }));
+    } catch { setAiErr("Couldn't reach the coach. Please try again."); }
+    finally { setAiLoading(false); }
+  };
+
+  const lawHead = { display:"flex", alignItems:"center", gap:7, marginTop:22 };
+  const lawNum  = (c) => ({ width:19, height:19, borderRadius:"50%", background:c, color:"#fff", fontSize:12, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 });
+  const lawTxt  = (c) => ({ fontSize:12, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:c });
+
   return (
     <div style={{ padding: "0 20px 20px" }}>
-      <label htmlFor={ids.label} style={S.fieldLabel}>Habit Name *</label>
-      <input id={ids.label} style={S.input} value={form.label} onChange={e=>set("label",e.target.value)} placeholder="e.g. Meditate 10 min" autoFocus maxLength={80} />
+      {/* Build vs break — drives the Four Laws vs their inversion */}
+      <label style={S.fieldLabel}>What do you want to do?</label>
+      <div style={{ display:"flex", gap:8, marginBottom:6 }} role="group" aria-label="Habit type">
+        {[["good","➕ Build a good habit", T.primary], ["bad","🚫 Break a bad habit", "#D4537E"]].map(([k,txt,c])=>(
+          <button key={k} type="button" onClick={()=>set("kind",k)} aria-pressed={form.kind===k}
+            style={{ flex:1, padding:"10px 8px", borderRadius:10, fontFamily:"inherit", fontSize:12.5, fontWeight:700, cursor:"pointer", WebkitTapHighlightColor:"transparent",
+              border:`1.5px solid ${form.kind===k ? c : T.border}`, background: form.kind===k ? c+"12" : T.surface, color: form.kind===k ? c : T.text2 }}>
+            {txt}
+          </button>
+        ))}
+      </div>
 
-      <label htmlFor={ids.identityId} style={S.fieldLabel}>Identity *</label>
+      {/* Identity anchor — who you're becoming (foundation of every check) */}
+      <label htmlFor={ids.identityId} style={{ ...S.fieldLabel, marginTop:16 }}>You're becoming</label>
       <select id={ids.identityId} style={S.input} value={form.identityId} onChange={e=>set("identityId",e.target.value)}>
         {identities.map(i=><option key={i.id} value={i.id}>{i.icon} {i.label}</option>)}
       </select>
+      <div style={{ fontSize:11.5, color:T.muted, fontStyle:"italic", marginTop:6 }}>{breaking ? "Every clean day is a vote for this person." : "Every check is a vote for this person."}</div>
 
-      {/* ── Law 1 · Make it obvious — cue, time, place, schedule ── */}
-      <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:24 }}>
-        <span aria-hidden="true" style={{ width:19, height:19, borderRadius:"50%", background:T.primary, color:"#fff", fontSize:12, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>1</span>
-        <span style={{ fontSize:12, fontWeight:800, letterSpacing:"0.07em", textTransform:"uppercase", color:T.primary }}>Make it obvious</span>
-      </div>
+      {/* The habit + the minimum-effort lever */}
+      <label htmlFor={ids.label} style={{ ...S.fieldLabel, marginTop:18 }}>{breaking ? "The habit to break *" : "The habit *"}</label>
+      <input id={ids.label} style={S.input} value={form.label} onChange={e=>set("label",e.target.value)} placeholder={breaking ? "e.g. Scroll my phone in bed" : "e.g. Meditate 10 minutes"} autoFocus maxLength={80} />
 
-      <label htmlFor={ids.trigger} style={S.fieldLabel}><span aria-hidden="true">⚡</span> After what? (cue)</label>
-      <input id={ids.trigger} style={S.input} value={form.trigger} onChange={e=>set("trigger",e.target.value)} placeholder="e.g. After morning coffee" maxLength={120} />
+      {breaking ? (
+        <div style={{ marginTop:10, background:"#FAECE7", border:"1px solid #F5C4B3", borderRadius:10, padding:"10px 12px" }}>
+          <label htmlFor={ids.starter} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, fontWeight:800, color:"#712B13", marginBottom:6 }}>
+            <Ic name="warn" size={13} color="#712B13" /> If tempted (make it hard)
+          </label>
+          <input id={ids.starter} style={{ ...S.input, marginTop:0, background:"#fff" }} value={form.starter} onChange={e=>set("starter",e.target.value)} placeholder="e.g. Phone charges in the kitchen" maxLength={100} />
+          <div style={{ fontSize:11.5, color:"#993C1D", fontStyle:"italic", marginTop:6, lineHeight:1.45 }}>Add friction so the bad habit is harder than resisting it.</div>
+        </div>
+      ) : (
+        <div style={{ marginTop:10, background:"#E1F5EE", border:"1px solid #9FE1CB", borderRadius:10, padding:"10px 12px" }}>
+          <label htmlFor={ids.starter} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, fontWeight:800, color:"#085041", marginBottom:6 }}>
+            <Ic name="clock" size={13} color="#085041" /> Two-minute version
+          </label>
+          <input id={ids.starter} style={{ ...S.input, marginTop:0, background:"#fff" }} value={form.starter} onChange={e=>set("starter",e.target.value)} placeholder="e.g. Meditate for one minute" maxLength={100} />
+          <div style={{ fontSize:11.5, color:"#0F6E56", fontStyle:"italic", marginTop:6, lineHeight:1.45 }}>Your no-excuses minimum. On hard days, only this counts — and it still keeps the streak.</div>
+        </div>
+      )}
 
-      {/* Habit stacking — tap an existing habit to chain onto it */}
-      {(() => {
-        const options = identities
-          .flatMap(i => i.habits.map(h => h.label))
-          .filter(l => l && l !== initial.label)
-          .slice(0, 8);
-        if (options.length === 0) return null;
-        return (
-          <div style={{ display:"flex", gap:6, overflowX:"auto", marginTop:8, paddingBottom:2, WebkitOverflowScrolling:"touch" }} aria-label="Stack after an existing habit">
-            {options.map(l => (
-              <button key={l} type="button" onClick={() => set("trigger", `After ${l}`)}
-                style={{
-                  flexShrink:0, fontSize:12, fontWeight:600, color:T.primary,
-                  background:T.primary+"10", border:`1px solid ${T.primary}33`, borderRadius:20,
-                  padding:"5px 11px", cursor:"pointer", fontFamily:"inherit",
-                  WebkitTapHighlightColor:"transparent", maxWidth:190,
-                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-                }}>
-                After {l}
-              </button>
-            ))}
-          </div>
-        );
-      })()}
+      {/* Draft with James Clear — fills the empty fields below */}
+      <button type="button" onClick={draftWithJames} disabled={aiLoading}
+        style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:7, width:"100%", marginTop:12, padding:"10px 14px", borderRadius:10, border:`1px solid ${T.primary}55`, background:T.primary+"0F", color:T.primary, fontFamily:"inherit", fontSize:13.5, fontWeight:800, cursor: aiLoading?"default":"pointer", opacity: aiLoading?0.7:1, WebkitTapHighlightColor:"transparent" }}>
+        <Ic name="spark" size={15} color={T.primary} /> {aiLoading ? "Drafting…" : "Draft with James Clear"}
+      </button>
+      <div style={{ fontSize:11, color:T.muted, textAlign:"center", marginTop:5 }}>Fills the empty fields below — you can edit anything.</div>
+      {aiErr && <div role="alert" style={{ fontSize:12, color:T.red, textAlign:"center", marginTop:6 }}>{aiErr}</div>}
 
-      <div style={{ display:"flex", gap:10 }}>
+      {/* Law 1 · obvious (build) / invisible (break) */}
+      <div style={lawHead}><span aria-hidden="true" style={lawNum(T.primary)}>1</span><span style={lawTxt(T.primary)}>{breaking ? "Make it invisible" : "Make it obvious"}</span></div>
+      <label htmlFor={ids.trigger} style={S.fieldLabel}>{breaking ? "When are you tempted? (cue)" : "After what? (cue)"}</label>
+      <input id={ids.trigger} list={ids.trigger + "-list"} style={S.input} value={form.trigger} onChange={e=>set("trigger",e.target.value)} placeholder={breaking ? "e.g. When I get into bed" : "e.g. After I pour my morning coffee"} maxLength={120} />
+      <datalist id={ids.trigger + "-list"}>
+        {cueOptions.map(o => <option key={o} value={o} />)}
+      </datalist>
+      <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>Pick a suggestion or type your own.</div>
+      <div style={{ display:"flex", gap:10, marginTop:10 }}>
         <div style={{ flex:1, minWidth:0 }}>
-          <label htmlFor={ids.time} style={S.fieldLabel}><span aria-hidden="true">🕐</span> Time</label>
+          <label htmlFor={ids.time} style={S.fieldLabel}>Time</label>
           <input id={ids.time} style={S.input} type="time" value={form.time} onChange={e=>set("time",e.target.value)} />
         </div>
         <div style={{ flex:1, minWidth:0 }}>
-          <label htmlFor={ids.location} style={S.fieldLabel}><span aria-hidden="true">📍</span> Where</label>
+          <label htmlFor={ids.location} style={S.fieldLabel}>Where</label>
           <input id={ids.location} style={S.input} value={form.location} onChange={e=>set("location",e.target.value)} placeholder="e.g. Kitchen" maxLength={50} />
         </div>
       </div>
-
-      {/* Environment design — stored in the legacy `easy` field so old data resurfaces */}
-      <label htmlFor={ids.easy} style={S.fieldLabel}><span aria-hidden="true">🏠</span> Environment (set it up)</label>
-      <input id={ids.easy} style={S.input} value={form.easy} onChange={e=>set("easy",e.target.value)} placeholder="e.g. Keep gym clothes out at night" maxLength={140} />
-
-      <label style={S.fieldLabel}><span aria-hidden="true">🔁</span> Frequency</label>
+      <label style={S.fieldLabel}>Frequency</label>
       <FrequencyPicker value={form.frequency} onChange={v=>set("frequency",v)} />
 
-      {/* ── Law 2 · Make it attractive — temptation bundle ── */}
-      <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:24 }}>
-        <span aria-hidden="true" style={{ width:19, height:19, borderRadius:"50%", background:"#534AB7", color:"#fff", fontSize:12, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>2</span>
-        <span style={{ fontSize:12, fontWeight:800, letterSpacing:"0.07em", textTransform:"uppercase", color:"#534AB7" }}>Make it attractive</span>
-        <span style={{ fontSize:12, color:T.muted }}>optional</span>
-      </div>
-      <div style={{ marginTop:10 }}>
-        <input id={ids.attractive} aria-label="Temptation bundle — pair it with something you enjoy" style={S.input} value={form.attractive} onChange={e=>set("attractive",e.target.value)} placeholder="✨ Pair it with… e.g. evening chai" maxLength={140} />
-      </div>
-
-      {/* ── Law 3 · Make it easy — two-minute starter ── */}
-      <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:24 }}>
-        <span aria-hidden="true" style={{ width:19, height:19, borderRadius:"50%", background:"#0F6E56", color:"#fff", fontSize:12, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>3</span>
-        <span style={{ fontSize:12, fontWeight:800, letterSpacing:"0.07em", textTransform:"uppercase", color:"#0F6E56" }}>Make it easy</span>
-        <span style={{ fontSize:12, color:T.muted }}>optional</span>
-      </div>
-      <div style={{ marginTop:10 }}>
-        <input id={ids.starter} aria-label="Two-minute starter version" style={S.input} value={form.starter} onChange={e=>set("starter",e.target.value)} placeholder="⏱ 2-min version… e.g. just read 2 pages" maxLength={100} />
+      {/* Laws 2 & 3 — accelerants, compact two-up */}
+      <div style={{ display:"flex", gap:10, marginTop:22 }}>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:7 }}><span aria-hidden="true" style={lawNum("#534AB7")}>2</span><span style={{ fontSize:11.5, fontWeight:800, color:"#534AB7" }}>{breaking ? "Unattractive" : "Attractive"}</span></div>
+          <input id={ids.attractive} aria-label={breaking ? "Make it unattractive — highlight the cost" : "Make it attractive — pair it with something you enjoy"} style={{ ...S.input, marginTop:0 }} value={form.attractive} onChange={e=>set("attractive",e.target.value)} placeholder={breaking ? "The real cost…" : "Pair with…"} maxLength={140} />
+        </div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:7 }}><span aria-hidden="true" style={lawNum("#0F6E56")}>3</span><span style={{ fontSize:11.5, fontWeight:800, color:"#0F6E56" }}>{breaking ? "Difficult" : "Easy"}</span></div>
+          <input id={ids.easy} aria-label={breaking ? "Make it difficult — add friction" : "Make it easy — set up the environment"} style={{ ...S.input, marginTop:0 }} value={form.easy} onChange={e=>set("easy",e.target.value)} placeholder={breaking ? "Add friction" : "Set up the space"} maxLength={140} />
+        </div>
       </div>
 
-      {/* ── Law 4 · Make it satisfying — automatic, nothing to fill ── */}
-      <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:24 }}>
-        <span aria-hidden="true" style={{ width:19, height:19, borderRadius:"50%", background:"#854F0B", color:"#fff", fontSize:12, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>4</span>
-        <span style={{ fontSize:12, fontWeight:800, letterSpacing:"0.07em", textTransform:"uppercase", color:"#854F0B" }}>Make it satisfying</span>
-        <span style={{ fontSize:12, color:T.muted }}>optional</span>
-      </div>
-      {/* Immediate reward — stored in the legacy `satisfying` field so old data resurfaces */}
-      <div style={{ marginTop:10 }}>
-        <input id={ids.satisfying} aria-label="Immediate reward after the habit" style={S.input} value={form.satisfying} onChange={e=>set("satisfying",e.target.value)} placeholder="🎁 Reward right after… e.g. chai after workout" maxLength={140} />
-      </div>
-      <div style={{ marginTop:8, fontSize:12.5, color:T.text2, lineHeight:1.5, background:T.gold+"12", border:`1px solid ${T.gold}33`, borderRadius:10, padding:"9px 12px" }}>
-        Plus automatic <span aria-hidden="true">🗳️</span> — every check earns a vote for your identity, grows your streak, and moves you toward the next badge.
+      {/* Law 4 · satisfying (build) / unsatisfying — accountability (break) */}
+      <div style={lawHead}><span aria-hidden="true" style={lawNum("#854F0B")}>4</span><span style={lawTxt("#854F0B")}>{breaking ? "Make it unsatisfying" : "Make it satisfying"}</span></div>
+      <input id={ids.satisfying} aria-label={breaking ? "Accountability or a cost for slipping" : "Immediate reward after the habit"} style={{ ...S.input, marginTop:10 }} value={form.satisfying} onChange={e=>set("satisfying",e.target.value)} placeholder={breaking ? "A cost for slipping… e.g. tell a friend" : "Reward right after… e.g. a square of chocolate"} maxLength={140} />
+      <div style={{ display:"flex", alignItems:"center", gap:9, marginTop:10, background:T.bg, borderRadius:10, padding:"9px 11px" }}>
+        <Ic name="check" size={15} color="#0F6E56" />
+        <span style={{ flex:1, fontSize:12, color:T.text2, lineHeight:1.4 }}><span style={{ fontWeight:800, color:T.text }}>Never miss twice</span> — {breaking ? "one slip is a mistake; two starts the habit again." : "miss once and we nudge you the next day."}</span>
       </div>
 
-      <div style={{ display:"flex", gap:8, marginTop:20 }}>
+      <div style={{ display:"flex", gap:8, marginTop:22 }}>
         <button type="button" style={S.btnSecondary} onClick={onCancel}>Cancel</button>
         <button type="button" style={{ ...S.btnPrimary, opacity: valid?1:0.4 }}
           onClick={() => { setSubmitted(true); if (valid) onSave(form); }}
           aria-disabled={!valid}>
-          {mode==="add" ? "Add Habit" : "Save Changes"}
+          {mode==="add" ? "Create habit" : "Save changes"}
         </button>
       </div>
       {submitted && !valid && (
@@ -816,6 +870,7 @@ export default function App() {
 
   // ── Streak cache — avoids 400-iteration loop per habit on every render ──
   const streakCacheRef      = useRef({});
+  const streakDataRef       = useRef(null);   // tracks the data ref the cache was built against
   // ── Timers stored in refs so they can be cleared on re-fire or unmount ──
   const celebrationTimerRef = useRef(null);
   const justCheckedTimerRef = useRef(null);
@@ -951,8 +1006,11 @@ export default function App() {
     return streak;
   }, [data]);
 
-  // Invalidate streak cache whenever data changes
-  useEffect(() => { streakCacheRef.current = {}; }, [data]);
+  // Invalidate the streak cache synchronously (during render) the moment `data`
+  // changes, so a just-made check is reflected in the SAME render — not one
+  // render later. (The old post-commit useEffect left the streak stale until
+  // the next re-render, e.g. when checking a 2nd habit on the same day.)
+  if (streakDataRef.current !== data) { streakDataRef.current = data; streakCacheRef.current = {}; }
 
   // ── Toggle — must be before early returns ──
   const toggle = useCallback((habitId, frequency, identity) => {
@@ -967,8 +1025,8 @@ export default function App() {
     });
     clearTimeout(justCheckedTimerRef.current);
     setJustChecked(habitId);
-    // Long enough for the reward strip to register before the row fades out
-    justCheckedTimerRef.current = setTimeout(()=>setJustChecked(null),1500);
+    // Long enough to read the reward before the row fades out (see .row-leaving delay)
+    justCheckedTimerRef.current = setTimeout(()=>setJustChecked(null),3400);
     const streak = getStreakForHabit(habitId, frequency) + 1;
     const milestone = MILESTONES.find(m=>m.days===streak);
     if(milestone && !wasChecked) {
@@ -1317,28 +1375,29 @@ export default function App() {
   }
 
   // ── CRUD: Habits ──
-  const addHabit = ({ label, trigger, attractive, easy, starter, satisfying, time, location, identityId, frequency }) => {
+  const addHabit = ({ label, trigger, attractive, easy, starter, satisfying, time, location, identityId, frequency, kind }) => {
     setIdentities(prev => prev.map(ident =>
       ident.id !== identityId ? ident :
-      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, attractive, easy, starter, satisfying, time, location, frequency: frequency || DEFAULT_FREQUENCY }] }
+      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, attractive, easy, starter, satisfying, time, location, kind: kind || "good", frequency: frequency || DEFAULT_FREQUENCY }] }
     ));
     setModal(null);
   };
 
-  const updateHabit = ({ label, trigger, attractive, easy, starter, satisfying, time, location, identityId: newIdentityId, frequency }) => {
+  const updateHabit = ({ label, trigger, attractive, easy, starter, satisfying, time, location, identityId: newIdentityId, frequency, kind }) => {
     const { identityId: oldIdentityId, habitId } = modalCtx;
     const freq = frequency || DEFAULT_FREQUENCY;
+    const k = kind || "good";
     if (newIdentityId === oldIdentityId) {
       setIdentities(prev => prev.map(ident =>
         ident.id !== oldIdentityId ? ident :
-        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, attractive, easy, starter, satisfying, time, location, frequency: freq }) }
+        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, attractive, easy, starter, satisfying, time, location, kind: k, frequency: freq }) }
       ));
     } else {
       setIdentities(prev => {
         const habitData = prev.find(i => i.id === oldIdentityId)?.habits.find(h => h.id === habitId);
         return prev.map(ident => {
           if (ident.id === oldIdentityId) return { ...ident, habits: ident.habits.filter(h => h.id !== habitId) };
-          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, attractive, easy, starter, satisfying, time, location, frequency: freq }] };
+          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, attractive, easy, starter, satisfying, time, location, kind: k, frequency: freq }] };
           return ident;
         });
       });
@@ -1912,22 +1971,29 @@ function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHab
 
 // ─── HABIT ROW ────────────────────────────────────────────────────────────────
 // One habit on the timeline: cue → action → coaching (identity header is above).
-function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, first, showIdentity, hideTime }) {
+function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, first, showIdentity, hideTime, history, votes = 0 }) {
   const next = getNextMilestone(streak);
 
   // One cue line above the label: trigger · time · location · frequency.
   // The milestone countdown lives in the micro-bar, not as text.
   const freq = habit.frequency;
   const isEveryDay = freq && freq.cadence === "weekly" && (freq.days || []).length === 7;
-  const cueParts = [
-    habit.trigger,
-    !hideTime && habit.time && to24h(habit.time),
-    habit.location,
-    freq && !isEveryDay && getFreqLabel(freq),
-  ].filter(Boolean);
+  // The habit renders as a full implementation-intention + identity sentence:
+  // "I will {habit} at {time} at {location}, so I can become {identity}".
+  // Lowercase the first letter unless it's an acronym (starts with two capitals).
+  const habitPhrase = /^[A-Z][A-Z]/.test(habit.label || "")
+    ? habit.label
+    : (habit.label || "").charAt(0).toLowerCase() + (habit.label || "").slice(1);
+
+  // Attractive + Easy collapse behind a "plan" toggle (tap to open).
+  const [showPlan, setShowPlan] = useState(false);
+  const hasPlan = !!(habit.attractive || habit.easy);
+
+  // Breaking a bad habit inverts the whole loop (resist, clean days, accountability).
+  const breaking = habit.kind === "bad";
 
   return (
-    <div style={{
+    <div className={"habit-card" + (showPlan ? " plan-open" : "")} style={{
       background: checked ? identity.color + "1f" : missed ? T.red + "10" : "transparent",
       borderTop: first ? "none" : `1px solid ${identity.color}22`,
       transition: "background 0.2s ease",
@@ -1935,18 +2001,8 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
       {/* ── Card body — cue, action, coaching (same layout as the Up Next hero) ── */}
       <div style={{ padding: "10px 12px 12px" }}>
-        {/* Cue line (Law 1 · make it obvious) — identity-tinted pill so the trigger stands out */}
-        {!checked && (showIdentity || cueParts.length > 0) && (
-          <div style={{ display:"inline-flex", alignItems:"center", gap:5, marginBottom:8, maxWidth:"100%", fontSize:12, fontWeight:700, color:identity.colorDim || T.text, background:identity.color+"1f", border:`1px solid ${identity.color}44`, borderRadius:8, padding:"3px 9px", boxSizing:"border-box" }}>
-            {habit.trigger && <Ic name="bolt" size={12} color={identity.colorDim || T.text} />}
-            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-              {[showIdentity && `${identity.icon} ${shortLabel(identity.label)}`, ...cueParts].filter(Boolean).join(" · ")}
-            </span>
-          </div>
-        )}
-
-        {/* Ring + label + streak */}
-        <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+        {/* Ring + the intention sentence */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
           <HabitRing
             checked={checked}
             missed={missed}
@@ -1962,15 +2018,19 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             tabIndex={0}
             onKeyDown={e => { if (e.key === "Enter") toggle(habit.id, habit.frequency, identity); }}
             aria-label={checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
-            style={{
-              flex: 1, minWidth: 0, fontSize:15.5, fontWeight: 700, lineHeight: 1.3, cursor: "pointer",
+            style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
+          >
+            <span style={{
+              display:"block", wordBreak:"break-word", fontSize:15, lineHeight: 1.45,
               color: checked ? T.text2 : missed ? T.muted : T.text,
               textDecoration: checked ? "line-through" : "none",
               textDecorationColor: identity.color + "88",
-              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-            }}
-          >
-            {habit.label}
+            }}>
+              {breaking ? "I won't" : "I will"} <span style={{ fontWeight:700, color: breaking ? "#993556" : "inherit" }}>{habitPhrase}</span>
+              {habit.time && <> {breaking ? "after" : "at"} <span style={{ fontWeight:700, color:"#92400E" }}>{to24h(habit.time)}</span></>}
+              {habit.location && <> at <span style={{ fontWeight:700, color:"#92400E" }}>{habit.location}</span></>}
+              , so I can become <span style={{ fontWeight:700, color: identity.colorDim || identity.color }}>{shortLabel(identity.label)}</span>.
+            </span>
           </span>
           {missed && (
             <span style={{
@@ -1980,25 +2040,17 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               Missed
             </span>
           )}
-          {streak >= 2 && !checked && (
-            <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:700, color:"#B45309", flexShrink:0, whiteSpace:"nowrap", background:T.gold+"1f", padding:"2px 8px", borderRadius:20 }} aria-label={`${streak} day streak`}>
-              <Ic name="flame" size={11} color="#B45309" /> {streak}d
-            </span>
-          )}
         </div>
 
-        {/* Attractive bundle (Law 2) */}
-        {!checked && !missed && habit.attractive && (
-          <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:9, marginLeft:39, fontSize:12.5, fontWeight:600, color:"#534AB7", minWidth:0 }}>
-            <Ic name="spark" size={13} color="#534AB7" />
-            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.attractive}</span>
-          </div>
-        )}
-
-        {/* 2-min chip (Law 3) + then: reward */}
-        {!checked && !missed && (habit.starter || habit.satisfying) && (
-          <div style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:8, marginTop:9, marginLeft:39 }}>
-            {habit.starter && (
+        {/* 2-min quick start (Law 3) + plan toggle (reward now shows on completion) */}
+        {!checked && !missed && (habit.starter || hasPlan) && (
+          <div style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:8, marginTop:6, marginLeft:39 }}>
+            {habit.starter && (breaking ? (
+              <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12.5, fontWeight:700, color:"#712B13", background:"#FAECE7", border:"1px solid #F5C4B3", borderRadius:20, padding:"6px 13px", maxWidth:"100%" }}>
+                <Ic name="warn" size={13} color="#712B13" />
+                <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>If tempted: {habit.starter}</span>
+              </span>
+            ) : (
               <button
                 onClick={() => toggle(habit.id, habit.frequency, identity)}
                 aria-label={`Do the two-minute version: ${habit.starter}`}
@@ -2008,23 +2060,57 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
                 <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>2-min: {habit.starter}</span>
                 <Ic name="check" size={12} color="#085041" />
               </button>
+            ))}
+            {hasPlan && (
+              <button type="button" onClick={() => setShowPlan(p => !p)} aria-expanded={showPlan}
+                aria-label={showPlan ? "Hide the plan" : "Show the attractive and easy setup"}
+                style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:11.5, fontWeight:600, color:T.muted, background:"transparent", border:"none", cursor:"pointer", fontFamily:"inherit", padding:"4px 2px", WebkitTapHighlightColor:"transparent" }}>
+                <span aria-hidden="true">{showPlan ? "▴" : "▾"}</span> plan
+              </button>
             )}
-            {habit.satisfying && (
-              <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:12, fontWeight:600, color:"#854F0B", minWidth:0, maxWidth:"100%" }}>
-                <Ic name="gift" size={13} color="#854F0B" />
-                <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>then: {habit.satisfying}</span>
+          </div>
+        )}
+
+        {/* Plan — attractive + easy, collapsed by default (revealed on hover or tap) */}
+        {!checked && !missed && hasPlan && (
+          <div className="plan-panel" style={{ flexDirection:"column", gap:6, marginTop:8, marginLeft:39, background:T.bg, borderRadius:10, padding:"8px 11px" }}>
+            {habit.attractive && (
+              <span style={{ display:"flex", alignItems:"flex-start", gap:7, fontSize:12, color:T.text2, minWidth:0 }}>
+                <Ic name="spark" size={13} color="#534AB7" />
+                <span><span style={{ fontWeight:700, color:"#534AB7" }}>{breaking ? "Unattractive: " : "Attractive: "}</span>{habit.attractive}</span>
+              </span>
+            )}
+            {habit.easy && (
+              <span style={{ display:"flex", alignItems:"flex-start", gap:7, fontSize:12, color:T.text2, minWidth:0 }}>
+                <Ic name="home" size={13} color="#0F6E56" />
+                <span><span style={{ fontWeight:700, color:"#0F6E56" }}>{breaking ? "Difficult: " : "Easy: "}</span>{habit.easy}</span>
               </span>
             )}
           </div>
         )}
 
-        {/* Milestone bar + count — progress toward the next streak badge */}
-        {!checked && next && streak > 0 && (
-          <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 10, marginLeft: 39 }} aria-label={`${streak} of ${next.days} days to ${next.label}`}>
-            <div aria-hidden="true" style={{ flex: 1, height: 4, borderRadius: 99, background: T.surf2, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${Math.min(100, (streak / next.days) * 100)}%`, background: identity.color, borderRadius: 99, transition: "width 0.4s ease" }} />
+        {/* Last 7 days + streak — one consolidated progress row (today is the rightmost square) */}
+        {!missed && Array.isArray(history) && history.length > 0 && (
+          <div style={{ display:"flex", alignItems:"flex-end", gap:8, marginTop:12, marginLeft:39 }}>
+            <div style={{ display:"flex", gap:5, flex:1 }} aria-label={`Last 7 days: ${history.filter(d=>d.status==="done").length} ${breaking ? "clean" : "done"}`}>
+              {history.map((d, i) => {
+                const doneColor = breaking ? "#639922" : identity.color;
+                const bg = d.status === "done" ? doneColor : d.status === "miss" ? T.red + "44" : T.surf2;
+                return (
+                  <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
+                    <span aria-hidden="true" style={{ fontSize:9, fontWeight:700, color: d.today ? T.text2 : T.muted }}>{d.letter}</span>
+                    <span aria-hidden="true" style={{ width:15, height:15, borderRadius:5, background:bg, boxSizing:"border-box", border: d.today ? `1.5px solid ${doneColor}` : "1px solid transparent", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                      {d.status === "done" && <Ic name="check" size={9} color="#fff" />}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
-            <span aria-hidden="true" style={{ fontSize:11.5, color: T.muted, fontWeight: 600, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{streak}/{next.days}</span>
+            {streak > 0 && (
+              <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:700, color: breaking ? "#3B6D11" : "#B45309", whiteSpace:"nowrap" }} aria-label={`${streak} ${breaking ? "clean days" : "day streak"}, ${votes} votes toward ${shortLabel(identity.label)}`}>
+                <Ic name={breaking ? "check" : "flame"} size={11} color={breaking ? "#3B6D11" : "#B45309"} /> {streak}{breaking ? " clean" : ""} · vote {votes}
+              </span>
+            )}
           </div>
         )}
 
@@ -2035,25 +2121,39 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           </div>
         )}
 
-        {/* Reward strip (Law 4) — instant payoff the moment it's checked */}
-        {checked && (
-          <div style={{ display:"flex", flexDirection:"column", gap:5, marginTop:9, marginLeft:39, boxSizing:"border-box", background:"#fff", border:"1px solid #9FE1CB", borderRadius:12, padding:"9px 12px", minWidth:0 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
-              <Ic name="vote" size={14} color="#0F6E56" />
-              <span style={{ fontSize:12.5, fontWeight:600, color:"#085041", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", minWidth:0 }}>
-                +1 vote for {shortLabel(identity.label)} · {streak}d streak{next ? ` · ${next.days - streak}d to ${next.label}` : ""}
+        {/* Payoff the moment it's checked — reward (build) or a clean day (break) */}
+        {checked && (breaking ? (
+          <div style={{ marginTop:9, marginLeft:39, minWidth:0 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:11, background:"#EAF3DE", border:"1px solid #97C459", borderRadius:12, padding:"11px 13px" }}>
+              <Ic name="check" size={22} color="#3B6D11" />
+              <span style={{ flex:1, minWidth:0 }}>
+                <span style={{ display:"block", fontSize:10.5, fontWeight:700, letterSpacing:"0.04em", textTransform:"uppercase", color:"#639922" }}>{streak} {streak === 1 ? "day" : "days"} clean</span>
+                <span style={{ display:"block", fontSize:14.5, fontWeight:600, color:"#173404" }}>You resisted — well done.</span>
               </span>
             </div>
+            <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:9, paddingLeft:2 }}>
+              <Ic name="check" size={13} color="#3B6D11" />
+              <span style={{ flex:1, minWidth:0, fontSize:12, color:"#3B6D11", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>+1 vote toward <span style={{ fontWeight:700 }}>{shortLabel(identity.label)}</span></span>
+            </div>
+          </div>
+        ) : (
+          <div style={{ marginTop:9, marginLeft:39, minWidth:0 }}>
             {habit.satisfying && (
-              <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
-                <Ic name="gift" size={14} color="#854F0B" />
-                <span style={{ fontSize:12.5, fontWeight:700, color:"#854F0B", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", minWidth:0 }}>
-                  Claim your reward: {habit.satisfying}
+              <div style={{ display:"flex", alignItems:"center", gap:11, background:"#FAEEDA", border:"1px solid #FAC775", borderRadius:12, padding:"11px 13px" }}>
+                <Ic name="gift" size={22} color="#854F0B" />
+                <span style={{ flex:1, minWidth:0 }}>
+                  <span style={{ display:"block", fontSize:10.5, fontWeight:700, letterSpacing:"0.04em", textTransform:"uppercase", color:"#BA7517" }}>Your reward</span>
+                  <span style={{ display:"block", fontSize:14.5, fontWeight:600, color:"#633806", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.satisfying}</span>
                 </span>
               </div>
             )}
+            <div style={{ display:"flex", alignItems:"center", gap:6, marginTop: habit.satisfying ? 9 : 0, paddingLeft:2 }}>
+              <Ic name="check" size={13} color="#0F6E56" />
+              <span style={{ flex:1, minWidth:0, fontSize:12, color:"#0F6E56", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>+1 vote toward <span style={{ fontWeight:700 }}>{shortLabel(identity.label)}</span></span>
+              <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:700, color:"#854F0B" }}><Ic name="flame" size={12} color="#854F0B" /> {streak}</span>
+            </div>
           </div>
-        )}
+        ))}
       </div>
 
     </div>
@@ -3277,31 +3377,28 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
             {visible.map(({ habit, identity }) => (
               <div key={habit.id} className={justChecked === habit.id ? "row-leaving" : ""} style={{
                 background:T.surface, borderRadius:14,
-                border: habit.id === firstPendingId ? `1.5px solid ${identity.color}` : `1px solid ${T.border}`,
-                boxShadow: habit.id === firstPendingId ? `0 6px 20px ${identity.color}22` : "0 4px 16px rgba(2,80,130,0.05)",
+                border: habit.kind === "bad"
+                  ? (habit.id === firstPendingId ? "1.5px solid #D4537E" : "1px solid #F4C0D1")
+                  : (habit.id === firstPendingId ? `1.5px solid ${identity.color}` : `1px solid ${T.border}`),
+                boxShadow: habit.id === firstPendingId
+                  ? (habit.kind === "bad" ? "0 6px 20px #D4537E22" : `0 6px 20px ${identity.color}22`)
+                  : "0 4px 16px rgba(2,80,130,0.05)",
                 overflow:"hidden",
               }}>
-                {/* Header — time (left) · identity (center) · ⋯ menu (right) */}
-                <div style={{ display:"flex", alignItems:"center", padding:"8px 8px 0 13px" }}>
-                  <div style={{ flex:1, minWidth:0, display:"flex", alignItems:"center", gap:6 }}>
-                    {habit.time && (
-                      <span style={{ flexShrink:0, fontSize:11, fontWeight:800, fontVariantNumeric:"tabular-nums", color: habit.id === firstPendingId ? T.primary : T.muted }}>
-                        {to24h(habit.time)}
+                {/* Header — breaking tag + cue (left) · ⋯ menu (right). Time & place live in the habit sentence below. */}
+                <div style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 8px 0 12px" }}>
+                  <span style={{ flex:1, minWidth:0, display:"inline-flex", alignItems:"center", gap:6, overflow:"hidden" }}>
+                    {habit.kind === "bad" && (
+                      <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:3, fontSize:10, fontWeight:800, color:"#993556", background:"#FBEAF0", border:"1px solid #F4C0D1", borderRadius:20, padding:"2px 7px" }}><Ic name="x" size={10} color="#993556" /> breaking</span>
+                    )}
+                    {habit.trigger && (
+                      <span style={{ display:"inline-flex", alignItems:"center", gap:5, minWidth:0, fontSize:11.5, fontWeight:700, color: habit.kind === "bad" ? "#993556" : (identity.colorDim || T.primary), overflow:"hidden" }}>
+                        <Ic name={habit.kind === "bad" ? "warn" : "bolt"} size={12} color={habit.kind === "bad" ? "#993556" : (identity.colorDim || T.primary)} />
+                        <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.trigger}</span>
                       </span>
                     )}
-                    {habit.id === firstPendingId && (
-                      <span style={{ flexShrink:0, fontSize:10, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.primary, background:T.primary+"14", borderRadius:10, padding:"2px 8px" }}>Now</span>
-                    )}
-                  </div>
-                  <div style={{ display:"flex", alignItems:"center", gap:6, minWidth:0, flexShrink:1 }}>
-                    <span style={{ width:8, height:8, borderRadius:"50%", background:identity.color, flexShrink:0 }} aria-hidden="true" />
-                    <span style={{ minWidth:0, fontSize:11, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.muted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                      <span aria-hidden="true">{identity.icon}</span> {shortLabel(identity.label)}
-                    </span>
-                  </div>
-                  <div style={{ flex:1, minWidth:0, display:"flex", justifyContent:"flex-end" }}>
-                    <RowMenu habit={habit} identity={identity} missed={todayData[habit.id] === "miss"} onMiss={markMiss} openEditHabit={openEditHabit} openDeleteHabit={openDeleteHabit} />
-                  </div>
+                  </span>
+                  <RowMenu habit={habit} identity={identity} missed={todayData[habit.id] === "miss"} onMiss={markMiss} openEditHabit={openEditHabit} openDeleteHabit={openDeleteHabit} />
                 </div>
                 <HabitRow
                   habit={habit}
@@ -3314,6 +3411,13 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                   first={true}
                   showIdentity={false}
                   hideTime={true}
+                  history={[...Array(7)].map((_, i) => {
+                    const k = addDaysKey(todayKey, i - 6);
+                    const v = (allData[k] || {})[habit.id];
+                    const d = new Date(k + "T00:00");
+                    return { status: v === true ? "done" : v === "miss" ? "miss" : "none", letter: "SMTWTFS"[d.getDay()], today: i === 6 };
+                  })}
+                  votes={Object.values(allData).reduce((n, day) => n + (day && day[habit.id] === true ? 1 : 0), 0)}
                 />
               </div>
             ))}
@@ -3731,9 +3835,11 @@ html, body, #root { height: 100%; }
 #root ::-webkit-scrollbar { display: none; }
 #root * { scrollbar-width: none; }
 .habit-toggle:active { opacity: 0.7; transform: scale(0.98); }
+.plan-panel { display: none; }
+.habit-card.plan-open .plan-panel { display: flex; }
 .check-pop { animation: pop 0.25s cubic-bezier(0.34,1.56,0.64,1) both; }
 .card-leaving { animation: fadeOut 0.3s ease forwards; }
-.row-leaving { animation: fadeOut 0.35s ease 1.15s forwards; }
+.row-leaving { animation: fadeOut 0.35s ease 3s forwards; }
 .sheet-in { animation: slideUp 0.28s cubic-bezier(0.32,0.72,0,1) both; }
 .toast-in { animation: fadeSlideDown 0.3s cubic-bezier(0.32,0.72,0,1) both; }
 .toast-in-up { animation: fadeSlideUp 0.3s cubic-bezier(0.32,0.72,0,1) both; }
