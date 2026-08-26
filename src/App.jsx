@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo, useId, memo, Fragment } from "react";
 import { initializeApp, getApps } from "firebase/app";
-import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
+import { getFirestore, initializeFirestore, doc, getDoc, setDoc } from "firebase/firestore";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "firebase/auth";
+import { getMessaging, getToken, isSupported } from "firebase/messaging";
 
 // ─── FIREBASE ────────────────────────────────────────────────────────────────
 // Config is read from .env (VITE_ prefix exposes vars to the browser bundle).
@@ -14,13 +15,44 @@ const _fbConfig = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId:             import.meta.env.VITE_FIREBASE_APP_ID,
 };
-const _fbApp = getApps().length ? getApps()[0] : initializeApp(_fbConfig);
-const _db    = getFirestore(_fbApp);
+const _hadApp = getApps().length > 0;   // true only on HMR re-runs, where Firestore is already started
+const _fbApp  = _hadApp ? getApps()[0] : initializeApp(_fbConfig);
+// ignoreUndefinedProperties: a single `undefined` field anywhere in the payload
+// makes setDoc throw and silently fail the whole save — this drops them instead.
+// initializeFirestore can only run once per app, so reuse the instance on HMR.
+const _db     = _hadApp
+  ? getFirestore(_fbApp)
+  : initializeFirestore(_fbApp, { ignoreUndefinedProperties: true });
 const _auth  = getAuth(_fbApp);
+
+// Web-push VAPID public key (Firebase console → Cloud Messaging → Web Push certificates).
+const _vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
 
 function identitiesRef(uid) { return doc(_db, "users", uid, "atomicHabits", "identities"); }
 function checkInsRef(uid)    { return doc(_db, "users", uid, "atomicHabits", "checkIns"); }
 function dailyTasksRef(uid)  { return doc(_db, "users", uid, "atomicHabits", "dailyTasks"); }
+function habitNotesRef(uid)  { return doc(_db, "users", uid, "atomicHabits", "habitNotes"); }
+function pushTokensRef(uid)  { return doc(_db, "pushTokens", uid); }
+
+// Turn on per-habit reminders: ask permission, register the FCM service worker,
+// fetch the device token, and store it (+ timezone) so the Cloud Function can push.
+async function enableHabitReminders(uid) {
+  if (!(await isSupported().catch(() => false))) throw new Error("unsupported");
+  if (!_vapidKey) throw new Error("no-vapid");
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") throw new Error("denied");
+  // Pass the Firebase config to the SW via query params (it can't read import.meta.env).
+  const swUrl = "/firebase-messaging-sw.js?" + new URLSearchParams({
+    apiKey: _fbConfig.apiKey, authDomain: _fbConfig.authDomain, projectId: _fbConfig.projectId,
+    storageBucket: _fbConfig.storageBucket, messagingSenderId: _fbConfig.messagingSenderId, appId: _fbConfig.appId,
+  }).toString();
+  const reg = await navigator.serviceWorker.register(swUrl);
+  const token = await getToken(getMessaging(_fbApp), { vapidKey: _vapidKey, serviceWorkerRegistration: reg });
+  if (!token) throw new Error("no-token");
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  await setDoc(pushTokensRef(uid), { uid, token, timezone, updatedAt: Date.now() });
+  return token;
+}
 
 // Detect missing env vars early — surfaces a helpful screen instead of cryptic Firebase errors
 const _envMissing = Object.entries(_fbConfig).filter(([, v]) => !v).map(([k]) => k);
@@ -170,6 +202,34 @@ function daysBetweenKeys(a, b) {
   const [y1,m1,d1] = a.split("-").map(Number);
   const [y2,m2,d2] = b.split("-").map(Number);
   return Math.round((new Date(y2,m2-1,d2) - new Date(y1,m1-1,d1)) / 86400000);
+}
+
+// The day a habit began counting — so streaks, votes, history and completion %
+// never penalise the days before it existed. Uses the stored createdAt when
+// present; for older habits saved before we tracked it, infers the earliest
+// day that has any entry for this habit. Returns null when there's nothing to
+// gate against (no createdAt and no history).
+function habitStartKey(habit, allData) {
+  if (habit && habit.createdAt) return habit.createdAt;
+  if (!habit || !allData) return null;
+  let earliest = null;
+  for (const k in allData) {
+    const day = allData[k];
+    if (day && day[habit.id] !== undefined && (earliest === null || k < earliest)) earliest = k;
+  }
+  return earliest;
+}
+
+// How many days the habit was actually due between its start and endKey
+// (inclusive) — the denominator for "X of Y days" on the card.
+function scheduledDaysSince(frequency, startKey, endKey) {
+  if (!startKey || startKey > endKey) return 0;
+  const span = daysBetweenKeys(startKey, endKey); // whole days, >= 0
+  let n = 0;
+  for (let i = 0; i <= span && i <= 400; i++) {
+    if (isScheduledOn(frequency, addDaysKey(startKey, i))) n++;
+  }
+  return n;
 }
 
 // Walk back over the window and record every day this habit was actually due.
@@ -582,6 +642,7 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
   // ── Draft with James Clear — fills only the EMPTY fields, never overwrites you ──
   const [aiLoading, setAiLoading] = useState(false);
   const [aiErr, setAiErr] = useState("");
+  const [fieldLoading, setFieldLoading] = useState(""); // which single field is regenerating
   const parseTime = (s) => {
     const m = (s || "").trim().match(/^(\d{1,2})(?::(\d{2}))?\s*([ap]\.?m\.?)?$/i);
     if (!m) return "";
@@ -622,6 +683,42 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     finally { setAiLoading(false); }
   };
 
+  // ── Suggest a SINGLE field with James Clear (mode:"field") ──
+  const regenField = async (field) => {
+    // Every field needs a habit name first — except suggesting the name itself.
+    if (field !== "label" && !form.label.trim()) { setSubmitted(true); return; }
+    setFieldLoading(field); setAiErr("");
+    try {
+      const { getFunctions, httpsCallable } = await import("firebase/functions");
+      const call = httpsCallable(getFunctions(), "askJamesClear", { timeout: 20000 });
+      const identityLabel = identities.find(i => i.id === form.identityId)?.label || "";
+      const res = await call({ mode: "field", field, habit: {
+        label: form.label, identity: identityLabel, kind: form.kind,
+        trigger: form.trigger, attractive: form.attractive, easy: form.easy,
+        starter: form.starter, satisfying: form.satisfying,
+        time: form.time, location: form.location, frequency: getFreqLabel(form.frequency),
+      }});
+      const s = res?.data?.suggestion;
+      let val = s == null ? "" : (typeof s === "string" ? s : s.value);
+      // Store a suggested habit name sentence-cased (the card lowercases it for display).
+      if (field === "label" && val) val = val.charAt(0).toUpperCase() + val.slice(1);
+      if (val) { if (field === "time") set("time", parseTime(val) || form.time); else set(field, val); }
+      else setAiErr("Couldn't suggest that one — try again.");
+    } catch { setAiErr("Couldn't reach the coach. Please try again."); }
+    finally { setFieldLoading(""); }
+  };
+  // Compact per-field "suggest" icon button — sits beside a field's label.
+  const suggestBtn = (field) => (
+    <button type="button" onClick={() => regenField(field)} disabled={!!fieldLoading || aiLoading}
+      aria-label="Suggest this field with James Clear" title="Suggest with James Clear"
+      style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:22, height:22, flexShrink:0,
+        color:T.primary, background:T.primary+"12", border:`1px solid ${T.primary}44`, borderRadius:6, padding:0,
+        cursor:(fieldLoading||aiLoading)?"default":"pointer", opacity:(fieldLoading && fieldLoading!==field)?0.4:1,
+        WebkitTapHighlightColor:"transparent" }}>
+      {fieldLoading===field ? <span style={{ fontSize:11, fontWeight:800 }}>…</span> : <Ic name="spark" size={12} color={T.primary} />}
+    </button>
+  );
+
   const lawHead = { display:"flex", alignItems:"center", gap:7, marginTop:22 };
   const lawNum  = (c) => ({ width:19, height:19, borderRadius:"50%", background:c, color:"#fff", fontSize:12, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 });
   const lawTxt  = (c) => ({ fontSize:12, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:c });
@@ -648,22 +745,32 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
       <div style={{ fontSize:11.5, color:T.muted, fontStyle:"italic", marginTop:6 }}>{breaking ? "Every clean day is a vote for this person." : "Every check is a vote for this person."}</div>
 
       {/* The habit + the minimum-effort lever */}
-      <label htmlFor={ids.label} style={{ ...S.fieldLabel, marginTop:18 }}>{breaking ? "The habit to break *" : "The habit *"}</label>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginTop:18 }}>
+        <label htmlFor={ids.label} style={S.fieldLabel}>{breaking ? "The habit to break *" : "The habit *"}</label>
+        {suggestBtn("label")}
+      </div>
       <input id={ids.label} style={S.input} value={form.label} onChange={e=>set("label",e.target.value)} placeholder={breaking ? "e.g. Scroll my phone in bed" : "e.g. Meditate 10 minutes"} autoFocus maxLength={80} />
+      <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>Type a name, or tap <Ic name="spark" size={10} color={T.primary} /> to have James Clear suggest one from your identity.</div>
 
       {breaking ? (
         <div style={{ marginTop:10, background:"#FAECE7", border:"1px solid #F5C4B3", borderRadius:10, padding:"10px 12px" }}>
-          <label htmlFor={ids.starter} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, fontWeight:800, color:"#712B13", marginBottom:6 }}>
-            <Ic name="warn" size={13} color="#712B13" /> If tempted (make it hard)
-          </label>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
+            <label htmlFor={ids.starter} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, fontWeight:800, color:"#712B13" }}>
+              <Ic name="warn" size={13} color="#712B13" /> If tempted (make it hard)
+            </label>
+            {suggestBtn("starter")}
+          </div>
           <input id={ids.starter} style={{ ...S.input, marginTop:0, background:"#fff" }} value={form.starter} onChange={e=>set("starter",e.target.value)} placeholder="e.g. Phone charges in the kitchen" maxLength={100} />
           <div style={{ fontSize:11.5, color:"#993C1D", fontStyle:"italic", marginTop:6, lineHeight:1.45 }}>Add friction so the bad habit is harder than resisting it.</div>
         </div>
       ) : (
         <div style={{ marginTop:10, background:"#E1F5EE", border:"1px solid #9FE1CB", borderRadius:10, padding:"10px 12px" }}>
-          <label htmlFor={ids.starter} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, fontWeight:800, color:"#085041", marginBottom:6 }}>
-            <Ic name="clock" size={13} color="#085041" /> Two-minute version
-          </label>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
+            <label htmlFor={ids.starter} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, fontWeight:800, color:"#085041" }}>
+              <Ic name="clock" size={13} color="#085041" /> Two-minute version
+            </label>
+            {suggestBtn("starter")}
+          </div>
           <input id={ids.starter} style={{ ...S.input, marginTop:0, background:"#fff" }} value={form.starter} onChange={e=>set("starter",e.target.value)} placeholder="e.g. Meditate for one minute" maxLength={100} />
           <div style={{ fontSize:11.5, color:"#0F6E56", fontStyle:"italic", marginTop:6, lineHeight:1.45 }}>Your no-excuses minimum. On hard days, only this counts — and it still keeps the streak.</div>
         </div>
@@ -674,12 +781,15 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
         style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:7, width:"100%", marginTop:12, padding:"10px 14px", borderRadius:10, border:`1px solid ${T.primary}55`, background:T.primary+"0F", color:T.primary, fontFamily:"inherit", fontSize:13.5, fontWeight:800, cursor: aiLoading?"default":"pointer", opacity: aiLoading?0.7:1, WebkitTapHighlightColor:"transparent" }}>
         <Ic name="spark" size={15} color={T.primary} /> {aiLoading ? "Drafting…" : "Draft with James Clear"}
       </button>
-      <div style={{ fontSize:11, color:T.muted, textAlign:"center", marginTop:5 }}>Fills the empty fields below — you can edit anything.</div>
+      <div style={{ fontSize:11, color:T.muted, textAlign:"center", marginTop:5 }}>Fills the empty fields below — or tap <Ic name="spark" size={10} color={T.primary} /> on any field for a single suggestion.</div>
       {aiErr && <div role="alert" style={{ fontSize:12, color:T.red, textAlign:"center", marginTop:6 }}>{aiErr}</div>}
 
       {/* Law 1 · obvious (build) / invisible (break) */}
       <div style={lawHead}><span aria-hidden="true" style={lawNum(T.primary)}>1</span><span style={lawTxt(T.primary)}>{breaking ? "Make it invisible" : "Make it obvious"}</span></div>
-      <label htmlFor={ids.trigger} style={S.fieldLabel}>{breaking ? "When are you tempted? (cue)" : "After what? (cue)"}</label>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+        <label htmlFor={ids.trigger} style={S.fieldLabel}>{breaking ? "When are you tempted? (cue)" : "After what? (cue)"}</label>
+        {suggestBtn("trigger")}
+      </div>
       <input id={ids.trigger} list={ids.trigger + "-list"} style={S.input} value={form.trigger} onChange={e=>set("trigger",e.target.value)} placeholder={breaking ? "e.g. When I get into bed" : "e.g. After I pour my morning coffee"} maxLength={120} />
       <datalist id={ids.trigger + "-list"}>
         {cueOptions.map(o => <option key={o} value={o} />)}
@@ -701,17 +811,17 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
       {/* Laws 2 & 3 — accelerants, compact two-up */}
       <div style={{ display:"flex", gap:10, marginTop:22 }}>
         <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:7 }}><span aria-hidden="true" style={lawNum("#534AB7")}>2</span><span style={{ fontSize:11.5, fontWeight:800, color:"#534AB7" }}>{breaking ? "Unattractive" : "Attractive"}</span></div>
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:7 }}><span aria-hidden="true" style={lawNum("#534AB7")}>2</span><span style={{ fontSize:11.5, fontWeight:800, color:"#534AB7" }}>{breaking ? "Unattractive" : "Attractive"}</span><span style={{ marginLeft:"auto" }}>{suggestBtn("attractive")}</span></div>
           <input id={ids.attractive} aria-label={breaking ? "Make it unattractive — highlight the cost" : "Make it attractive — pair it with something you enjoy"} style={{ ...S.input, marginTop:0 }} value={form.attractive} onChange={e=>set("attractive",e.target.value)} placeholder={breaking ? "The real cost…" : "Pair with…"} maxLength={140} />
         </div>
         <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:7 }}><span aria-hidden="true" style={lawNum("#0F6E56")}>3</span><span style={{ fontSize:11.5, fontWeight:800, color:"#0F6E56" }}>{breaking ? "Difficult" : "Easy"}</span></div>
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:7 }}><span aria-hidden="true" style={lawNum("#0F6E56")}>3</span><span style={{ fontSize:11.5, fontWeight:800, color:"#0F6E56" }}>{breaking ? "Difficult" : "Easy"}</span><span style={{ marginLeft:"auto" }}>{suggestBtn("easy")}</span></div>
           <input id={ids.easy} aria-label={breaking ? "Make it difficult — add friction" : "Make it easy — set up the environment"} style={{ ...S.input, marginTop:0 }} value={form.easy} onChange={e=>set("easy",e.target.value)} placeholder={breaking ? "Add friction" : "Set up the space"} maxLength={140} />
         </div>
       </div>
 
       {/* Law 4 · satisfying (build) / unsatisfying — accountability (break) */}
-      <div style={lawHead}><span aria-hidden="true" style={lawNum("#854F0B")}>4</span><span style={lawTxt("#854F0B")}>{breaking ? "Make it unsatisfying" : "Make it satisfying"}</span></div>
+      <div style={lawHead}><span aria-hidden="true" style={lawNum("#854F0B")}>4</span><span style={lawTxt("#854F0B")}>{breaking ? "Make it unsatisfying" : "Make it satisfying"}</span><span style={{ marginLeft:"auto" }}>{suggestBtn("satisfying")}</span></div>
       <input id={ids.satisfying} aria-label={breaking ? "Accountability or a cost for slipping" : "Immediate reward after the habit"} style={{ ...S.input, marginTop:10 }} value={form.satisfying} onChange={e=>set("satisfying",e.target.value)} placeholder={breaking ? "A cost for slipping… e.g. tell a friend" : "Reward right after… e.g. a square of chocolate"} maxLength={140} />
       <div style={{ display:"flex", alignItems:"center", gap:9, marginTop:10, background:T.bg, borderRadius:10, padding:"9px 11px" }}>
         <Ic name="check" size={15} color="#0F6E56" />
@@ -827,6 +937,7 @@ export default function App() {
   useEffect(() => { scrollRef.current?.scrollTo(0, 0); window.scrollTo(0, 0); }, [view]);
   const [undoDelete,   setUndoDelete]  = useState(null);
   const [dailyTasks,   setDailyTasks]  = useState({});       // { [dateKey]: [{id, text, done}] }
+  const [habitNotes,   setHabitNotes]  = useState({});       // { [dateKey]: { [habitId]: "note" } } — daily reflection per habit
 
   // Modal states
   const [modal,    setModal]    = useState(null);
@@ -850,6 +961,31 @@ export default function App() {
   );
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewDismissed, setReviewDismissed] = useState(null); // habit id, this session only
+  const [manualReview, setManualReview] = useState(null);       // review opened from a habit's ⋯ menu
+  const openReviewFor = useCallback((habit, identity) => {
+    const stats = habitReviewStats(habit, data, todayKey);
+    setManualReview({ habit, identity, stats, pattern: missPattern(stats), followUp: null, mode: "review" });
+    setReviewOpen(true);
+  }, [data, todayKey]);
+
+  // ── Habit reminders (web push) ──
+  const [notifStatus, setNotifStatus] = useState(() => (typeof Notification !== "undefined" ? Notification.permission : "unsupported"));
+  const [notifBusy, setNotifBusy] = useState(false);
+  const handleEnableReminders = useCallback(async () => {
+    if (!user) return;
+    setNotifBusy(true);
+    try {
+      await enableHabitReminders(user.uid);
+      setNotifStatus("granted");
+    } catch (e) {
+      const msg = e.message === "unsupported" ? "Reminders aren't supported in this browser."
+        : e.message === "no-vapid"    ? "Reminders aren't set up yet — the notification key is missing."
+        : e.message === "denied"      ? "Notifications are blocked. Enable them for this site in your browser settings."
+        : "Couldn't turn on reminders. Please try again.";
+      setNotifStatus(typeof Notification !== "undefined" ? Notification.permission : "unsupported");
+      alert(msg);
+    } finally { setNotifBusy(false); }
+  }, [user]);
 
   // ── Scores — must be before early returns (Rules of Hooks) ──
   const scheduledToday = useMemo(
@@ -867,6 +1003,13 @@ export default function App() {
   const ciTimer   = useRef(null);
   const isFirstId = useRef(true);
   const isFirstCi = useRef(true);
+  // Dirty flags: a debounced save is pending. Used to flush immediately when the
+  // tab hides / the page unloads, so a quick refresh never loses a recent change.
+  const idDirty   = useRef(false);
+  const ciDirty   = useRef(false);
+  const dtDirty   = useRef(false);
+  const hnDirty   = useRef(false);
+  const latestRef = useRef({});   // most recent state, for the unload-flush closure
 
   // ── Streak cache — avoids 400-iteration loop per habit on every render ──
   const streakCacheRef      = useRef({});
@@ -877,7 +1020,10 @@ export default function App() {
   const undoTimerRef        = useRef(null);
   const dtTimer             = useRef(null);
   const isFirstDt           = useRef(true);
+  const hnTimer             = useRef(null);
+  const isFirstHn           = useRef(true);
   const hasLoadedRef        = useRef(false); // saves stay blocked until the initial fetch succeeds — otherwise a failed load + local edit could overwrite cloud data with empty state
+  const didBackfillRef      = useRef(false); // one-time createdAt backfill for habits saved before we tracked it
 
   // ── Auth listener ──
   useEffect(() => {
@@ -885,16 +1031,19 @@ export default function App() {
       isFirstId.current = true;
       isFirstCi.current = true;
       isFirstDt.current = true;
+      isFirstHn.current = true;
       hasLoadedRef.current = false;
+      didBackfillRef.current = false;
       streakCacheRef.current = {};
       setUser(u);
       if (u) {
         setDataLoading(true);
         try {
-          const [idSnap, ciSnap, dtSnap] = await Promise.all([
+          const [idSnap, ciSnap, dtSnap, hnSnap] = await Promise.all([
             getDoc(identitiesRef(u.uid)),
             getDoc(checkInsRef(u.uid)),
             getDoc(dailyTasksRef(u.uid)),
+            getDoc(habitNotesRef(u.uid)),
           ]);
           // Re-arm each first-run guard when applying fetched data, so the load
           // itself doesn't echo straight back to Firestore as a spurious save
@@ -915,6 +1064,12 @@ export default function App() {
             isFirstDt.current = true;
             setDailyTasks(pruned);
           }
+          if (hnSnap.exists()) {
+            const raw = hnSnap.data().data || {};
+            const pruned = Object.fromEntries(Object.entries(raw).filter(([k]) => k >= cutoffKey));
+            isFirstHn.current = true;
+            setHabitNotes(pruned);
+          }
           hasLoadedRef.current = true;
         } catch (err) {
           console.error("Failed to load data from Firestore:", err);
@@ -929,41 +1084,108 @@ export default function App() {
   useEffect(() => {
     if (!user || isFirstId.current) { isFirstId.current = false; return; }
     if (!hasLoadedRef.current) return;
+    idDirty.current = true;
     clearTimeout(idTimer.current);
     idTimer.current = setTimeout(() => {
       setSyncing(true);
       setSaveError(false);
       setDoc(identitiesRef(user.uid), { data: identities })
+        .then(() => { idDirty.current = false; })
         .catch(err => { console.error("Identity save failed:", err); setSaveError(true); })
         .finally(() => setSyncing(false));
-    }, 800);
+    }, 500);
   }, [identities, user]);
 
   useEffect(() => {
     if (!user || isFirstCi.current) { isFirstCi.current = false; return; }
     if (!hasLoadedRef.current) return;
+    ciDirty.current = true;
     clearTimeout(ciTimer.current);
     ciTimer.current = setTimeout(() => {
       setSyncing(true);
       setSaveError(false);
       setDoc(checkInsRef(user.uid), { data })
+        .then(() => { ciDirty.current = false; })
         .catch(err => { console.error("Check-in save failed:", err); setSaveError(true); })
         .finally(() => setSyncing(false));
-    }, 800);
+    }, 500);
   }, [data, user]);
 
   useEffect(() => {
     if (!user || isFirstDt.current) { isFirstDt.current = false; return; }
     if (!hasLoadedRef.current) return;
+    dtDirty.current = true;
     clearTimeout(dtTimer.current);
     dtTimer.current = setTimeout(() => {
       setSyncing(true);
       setSaveError(false);
       setDoc(dailyTasksRef(user.uid), { data: dailyTasks })
+        .then(() => { dtDirty.current = false; })
         .catch(err => { console.error("Daily tasks save failed:", err); setSaveError(true); })
         .finally(() => setSyncing(false));
-    }, 800);
+    }, 500);
   }, [dailyTasks, user]);
+
+  useEffect(() => {
+    if (!user || isFirstHn.current) { isFirstHn.current = false; return; }
+    if (!hasLoadedRef.current) return;
+    hnDirty.current = true;
+    clearTimeout(hnTimer.current);
+    hnTimer.current = setTimeout(() => {
+      setSyncing(true);
+      setSaveError(false);
+      setDoc(habitNotesRef(user.uid), { data: habitNotes })
+        .then(() => { hnDirty.current = false; })
+        .catch(err => { console.error("Habit notes save failed:", err); setSaveError(true); })
+        .finally(() => setSyncing(false));
+    }, 500);
+  }, [habitNotes, user]);
+
+  // Keep the latest state handy for the unload-flush closure (which is created once).
+  latestRef.current = { user, identities, data, dailyTasks, habitNotes };
+
+  // Flush any pending debounced save the instant the tab is hidden or the page is
+  // being unloaded (refresh, close, app backgrounded), so a quick refresh can't
+  // roll a recent change back. Fire-and-forget — we can't await during unload.
+  useEffect(() => {
+    const flush = () => {
+      const { user, identities, data, dailyTasks, habitNotes } = latestRef.current;
+      if (!user || !hasLoadedRef.current) return;
+      if (idDirty.current) { clearTimeout(idTimer.current); idDirty.current = false; setDoc(identitiesRef(user.uid), { data: identities }).catch(() => {}); }
+      if (ciDirty.current) { clearTimeout(ciTimer.current); ciDirty.current = false; setDoc(checkInsRef(user.uid), { data }).catch(() => {}); }
+      if (dtDirty.current) { clearTimeout(dtTimer.current); dtDirty.current = false; setDoc(dailyTasksRef(user.uid), { data: dailyTasks }).catch(() => {}); }
+      if (hnDirty.current) { clearTimeout(hnTimer.current); hnDirty.current = false; setDoc(habitNotesRef(user.uid), { data: habitNotes }).catch(() => {}); }
+    };
+    const onVisibility = () => { if (document.visibilityState === "hidden") flush(); };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, []);
+
+  // One-time backfill: stamp a createdAt on every habit saved before we tracked
+  // it. Uses the earliest recorded check-in as a safe start (you can't have
+  // logged a day before the habit existed); falls back to today if there's no
+  // history. Runs once per load; the resulting setIdentities persists normally.
+  useEffect(() => {
+    if (!user || !hasLoadedRef.current || didBackfillRef.current) return;
+    if (!identities.length) return;
+    const today = getTodayKey();
+    let changed = false;
+    const next = identities.map(ident => {
+      let identChanged = false;
+      const habits = ident.habits.map(h => {
+        if (h.createdAt) return h;
+        identChanged = true; changed = true;
+        return { ...h, createdAt: habitStartKey(h, data) || today };
+      });
+      return identChanged ? { ...ident, habits } : ident;
+    });
+    didBackfillRef.current = true;
+    if (changed) setIdentities(next);
+  }, [identities, data, user]);
 
   // ── Google sign-in ──
   const signIn = async () => {
@@ -1048,6 +1270,21 @@ export default function App() {
     });
   }, [selectedDate]);
 
+  // Daily reflection note per habit — a short "what did I do today" for later review.
+  const setHabitNote = useCallback((dateKey, habitId, text) => {
+    setHabitNotes(prev => {
+      const trimmed = (text || "").trim();
+      const day = { ...(prev[dateKey] || {}) };
+      if (trimmed) day[habitId] = trimmed;
+      else delete day[habitId];
+      if (Object.keys(day).length === 0) {           // drop empty day buckets
+        const { [dateKey]: _drop, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [dateKey]: day };
+    });
+  }, []);
+
   // Cleanup all timers on unmount
   useEffect(() => () => {
     clearTimeout(celebrationTimerRef.current);
@@ -1128,26 +1365,30 @@ export default function App() {
   // ── Daily task CRUD (stable callbacks — only touch setDailyTasks) ──
   // Tasks carry `star`: true for one of the day's Big 3, false for the backlog.
   // (Legacy tasks may still carry `priority`/`quadrant` — see migrateStars below.)
-  const addTask = useCallback((dateKey, text, star = false) => {
+  const addTask = useCallback((dateKey, text, priority = "med") => {
+    const p = PRIORITIES[priority] ? priority : "med";
     setDailyTasks(prev => {
       const existing = prev[dateKey] || [];
-      // Respect the cap even if a caller asks for a starred task
-      const canStar = star && countStarred(existing) < STAR_LIMIT;
-      return { ...prev, [dateKey]: [...existing, { id: uid(), text, done: false, star: canStar }] };
+      return { ...prev, [dateKey]: [...existing, { id: uid(), text, done: false, priority: p }] };
     });
   }, []);
 
-  // Star / unstar a task. Unstarring is always allowed; starring is refused
-  // once the day already has STAR_LIMIT picks — the cap is the whole point.
+  // Cycle a task's priority: High → Med → Low → High. (Kept the name `toggleStar`
+  // so the prop threading through TodayView/TopTasksCard stays intact.)
   const toggleStar = useCallback((dateKey, taskId) => {
     setDailyTasks(prev => {
       const list = prev[dateKey] || [];
       const target = list.find(t => t.id === taskId);
       if (!target) return prev;
-      if (!isStarred(target) && countStarred(list) >= STAR_LIMIT) return prev; // at cap — no-op
+      const cur  = PRIORITIES[target.priority] ? target.priority : (target.star ? "high" : "med");
+      const next = PRIORITY_ORDER[(PRIORITY_ORDER.indexOf(cur) + 1) % PRIORITY_ORDER.length];
       return {
         ...prev,
-        [dateKey]: list.map(t => t.id === taskId ? { ...t, star: !isStarred(t) } : t),
+        [dateKey]: list.map(t => {
+          if (t.id !== taskId) return t;
+          const { star, ...rest } = t; // drop the legacy star field entirely
+          return { ...rest, priority: next };
+        }),
       };
     });
   }, []);
@@ -1378,7 +1619,7 @@ export default function App() {
   const addHabit = ({ label, trigger, attractive, easy, starter, satisfying, time, location, identityId, frequency, kind }) => {
     setIdentities(prev => prev.map(ident =>
       ident.id !== identityId ? ident :
-      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, attractive, easy, starter, satisfying, time, location, kind: kind || "good", frequency: frequency || DEFAULT_FREQUENCY }] }
+      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, attractive, easy, starter, satisfying, time, location, kind: kind || "good", frequency: frequency || DEFAULT_FREQUENCY, createdAt: getTodayKey() }] }
     ));
     setModal(null);
   };
@@ -1528,14 +1769,14 @@ export default function App() {
       )}
 
       {/* ── Modals ── */}
-      {reviewOpen && reviewTarget && (
+      {reviewOpen && (manualReview || reviewTarget) && (
         <HabitReview
-          target={reviewTarget}
+          target={manualReview || reviewTarget}
           onApply={applyReviewFix}
           onSnooze={snoozeReview}
           onFollowUp={resolveFollowUp}
           onArchive={archiveHabit}
-          onClose={() => setReviewOpen(false)}
+          onClose={() => { setReviewOpen(false); setManualReview(null); }}
         />
       )}
       {modal==="addHabit" && (
@@ -1609,6 +1850,18 @@ export default function App() {
           <button onClick={()=>fbSignOut(_auth)} title={user.email||undefined} style={{ background:"transparent", border:`1px solid ${T.border}`, borderRadius:20, fontSize:12, color:T.muted, padding:"3px 10px", cursor:"pointer", fontFamily:"inherit", maxWidth:120, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
             {user.displayName ? `${user.displayName.split(" ")[0]} · Sign out` : "Sign out"}
           </button>
+          {notifStatus !== "unsupported" && (
+            notifStatus === "granted" ? (
+              <span title="You'll get a reminder at each habit's time" style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:11, fontWeight:700, color:T.primary }}>
+                <Ic name="check" size={11} color={T.primary} /> Reminders on
+              </span>
+            ) : (
+              <button onClick={handleEnableReminders} disabled={notifBusy} title="Get a reminder at each habit's time"
+                style={{ background:"transparent", border:`1px solid ${T.primary}55`, borderRadius:20, fontSize:11, fontWeight:700, color:T.primary, padding:"3px 10px", cursor: notifBusy ? "default" : "pointer", fontFamily:"inherit", opacity: notifBusy ? 0.6 : 1, WebkitTapHighlightColor:"transparent" }}>
+                🔔 {notifBusy ? "Enabling…" : "Reminders"}
+              </button>
+            )
+          )}
           <div style={S.ringWrap}>
             {(() => {
               const ringTitleId = "ring-title-" + view;
@@ -1648,10 +1901,13 @@ export default function App() {
             allData={data}
             toggle={toggle}
             markMiss={markMiss}
+            habitNotes={habitNotes}
+            setHabitNote={setHabitNote}
             justChecked={justChecked}
             getStreakForHabit={getStreakForHabit}
             openEditHabit={openEditHabit}
             openDeleteHabit={openDeleteHabit}
+            openReviewFor={openReviewFor}
             setModal={setModal}
             openAddHabit={openAddHabit}
             openAddIdentity={openAddIdentity}
@@ -1929,9 +2185,100 @@ function HabitRing({ checked, missed, color, streak, next, onClick, label, size 
   );
 }
 
-// ─── ROW MENU — miss / edit / delete behind one ⋯ button ──────────────────────
-function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHabit }) {
+// ─── NOTES JOURNAL — edit today's note + scroll (and edit) past days ───────────
+// James Clear's "Reflection & Review", per habit: one scrollable log where any
+// day's note is editable. Opened from the card's note link and the ⋯ menu.
+function NotesJournalModal({ habit, identity, allData = {}, habitNotes = {}, onSaveNote, onClose }) {
+  const todayK = getTodayKey();
+  const [editingKey, setEditingKey] = useState(todayK);   // today open for writing by default
+  const [draft, setDraft] = useState((habitNotes[todayK] || {})[habit.id] || "");
+
+  // Today is editable; earlier days are a read-only log. Show today plus any past
+  // day that has a status or a note, newest first.
+  const rows = useMemo(() => {
+    const out = [];
+    for (let i = 0; i < 366 && out.length < 120; i++) {
+      const k = addDaysKey(todayK, -i);
+      const st = (allData[k] || {})[habit.id];
+      const nt = (habitNotes[k] || {})[habit.id];
+      if (i === 0 || st !== undefined || nt) out.push({ k, st, nt });
+    }
+    return out;
+  }, [habit.id, allData, habitNotes, todayK]);
+
+  const editingToday = editingKey === todayK;
+  const saveToday = () => { onSaveNote(todayK, draft); setEditingKey(null); };
+
+  return (
+    <Modal title={`${habit.label} · notes`} onClose={onClose}>
+      <div style={{ padding: "2px 16px 18px", maxHeight: "62vh", overflowY: "auto" }}>
+        {rows.map(({ k, st, nt }, idx) => {
+          const isToday = k === todayK;
+          const dateLabel = new Date(k + "T00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+          const done = st === true, miss = st === "miss";
+          const Badge = (
+            <span aria-hidden="true" style={{ width: 18, height: 18, borderRadius: "50%", flexShrink: 0, marginTop: 1, display: "flex", alignItems: "center", justifyContent: "center", background: done ? identity.color : miss ? "#D98AA9" : T.surf2 }}>
+              {done && <Ic name="check" size={11} color="#fff" />}
+              {miss && <Ic name="x" size={10} color="#fff" />}
+            </span>
+          );
+          const heading = <span style={{ fontSize: 12, fontWeight: 800, color: T.text2 }}>{isToday ? "Today · " : ""}{dateLabel}{done ? " · done" : miss ? " · missed" : ""}</span>;
+
+          // Today — editable entry
+          if (isToday) {
+            return (
+              <div key={k} style={{ borderTop: idx === 0 ? "none" : `1px solid ${T.surf2}`, padding: "11px 0" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 7 }}>{Badge}{heading}</div>
+                {editingToday ? (
+                  <div style={{ paddingLeft: 27 }}>
+                    <textarea
+                      value={draft}
+                      onChange={e => setDraft(e.target.value)}
+                      autoFocus
+                      maxLength={280}
+                      rows={3}
+                      placeholder="What did you do today? (for your own review)"
+                      style={{ width: "100%", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit", fontSize: 13, color: T.text, background: T.surface, border: `1px solid ${identity.color}`, borderRadius: 9, padding: "8px 10px", lineHeight: 1.45 }}
+                    />
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 6 }}>
+                      <span style={{ fontSize: 10.5, color: T.muted }}>{draft.length}/280</span>
+                      <span style={{ display: "flex", gap: 8 }}>
+                        <button type="button" onClick={() => { setDraft((habitNotes[todayK] || {})[habit.id] || ""); setEditingKey(null); }} style={{ fontSize: 12, fontWeight: 700, color: T.muted, background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", WebkitTapHighlightColor: "transparent" }}>Cancel</button>
+                        <button type="button" onClick={saveToday} style={{ fontSize: 12, fontWeight: 800, color: "#fff", background: identity.color, border: "none", borderRadius: 8, padding: "5px 13px", cursor: "pointer", fontFamily: "inherit", WebkitTapHighlightColor: "transparent" }}>Save</button>
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => { setDraft(nt || ""); setEditingKey(todayK); }} aria-label="Add or edit today's note"
+                    style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "none", border: "none", padding: "0 0 0 27px", cursor: "pointer", fontFamily: "inherit", WebkitTapHighlightColor: "transparent" }}>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: nt ? T.text : "#534AB7", fontWeight: nt ? 400 : 600, lineHeight: 1.45, wordBreak: "break-word" }}>{nt || "+ add today's note"}</span>
+                    <Ic name="pencil" size={14} color={T.muted} />
+                  </button>
+                )}
+              </div>
+            );
+          }
+
+          // Earlier days — read-only log
+          return (
+            <div key={k} style={{ display: "flex", gap: 9, padding: "11px 0", borderTop: idx === 0 ? "none" : `1px solid ${T.surf2}` }}>
+              {Badge}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {heading}
+                <div style={{ fontSize: 13, color: nt ? T.text : T.muted, fontStyle: nt ? "normal" : "italic", lineHeight: 1.45, marginTop: 2, wordBreak: "break-word" }}>{nt || "— no note"}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Modal>
+  );
+}
+
+// ─── ROW MENU — notes / miss / edit / delete behind one ⋯ button ──────────────
+function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHabit, onReview, habitNotes = {}, allData = {}, setHabitNote }) {
   const [open, setOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
   const menuItem = {
     display: "flex", alignItems: "center", gap: 10, width: "100%",
     padding: "13px 8px", background: "transparent", border: "none",
@@ -1952,6 +2299,14 @@ function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHab
       {open && (
         <Modal title={habit.label} onClose={() => setOpen(false)}>
           <div style={{ padding: "0 20px 16px" }}>
+            <button onClick={() => { setOpen(false); setNotesOpen(true); }} style={menuItem}>
+              <Ic name="info" size={15} color={identity.colorDim || T.text2} /> Notes &amp; history
+            </button>
+            {onReview && (
+              <button onClick={() => { setOpen(false); onReview(habit, identity); }} style={menuItem}>
+                <Ic name="spark" size={15} color={T.primary} /> Review &amp; adjust
+              </button>
+            )}
             <button onClick={() => { setOpen(false); onMiss(habit.id); }} style={menuItem}>
               <Ic name="x" size={15} color={T.red} />
               {missed ? "Clear missed" : "Mark as missed"}
@@ -1965,13 +2320,23 @@ function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHab
           </div>
         </Modal>
       )}
+      {notesOpen && (
+        <NotesJournalModal
+          habit={habit}
+          identity={identity}
+          allData={allData}
+          habitNotes={habitNotes}
+          onSaveNote={(dateKey, text) => setHabitNote && setHabitNote(dateKey, habit.id, text)}
+          onClose={() => setNotesOpen(false)}
+        />
+      )}
     </>
   );
 }
 
 // ─── HABIT ROW ────────────────────────────────────────────────────────────────
 // One habit on the timeline: cue → action → coaching (identity header is above).
-function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, first, showIdentity, hideTime, history, votes = 0 }) {
+function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0 }) {
   const next = getNextMilestone(streak);
 
   // One cue line above the label: trigger · time · location · frequency.
@@ -1986,14 +2351,17 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
     : (habit.label || "").charAt(0).toLowerCase() + (habit.label || "").slice(1);
 
   // Attractive + Easy collapse behind a "plan" toggle (tap to open).
-  const [showPlan, setShowPlan] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const hasPlan = !!(habit.attractive || habit.easy);
+
+  // Daily reflection note — the footer link opens the scrollable journal.
+  const [journalOpen, setJournalOpen] = useState(false);
 
   // Breaking a bad habit inverts the whole loop (resist, clean days, accountability).
   const breaking = habit.kind === "bad";
 
   return (
-    <div className={"habit-card" + (showPlan ? " plan-open" : "")} style={{
+    <div className="habit-card" style={{
       background: checked ? identity.color + "1f" : missed ? T.red + "10" : "transparent",
       borderTop: first ? "none" : `1px solid ${identity.color}22`,
       transition: "background 0.2s ease",
@@ -2001,7 +2369,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
       {/* ── Card body — cue, action, coaching (same layout as the Up Next hero) ── */}
       <div style={{ padding: "10px 12px 12px" }}>
-        {/* Ring + the intention sentence */}
+        {/* Bookend rings: ✓ check-in (left) · ✕ miss (right), intention sentence between */}
         <div style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
           <HabitRing
             checked={checked}
@@ -2010,7 +2378,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             streak={streak}
             next={next}
             onClick={() => toggle(habit.id, habit.frequency, identity)}
-            label={checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
+            label={checked ? `Uncheck: ${habit.label}` : (breaking ? `Mark clean: ${habit.label}` : `Check: ${habit.label}`)}
           />
           <span
             onClick={() => toggle(habit.id, habit.frequency, identity)}
@@ -2032,6 +2400,22 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               , so I can become <span style={{ fontWeight:700, color: identity.colorDim || identity.color }}>{shortLabel(identity.label)}</span>.
             </span>
           </span>
+          {/* Right bookend — ✕ miss ring, mirror of the check ring; files into Completed */}
+          {!checked && !missed && onMiss && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onMiss(habit.id); }}
+              aria-label={`Mark ${breaking ? "slipped" : "missed"}: ${habit.label}`}
+              style={{
+                flexShrink:0, width:28, height:28, borderRadius:"50%", marginTop:1,
+                border:"2px solid #E7A9C1", background:"transparent",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent",
+              }}
+            >
+              <Ic name="x" size={15} color="#C2648C" />
+            </button>
+          )}
           {missed && (
             <span style={{
               fontSize:12, fontWeight: 800, color: T.red, flexShrink: 0, whiteSpace: "nowrap",
@@ -2042,9 +2426,9 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           )}
         </div>
 
-        {/* 2-min quick start (Law 3) + plan toggle (reward now shows on completion) */}
+        {/* 2-min quick start (Law 3) + a quiet plan hint — reward shows on completion */}
         {!checked && !missed && (habit.starter || hasPlan) && (
-          <div style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:8, marginTop:6, marginLeft:39 }}>
+          <div style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:8, marginTop:8, marginLeft:39 }}>
             {habit.starter && (breaking ? (
               <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12.5, fontWeight:700, color:"#712B13", background:"#FAECE7", border:"1px solid #F5C4B3", borderRadius:20, padding:"6px 13px", maxWidth:"100%" }}>
                 <Ic name="warn" size={13} color="#712B13" />
@@ -2061,63 +2445,23 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
                 <Ic name="check" size={12} color="#085041" />
               </button>
             ))}
-            {hasPlan && (
-              <button type="button" onClick={() => setShowPlan(p => !p)} aria-expanded={showPlan}
-                aria-label={showPlan ? "Hide the plan" : "Show the attractive and easy setup"}
-                style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:11.5, fontWeight:600, color:T.muted, background:"transparent", border:"none", cursor:"pointer", fontFamily:"inherit", padding:"4px 2px", WebkitTapHighlightColor:"transparent" }}>
-                <span aria-hidden="true">{showPlan ? "▴" : "▾"}</span> plan
-              </button>
-            )}
           </div>
         )}
 
-        {/* Plan — attractive + easy, collapsed by default (revealed on hover or tap) */}
-        {!checked && !missed && hasPlan && (
-          <div className="plan-panel" style={{ flexDirection:"column", gap:6, marginTop:8, marginLeft:39, background:T.bg, borderRadius:10, padding:"8px 11px" }}>
-            {habit.attractive && (
-              <span style={{ display:"flex", alignItems:"flex-start", gap:7, fontSize:12, color:T.text2, minWidth:0 }}>
-                <Ic name="spark" size={13} color="#534AB7" />
-                <span><span style={{ fontWeight:700, color:"#534AB7" }}>{breaking ? "Unattractive: " : "Attractive: "}</span>{habit.attractive}</span>
-              </span>
-            )}
-            {habit.easy && (
-              <span style={{ display:"flex", alignItems:"flex-start", gap:7, fontSize:12, color:T.text2, minWidth:0 }}>
-                <Ic name="home" size={13} color="#0F6E56" />
-                <span><span style={{ fontWeight:700, color:"#0F6E56" }}>{breaking ? "Difficult: " : "Easy: "}</span>{habit.easy}</span>
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Last 7 days + streak — one consolidated progress row (today is the rightmost square) */}
-        {!missed && Array.isArray(history) && history.length > 0 && (
-          <div style={{ display:"flex", alignItems:"flex-end", gap:8, marginTop:12, marginLeft:39 }}>
-            <div style={{ display:"flex", gap:5, flex:1 }} aria-label={`Last 7 days: ${history.filter(d=>d.status==="done").length} ${breaking ? "clean" : "done"}`}>
-              {history.map((d, i) => {
-                const doneColor = breaking ? "#639922" : identity.color;
-                const bg = d.status === "done" ? doneColor : d.status === "miss" ? T.red + "44" : T.surf2;
-                return (
-                  <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
-                    <span aria-hidden="true" style={{ fontSize:9, fontWeight:700, color: d.today ? T.text2 : T.muted }}>{d.letter}</span>
-                    <span aria-hidden="true" style={{ width:15, height:15, borderRadius:5, background:bg, boxSizing:"border-box", border: d.today ? `1.5px solid ${doneColor}` : "1px solid transparent", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                      {d.status === "done" && <Ic name="check" size={9} color="#fff" />}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-            {streak > 0 && (
-              <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:700, color: breaking ? "#3B6D11" : "#B45309", whiteSpace:"nowrap" }} aria-label={`${streak} ${breaking ? "clean days" : "day streak"}, ${votes} votes toward ${shortLabel(identity.label)}`}>
-                <Ic name={breaking ? "check" : "flame"} size={11} color={breaking ? "#3B6D11" : "#B45309"} /> {streak}{breaking ? " clean" : ""} · vote {votes}
-              </span>
-            )}
+        {/* Reward (Law 4) shown upfront, right after the 2-min rule — the payoff as motivation */}
+        {!checked && !missed && habit.satisfying && (
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:7, marginLeft:39, fontSize:12, minWidth:0 }}>
+            <Ic name={breaking ? "warn" : "gift"} size={13} color={breaking ? "#B23A6B" : "#BA7517"} />
+            <span style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color: breaking ? "#8A2F52" : "#8A5A12" }}>
+              <span style={{ fontWeight:800 }}>{breaking ? "If you slip: " : "Reward: "}</span>{habit.satisfying}
+            </span>
           </div>
         )}
 
         {/* Never-miss-twice nudge — this habit was missed yesterday */}
         {warnMissedYesterday && !checked && !missed && (
-          <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 9, marginLeft: 39, fontSize:12, fontWeight: 700, color: "#B45309" }}>
-            <Ic name="warn" size={13} color="#B45309" /> Missed yesterday — never miss twice!
+          <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 9, marginLeft: 39, fontSize:12, fontWeight: 800, color: "#C0392B" }}>
+            <Ic name="warn" size={13} color="#C0392B" /> Missed yesterday — never miss twice!
           </div>
         )}
 
@@ -2154,7 +2498,115 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             </div>
           </div>
         ))}
+
+        {/* Details toggle — reveals Plan + Your proof + note below */}
+        {!checked && !missed && (
+          <button type="button" onClick={() => setShowDetails(p => !p)} aria-expanded={showDetails}
+            aria-label={showDetails ? "Hide details" : "Show plan and proof"}
+            style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, width:"100%", marginTop:12, padding:"9px 10px", borderRadius:9, border:"none", background:T.surf2, cursor:"pointer", fontFamily:"inherit", fontSize:12, fontWeight:700, color:T.text2, WebkitTapHighlightColor:"transparent" }}>
+            Details <span aria-hidden="true" style={{ color:T.muted }}>{showDetails ? "▴" : "▾"}</span>
+          </button>
+        )}
       </div>
+
+      {/* ── Details panel — Plan + Your proof + note, revealed by the Details toggle ── */}
+      {showDetails && !checked && !missed && Array.isArray(history) && history.length > 0 && (() => {
+        const heroColor = breaking ? "#12694E" : identity.color;
+        const total = Math.max(voteTotal, votes);          // never show "53 of 50"
+        const pct   = total > 0 ? Math.min(100, Math.round((votes / total) * 100)) : 0;
+        return (
+        <div style={{ background:T.bg, borderTop:`1px solid ${T.surf2}`, padding:"12px 12px 12px" }}
+          aria-label={`${votes} of ${total} ${breaking ? "days clean" : "days kept"} toward ${shortLabel(identity.label)}, ${pct} percent${streak > 0 ? `, ${streak} ${breaking ? "days clean streak" : "day streak"}` : ""}`}>
+          {hasPlan && (
+            <div style={{ marginBottom:15 }}>
+              <div style={{ fontSize:10, fontWeight:800, letterSpacing:"0.05em", textTransform:"uppercase", color:T.muted, marginBottom:7 }}>{breaking ? "Plan · invert the laws" : "Plan"}</div>
+              {habit.attractive && (
+                <span style={{ display:"flex", alignItems:"flex-start", gap:7, fontSize:12, color:T.text2, minWidth:0, marginBottom:5 }}>
+                  <Ic name="spark" size={13} color="#534AB7" />
+                  <span><span style={{ fontWeight:700, color:"#534AB7" }}>{breaking ? "Unattractive: " : "Attractive: "}</span>{habit.attractive}</span>
+                </span>
+              )}
+              {habit.easy && (
+                <span style={{ display:"flex", alignItems:"flex-start", gap:7, fontSize:12, color:T.text2, minWidth:0 }}>
+                  <Ic name="home" size={13} color="#0F6E56" />
+                  <span><span style={{ fontWeight:700, color:"#0F6E56" }}>{breaking ? "Difficult: " : "Easy: "}</span>{habit.easy}</span>
+                </span>
+              )}
+            </div>
+          )}
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:8 }}>
+            <span aria-hidden="true" style={{ fontSize:10, fontWeight:800, letterSpacing:"0.05em", textTransform:"uppercase", color:T.muted }}>{breaking ? "Clean record" : "Your proof"}</span>
+            <span aria-hidden="true" style={{ flexShrink:0, display:"inline-flex", alignItems:"baseline", gap:5, fontSize:11.5, color:T.text2 }}>
+              <span><b style={{ color:heroColor, fontWeight:800 }}>{votes}</b>/<b style={{ color:heroColor, fontWeight:800 }}>{total}</b> days{breaking ? " clean" : ""}</span>
+              {!checked && streak > 0 && (
+                <span style={{ display:"inline-flex", alignItems:"center", gap:2, color: breaking ? "#3B6D11" : "#A9741E" }}>
+                  <span style={{ color:T.border2 }}>·</span>
+                  <Ic name={breaking ? "check" : "flame"} size={11} color={breaking ? "#3B6D11" : "#C2751A"} />{streak}
+                </span>
+              )}
+            </span>
+          </div>
+          <div style={{ display:"flex", gap:5 }} aria-hidden="true">
+            {history.map((d, i) => {
+              const doneColor = breaking ? "#639922" : identity.color;
+              const done = d.status === "done";
+              const miss = d.status === "miss";
+              // Muted slots that aren't trackable this day: before the habit existed
+              // (pre → tiny dot) or a day it simply isn't due (off → faint hollow ring).
+              if (d.pre || (d.off && d.status === "none")) {
+                return (
+                  <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+                    <span style={{ fontSize:9, fontWeight:700, color:T.border2 }}>{d.letter}</span>
+                    <span style={{ width:20, height:20, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                      {d.pre
+                        ? <span style={{ width:4, height:4, borderRadius:"50%", background:T.border2 }} />
+                        : <span style={{ width:10, height:10, borderRadius:"50%", border:`1px solid ${T.border2}`, boxSizing:"border-box" }} />}
+                    </span>
+                  </div>
+                );
+              }
+              const bg     = done ? doneColor : miss ? "transparent" : (d.today ? doneColor + "1f" : T.surf2);
+              const border = done ? "none" : miss ? "1.5px solid #F0997B" : d.today ? `2px solid ${doneColor}` : "1px solid transparent";
+              return (
+                <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+                  <span style={{ fontSize:9, fontWeight:700, color: d.today ? T.text2 : T.muted }}>{d.letter}</span>
+                  <span style={{ width:20, height:20, borderRadius:"50%", background:bg, boxSizing:"border-box", border, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    {done && <Ic name="check" size={12} color="#fff" />}
+                    {miss && <Ic name="x" size={11} color="#D85A30" />}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          {!checked && (
+            <div aria-hidden="true" style={{ height:6, borderRadius:5, background:T.surf2, overflow:"hidden", marginTop:8 }}>
+              <div style={{ height:"100%", width:`${pct}%`, borderRadius:5, background:heroColor, transition:"width 0.35s ease" }} />
+            </div>
+          )}
+
+          {/* Daily note — just the link; opens the journal. Note content isn't shown here. */}
+          {setHabitNote && (
+          <div style={{ marginTop:10 }}>
+            <button type="button" onClick={() => setJournalOpen(true)} aria-label={note ? "Open note" : "Add a note for today"}
+              style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, fontWeight:600, color: note ? "#534AB7" : T.muted, background:"none", border:"none", padding:0, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
+              <Ic name="pencil" size={12} color="#534AB7" /> {note ? "Note" : "Add note"}
+            </button>
+          </div>
+          )}
+        </div>
+        );
+      })()}
+
+      {journalOpen && setHabitNote && (
+        <NotesJournalModal
+          habit={habit}
+          identity={identity}
+          allData={allData}
+          habitNotes={habitNotes}
+          onSaveNote={(dateKey, text) => setHabitNote(dateKey, habit.id, text)}
+          onClose={() => setJournalOpen(false)}
+        />
+      )}
 
     </div>
   );
@@ -2343,6 +2795,29 @@ const countStarred = (list) => list.reduce((n, t) => n + (isStarred(t) && !t.don
 // Split a day's open tasks into [big3, rest], each keeping insertion order
 const splitByStar = (list) => [list.filter(isStarred), list.filter(t => !isStarred(t))];
 
+// ─── PRIORITY — simple High / Med / Low, sorts the list and tags each row ─────
+const PRIORITIES = {
+  high: { label:"High", rank:0, ring:"#E24B4A", tagBg:"#FCEBEB", tagText:"#A32D2D", pillBg:"#E24B4A", pillText:"#FFFFFF", pillBorder:"#E24B4A" },
+  med:  { label:"Med",  rank:1, ring:"#EF9F27", tagBg:"#FAEEDA", tagText:"#854F0B", pillBg:"#FAEEDA", pillText:"#854F0B", pillBorder:"#FAC775" },
+  low:  { label:"Low",  rank:2, ring:"#85B7EB", tagBg:"#E6F1FB", tagText:"#185FA5", pillBg:"#E6F1FB", pillText:"#185FA5", pillBorder:"#B5D4F4" },
+};
+const PRIORITY_ORDER = ["high", "med", "low"];
+// Old data used a `star` flag; treat a star as High and everything else as Med.
+const priorityOf = (t) => (t && PRIORITIES[t.priority]) ? t.priority : (t && t.star ? "high" : "med");
+const taskRank   = (t) => PRIORITIES[priorityOf(t)].rank;
+const byPriority = (a, b) => taskRank(a) - taskRank(b);
+
+// Small colour-coded priority tag; tap to cycle High → Med → Low.
+function PriorityTag({ priority, onCycle }) {
+  const p = PRIORITIES[priority] || PRIORITIES.med;
+  return (
+    <button type="button" onClick={onCycle} aria-label={`Priority: ${p.label}. Tap to change.`}
+      style={{ flexShrink:0, fontSize:10.5, fontWeight:800, color:p.tagText, background:p.tagBg, border:"none", borderRadius:6, padding:"3px 9px", cursor: onCycle ? "pointer" : "default", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
+      {p.label}
+    </button>
+  );
+}
+
 // ─── STAR TOGGLE — promote a task into the day's Big 3 ────────────────────────
 // At the cap the button stays visible but inert, so the tradeoff is legible:
 // you can see there's no room left without the control vanishing on you.
@@ -2439,43 +2914,59 @@ function taskPriority(t) {
 // backlog unstarred — promoting one into the Big 3 is a deliberate second act.
 function QuickAddTask({ dateKey, onAdd }) {
   const [val, setVal] = useState("");
+  const [prio, setPrio] = useState("med");
   const inputRef = useRef(null);
   useEffect(() => { setVal(""); }, [dateKey]);
   const add = () => {
     const t = val.trim();
     if (!t) return;
-    onAdd(dateKey, t, false);
+    onAdd(dateKey, t, prio);
     setVal("");
     inputRef.current?.focus();
   };
   return (
-    <div style={{ display:"flex", alignItems:"center", gap:10, background:T.bg, borderRadius:12, padding:"6px 6px 6px 14px" }}>
-      <input
-        ref={inputRef}
-        value={val}
-        onChange={e => setVal(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === "Enter")  add();
-          if (e.key === "Escape") setVal("");
-        }}
-        placeholder="Add a task…"
-        maxLength={80}
-        aria-label="New task text"
-        style={{ flex:1, minWidth:0, border:"none", background:"transparent", fontSize:16, color:T.text, outline:"none", fontFamily:"inherit", padding:"7px 0" }}
-      />
-      <button
-        onClick={add}
-        aria-label="Add task"
-        style={{
-          flexShrink:0, width:34, height:34, borderRadius:10, border:"none",
-          background: val.trim() ? T.primary : T.border2,
-          color:"#fff", fontSize:20, fontWeight:800, lineHeight:1,
-          display:"flex", alignItems:"center", justifyContent:"center",
-          cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"background 0.15s",
-        }}
-      >
-        <span aria-hidden="true">+</span>
-      </button>
+    <div>
+      <div style={{ display:"flex", alignItems:"center", gap:10, background:T.bg, borderRadius:12, padding:"6px 6px 6px 14px" }}>
+        <input
+          ref={inputRef}
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === "Enter")  add();
+            if (e.key === "Escape") setVal("");
+          }}
+          placeholder="Add a task…"
+          maxLength={80}
+          aria-label="New task text"
+          style={{ flex:1, minWidth:0, border:"none", background:"transparent", fontSize:16, color:T.text, outline:"none", fontFamily:"inherit", padding:"7px 0" }}
+        />
+        <button
+          onClick={add}
+          aria-label="Add task"
+          style={{
+            flexShrink:0, width:34, height:34, borderRadius:10, border:"none",
+            background: val.trim() ? T.primary : T.border2,
+            color:"#fff", fontSize:20, fontWeight:800, lineHeight:1,
+            display:"flex", alignItems:"center", justifyContent:"center",
+            cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"background 0.15s",
+          }}
+        >
+          <span aria-hidden="true">+</span>
+        </button>
+      </div>
+      <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:9, paddingLeft:2 }} role="group" aria-label="Priority for the new task">
+        <span style={{ fontSize:11.5, color:T.muted }}>Priority</span>
+        {PRIORITY_ORDER.map(k => {
+          const p = PRIORITIES[k]; const on = prio === k;
+          return (
+            <button key={k} type="button" onClick={() => setPrio(k)} aria-pressed={on}
+              style={{ fontSize:11.5, fontWeight:700, borderRadius:20, padding:"4px 12px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
+                color: on ? p.pillText : T.text2, background: on ? p.pillBg : "transparent", border:`1px solid ${on ? p.pillBorder : T.border}` }}>
+              {p.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -2531,10 +3022,10 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
             </div>
           );
         }
-        const [big3, rest] = splitByStar(openTasks);
+        const sorted = openTasks.slice().sort(byPriority);
         const renderRow = (task, i) => {
           const isEditing = editingId === task.id;
-          const starred = isStarred(task);
+          const pri = priorityOf(task);
           const row = (
                 <div style={{ display:"flex", alignItems:"center", gap:11, padding:"9px 2px" }}>
                   {/* Check circle */}
@@ -2544,7 +3035,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
                     aria-label={task.done ? `Uncheck: ${task.text}` : `Check: ${task.text}`}
                     style={{
                       width:22, height:22, borderRadius:"50%", flexShrink:0, boxSizing:"border-box",
-                      border:`2px solid ${starred ? STAR_COLOR : T.border2}`, background:"transparent",
+                      border:`2px solid ${PRIORITIES[pri].ring}`, background:"transparent",
                       cursor:"pointer", WebkitTapHighlightColor:"transparent", transition:"all 0.15s",
                     }}
                   />
@@ -2569,8 +3060,8 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
                       onClick={() => isToday && setSheetTask(task)}
                       title={isToday ? "Tap for options" : undefined}
                       style={{
-                        flex:1, minWidth:0, fontSize:16, lineHeight:1.4, color:T.text,
-                        fontWeight: starred ? 600 : 400,
+                        flex:1, minWidth:0, fontSize:15, lineHeight:1.4, color:T.text,
+                        fontWeight: 500,
                         cursor: isToday ? "pointer" : "default",
                       }}
                     >
@@ -2578,15 +3069,8 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
                     </span>
                   )}
 
-                  {/* Star — one tap to promote into (or drop from) the Big 3 */}
-                  {isToday && (
-                    <StarButton
-                      starred={starred}
-                      atCap={atCap}
-                      label={task.text}
-                      onToggle={() => onStar(dateKey, task.id)}
-                    />
-                  )}
+                  {/* Priority tag — tap to cycle High → Med → Low */}
+                  {isToday && <PriorityTag priority={pri} onCycle={() => onStar(dateKey, task.id)} />}
                 </div>
               );
           return (
@@ -2599,48 +3083,7 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
         };
         return (
           <div style={{ padding:"2px 0", maxHeight:320, overflowY:"auto", WebkitOverflowScrolling:"touch" }}>
-            {/* ── Big 3 — the day's real commitments ── */}
-            <div style={{
-              background: big3.length ? STAR_COLOR + "0f" : "transparent",
-              border: `1px ${big3.length ? "solid" : "dashed"} ${STAR_COLOR}${big3.length ? "33" : "44"}`,
-              borderRadius:12, padding:"6px 9px", marginBottom:10,
-            }}>
-              <div style={{ display:"flex", alignItems:"center", gap:6, padding:"2px 0 4px" }}>
-                <Ic name="star" size={12} color={STAR_COLOR} fill={STAR_COLOR} />
-                <span style={{ fontSize:11, fontWeight:800, letterSpacing:"0.08em", textTransform:"uppercase", color:STAR_DARK }}>
-                  {BIG_LABEL}
-                </span>
-                <span style={{ marginLeft:"auto", fontSize:11, fontWeight:700, color:STAR_DARK, opacity:0.7, fontVariantNumeric:"tabular-nums" }}>
-                  {starCount}/{STAR_LIMIT}
-                </span>
-              </div>
-              {big3.length === 0 ? (
-                <div style={{ fontSize:12.5, color:T.muted, padding:"4px 0 6px", lineHeight:1.5 }}>
-                  Star up to {STAR_LIMIT} tasks — the ones that would make today a win.
-                </div>
-              ) : big3.map(renderRow)}
-
-              {/* Vacant slots — finishing a star frees its place, so show the room */}
-              {big3.length > 0 && openSlots > 0 && (
-                <div style={{ display:"flex", alignItems:"center", gap:7, padding:"7px 2px 4px", borderTop:`1px dashed ${STAR_COLOR}33`, marginTop:4 }}>
-                  <Ic name="star" size={14} color={STAR_COLOR} style={{ opacity:0.5 }} />
-                  <span style={{ fontSize:12.5, color:T.muted, lineHeight:1.45 }}>
-                    {openSlots === 1 ? "1 slot open" : `${openSlots} slots open`}
-                    {rest.length > 0 ? " — star another task below" : ""}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* ── Everything else ── */}
-            {rest.length > 0 && (
-              <>
-                <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.08em", textTransform:"uppercase", color:T.muted, padding:"0 2px 2px" }}>
-                  Everything else
-                </div>
-                {rest.map(renderRow)}
-              </>
-            )}
+            {sorted.map(renderRow)}
           </div>
         );
       })()}
@@ -2710,29 +3153,21 @@ const TopTasksCard = memo(function TopTasksCard({ tasks, dateKey, isToday, onAdd
       {sheetTask && (
         <Modal title={sheetTask.text} onClose={() => setSheetTask(null)}>
           <div style={{ padding:"4px 20px 20px" }}>
-            {(() => {
-              const starred = isStarred(sheetTask);
-              const blocked = !starred && atCap;
-              return (
-                <button
-                  onClick={() => { if (!blocked) onStar(dateKey, sheetTask.id); setSheetTask(null); }}
-                  disabled={blocked}
-                  aria-pressed={starred}
-                  style={{
-                    display:"flex", alignItems:"center", justifyContent:"center", gap:8, width:"100%",
-                    padding:"12px 10px", borderRadius:10, marginBottom:10,
-                    background: starred ? STAR_COLOR + "1f" : T.surf2,
-                    border: starred ? `2px solid ${STAR_COLOR}` : "2px solid transparent",
-                    cursor: blocked ? "default" : "pointer", opacity: blocked ? 0.5 : 1,
-                    fontSize:14, fontWeight:700, color: starred ? STAR_DARK : T.text2,
-                    fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
-                  }}
-                >
-                  <Ic name="star" size={15} color={starred ? STAR_COLOR : T.text2} fill={starred ? STAR_COLOR : "none"} />
-                  {starred ? `Remove from ${BIG_LABEL}` : blocked ? `${BIG_LABEL} is full` : `Add to ${BIG_LABEL}`}
-                </button>
-              );
-            })()}
+            {/* Priority — set directly */}
+            <div style={{ display:"flex", gap:8, marginBottom:12 }} role="group" aria-label="Priority">
+              {PRIORITY_ORDER.map(k => {
+                const p = PRIORITIES[k]; const on = priorityOf(sheetTask) === k;
+                const steps = (PRIORITY_ORDER.indexOf(k) - PRIORITY_ORDER.indexOf(priorityOf(sheetTask)) + 3) % 3;
+                return (
+                  <button key={k} type="button" aria-pressed={on}
+                    onClick={() => { for (let i = 0; i < steps; i++) onStar(dateKey, sheetTask.id); setSheetTask(null); }}
+                    style={{ flex:1, padding:"11px 8px", borderRadius:10, fontFamily:"inherit", fontSize:13, fontWeight:700, cursor:"pointer", WebkitTapHighlightColor:"transparent",
+                      color: on ? p.pillText : T.text2, background: on ? p.pillBg : T.surf2, border:`1.5px solid ${on ? p.pillBorder : "transparent"}` }}>
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
             <button
               onClick={() => { onDefer(dateKey, sheetTask.id); setSheetTask(null); }}
               style={{
@@ -3073,7 +3508,7 @@ const HabitReview = memo(function HabitReview({ target, onApply, onSnooze, onFol
 });
 
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
-const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, markMiss, justChecked, getStreakForHabit, openEditHabit, openDeleteHabit, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask, editTask, toggleStar, deferTask, reviewTarget, onOpenReview, onDismissReview }) {
+const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, markMiss, habitNotes, setHabitNote, justChecked, getStreakForHabit, openEditHabit, openDeleteHabit, openReviewFor, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask, editTask, toggleStar, deferTask, reviewTarget, onOpenReview, onDismissReview }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
   const [matrixExpanded, setMatrixExpanded] = useState(false);
@@ -3114,7 +3549,8 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
     const yd = allData[yKey] || {};
     const ids = new Set();
     for (const { habit } of scheduledHabits) {
-      if (isScheduledOn(habit.frequency, yKey) && yd[habit.id] !== true) ids.add(habit.id);
+      const sKey = habitStartKey(habit, allData);
+      if (isScheduledOn(habit.frequency, yKey) && yd[habit.id] !== true && (!sKey || yKey >= sKey)) ids.add(habit.id);
     }
     return ids;
   }, [allData, selectedDate, scheduledHabits]);
@@ -3129,8 +3565,8 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
   const taskCounts = useMemo(() => {
     const active = (dailyTasks[selectedDate] || []).filter(t => !t.carried);
     return {
-      open: countStarred(active),
-      backlog: active.filter(t => !isStarred(t) && !t.done).length,
+      total: active.length,
+      done:  active.filter(t => t.done).length,
     };
   }, [dailyTasks, selectedDate]);
 
@@ -3160,53 +3596,21 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
       {/* Day Navigator */}
       <DayNavigator selectedDate={selectedDate} setSelectedDate={setSelectedDate} todayKey={todayKey} />
 
-      {/* Daily quote — one compact line */}
-      <div style={{ background:`linear-gradient(135deg,rgba(2,132,199,0.07),rgba(245,158,11,0.05))`, border:`1px solid rgba(2,132,199,0.16)`, borderRadius:14, padding:"10px 14px" }}>
-        <span style={{ fontSize:13.5,color:T.text2,fontStyle:"italic",lineHeight:1.55 }}>"{quote.text}"</span>
-        {quote.author && <span style={{ fontSize:12,color:T.gold,fontWeight:700,fontStyle:"normal" }}> — {quote.author}</span>}
-      </div>
-
-      {/* Habit review nudge — at most one habit, only when the data says so.
-          Neutral by design: this states a fact and offers help, it doesn't scold. */}
-      {reviewTarget && selectedDate === todayKey && (
-        <div style={{ ...S.card, padding:"12px 14px" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:9 }}>
-            <span style={{ width:26, height:26, borderRadius:"50%", background:reviewTarget.identity.color+"22", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, flexShrink:0 }} aria-hidden="true">{reviewTarget.identity.icon}</span>
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:14, fontWeight:700, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{reviewTarget.habit.label}</div>
-              <div style={{ fontSize:12, color:T.muted }}>
-                {reviewTarget.mode === "followup"
-                  ? "You changed this two weeks ago"
-                  : `Kept ${reviewTarget.stats.kept} of ${reviewTarget.stats.due} scheduled days`}
-              </div>
-            </div>
-          </div>
-          <div style={{ display:"flex", gap:8 }}>
-            <button onClick={onOpenReview} style={{ flex:1, background:T.primary, color:"#fff", border:"none", borderRadius:9, padding:"9px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
-              {reviewTarget.mode === "followup" ? "See how it went" : "Adjust it"}
-            </button>
-            <button onClick={onDismissReview} style={{ background:"transparent", border:"none", color:T.muted, fontSize:13, padding:"9px 12px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
-              Not now
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Today's Focus — compact task preview, expands into the full task list */}
       <div style={{ ...S.card, padding:"12px 14px" }}>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom: matrixExpanded ? 10 : 8 }}>
           <span style={{ fontSize:12, color:T.muted, letterSpacing:"0.1em", fontWeight:700, textTransform:"uppercase" }}>
             <span aria-hidden="true">🎯</span> Today's Focus
           </span>
-          {taskCounts.open > 0 && (
+          {taskCounts.total > 0 && (
             <span
-              aria-label={`${taskCounts.open} of ${STAR_LIMIT} ${BIG_LABEL} slots in use`}
+              aria-label={`${taskCounts.done} of ${taskCounts.total} tasks done`}
               style={{
-                fontSize:12, fontWeight:800, color:STAR_DARK, background:STAR_COLOR + "22",
+                fontSize:12, fontWeight:800, color:T.primary, background:T.primary + "18",
                 borderRadius:20, padding:"2px 9px", lineHeight:1.4, fontVariantNumeric:"tabular-nums",
               }}
             >
-              {taskCounts.open}/{STAR_LIMIT} {BIG_LABEL}
+              {taskCounts.done}/{taskCounts.total} done
             </span>
           )}
           {matrixExpanded && (
@@ -3238,12 +3642,11 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
           />
         ) : (() => {
           const active    = (dailyTasks[selectedDate] || []).filter(t => !t.carried);
-          const pending   = active.filter(t => !t.done);
-          // Collapsed view is the Big 3 and nothing else — the backlog is one tap away
-          const shown     = pending.filter(isStarred);
-          const remaining = pending.length - shown.length;
+          const pending   = active.filter(t => !t.done).slice().sort(byPriority);
           const editable  = selectedDate >= todayKey;
-          const atCap     = countStarred(active) >= STAR_LIMIT;
+          const CAP       = 2;
+          const shown     = pending.slice(0, CAP);
+          const remaining = pending.length - shown.length;
           if (active.length === 0) {
             return (
               <div style={{ fontSize:13, color:T.muted, textAlign:"center", padding:"6px 0" }}>
@@ -3259,52 +3662,27 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
           }
           return (
             <>
-              {shown.map((t, i) => (
-                <div key={t.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 2px", borderTop: i === 0 ? "none" : `1px solid ${T.surf2}` }}>
-                  <button
-                    onClick={() => toggleTask(selectedDate, t.id)}
-                    aria-label={`Complete: ${t.text}`}
-                    style={{
-                      width:21, height:21, borderRadius:"50%", flexShrink:0, boxSizing:"border-box",
-                      border:`2px solid ${STAR_COLOR}`, background:"transparent",
-                      cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent",
-                    }}
-                  />
-                  <span onClick={() => setMatrixExpanded(true)} title="Tap for options" style={{
-                    flex:1, minWidth:0, fontSize:15, lineHeight:1.4, fontWeight:600, color:T.text, cursor:"pointer",
-                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-                  }}>{t.text}</span>
-                  {editable && (
-                    <StarButton
-                      starred
-                      atCap={atCap}
-                      label={t.text}
-                      size={17}
-                      onToggle={() => toggleStar(selectedDate, t.id)}
+              {shown.map((t, i) => {
+                const pri = priorityOf(t);
+                return (
+                  <div key={t.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 2px", borderTop: i === 0 ? "none" : `1px solid ${T.surf2}` }}>
+                    <button
+                      onClick={() => toggleTask(selectedDate, t.id)}
+                      aria-label={`Complete: ${t.text}`}
+                      style={{
+                        width:21, height:21, borderRadius:"50%", flexShrink:0, boxSizing:"border-box",
+                        border:`2px solid ${PRIORITIES[pri].ring}`, background:"transparent",
+                        cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent",
+                      }}
                     />
-                  )}
-                </div>
-              ))}
-
-              {/* No picks yet — the card's whole job is getting three chosen */}
-              {shown.length === 0 && pending.length > 0 && (
-                <div style={{
-                  border:`1px dashed ${STAR_COLOR}55`, borderRadius:12, padding:"10px 12px",
-                  display:"flex", alignItems:"center", gap:9,
-                }}>
-                  <Ic name="star" size={15} color={STAR_COLOR} />
-                  <span style={{ flex:1, minWidth:0, fontSize:13, color:T.text2, lineHeight:1.45 }}>
-                    Pick your {BIG_LABEL} for today
-                  </span>
-                  <button onClick={() => setMatrixExpanded(true)} style={{
-                    flexShrink:0, background:STAR_COLOR + "22", border:"none", borderRadius:8,
-                    color:STAR_DARK, fontSize:12, fontWeight:800, padding:"5px 10px",
-                    cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
-                  }}>
-                    Choose
-                  </button>
-                </div>
-              )}
+                    <span onClick={() => setMatrixExpanded(true)} title="Tap for options" style={{
+                      flex:1, minWidth:0, fontSize:15, lineHeight:1.4, fontWeight:500, color:T.text, cursor:"pointer",
+                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                    }}>{t.text}</span>
+                    {editable && <PriorityTag priority={pri} onCycle={() => toggleStar(selectedDate, t.id)} />}
+                  </div>
+                );
+              })}
 
               {pending.length === 0 && (
                 <div style={{ fontSize:13, color:T.muted, textAlign:"center", padding:"6px 0" }}>All tasks done <span aria-hidden="true">🎉</span></div>
@@ -3319,12 +3697,6 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
           );
         })()}
 
-        {/* Quick add — pinned at the bottom when collapsed (expanded gets it inside the card, above Completed) */}
-        {!matrixExpanded && selectedDate >= todayKey && (
-          <div style={{ borderTop:`1px solid ${T.surf2}`, marginTop:10, paddingTop:10 }}>
-            <QuickAddTask dateKey={selectedDate} onAdd={addTask} />
-          </div>
-        )}
       </div>
 
       {/* Empty-identity nudge — show a contextual CTA for each identity with no habits */}
@@ -3368,38 +3740,58 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
 
       {/* Timeline — habits on a time rail */}
       {(() => {
-        const visible = scheduledHabits.filter(({ habit }) => todayData[habit.id] !== true || habit.id === justChecked);
+        const visible = scheduledHabits.filter(({ habit }) => {
+          const st = todayData[habit.id];
+          // Active list = neither done nor missed. Checked habits move to Completed instantly.
+          return st !== true && st !== "miss";
+        });
         if (visible.length === 0) return null;
         const firstPending = scheduledHabits.find(({ habit }) => todayData[habit.id] == null);
         const firstPendingId = firstPending ? firstPending.habit.id : null;
         return (
           <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-            {visible.map(({ habit, identity }) => (
-              <div key={habit.id} className={justChecked === habit.id ? "row-leaving" : ""} style={{
-                background:T.surface, borderRadius:14,
-                border: habit.kind === "bad"
+            {visible.map(({ habit, identity }) => {
+              // Missed yesterday & still pending today → flag the whole card red (never miss twice).
+              const warnMissed = selectedDate === todayKey && missedYesterdayIds.has(habit.id) && todayData[habit.id] == null;
+              return (
+              <div key={habit.id} style={{
+                background: warnMissed ? "#FEF4F4" : T.surface, borderRadius:14,
+                border: warnMissed
+                  ? "1px solid #F0B4B4"
+                  : habit.kind === "bad"
                   ? (habit.id === firstPendingId ? "1.5px solid #D4537E" : "1px solid #F4C0D1")
                   : (habit.id === firstPendingId ? `1.5px solid ${identity.color}` : `1px solid ${T.border}`),
-                boxShadow: habit.id === firstPendingId
+                // Left accent — red when missed yesterday, else the identity colour
+                borderLeft: `4px solid ${warnMissed ? "#E24B4A" : (habit.kind === "bad" ? "#D4537E" : identity.color)}`,
+                boxShadow: warnMissed
+                  ? "0 6px 20px #E24B4A22"
+                  : habit.id === firstPendingId
                   ? (habit.kind === "bad" ? "0 6px 20px #D4537E22" : `0 6px 20px ${identity.color}22`)
                   : "0 4px 16px rgba(2,80,130,0.05)",
                 overflow:"hidden",
               }}>
-                {/* Header — breaking tag + cue (left) · ⋯ menu (right). Time & place live in the habit sentence below. */}
-                <div style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 8px 0 12px" }}>
-                  <span style={{ flex:1, minWidth:0, display:"inline-flex", alignItems:"center", gap:6, overflow:"hidden" }}>
+                {/* Header — full-width cue BANNER (Law 1: make the trigger obvious) · ⋯ menu. */}
+                {habit.trigger ? (
+                  <div style={{ display:"flex", alignItems:"center", gap:9, padding:"10px 8px 10px 13px",
+                    background: habit.kind === "bad" ? "#FBEAF0" : "#EAF1FC",
+                    borderBottom: `1px solid ${habit.kind === "bad" ? "#F4C0D1" : "#D7E4F7"}` }}>
+                    <span aria-hidden="true" style={{ width:24, height:24, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", background: habit.kind === "bad" ? "#C85C88" : "#3B7DD8" }}>
+                      <Ic name={habit.kind === "bad" ? "warn" : "bolt"} size={14} color="#fff" />
+                    </span>
+                    <span style={{ flex:1, minWidth:0, fontSize:14, fontWeight:800, letterSpacing:"-0.01em", color: habit.kind === "bad" ? "#8A2F52" : "#1C4A8C", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      {habit.kind === "bad" && <span style={{ fontSize:9.5, fontWeight:900, letterSpacing:"0.08em", color:"#B23A6B", marginRight:6 }}>BREAKING</span>}
+                      {habit.trigger}
+                    </span>
+                    <RowMenu habit={habit} identity={identity} missed={todayData[habit.id] === "miss"} onMiss={markMiss} openEditHabit={openEditHabit} openDeleteHabit={openDeleteHabit} onReview={openReviewFor} habitNotes={habitNotes} allData={allData} setHabitNote={setHabitNote} />
+                  </div>
+                ) : (
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", gap:8, padding:"9px 8px 0 12px" }}>
                     {habit.kind === "bad" && (
-                      <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:3, fontSize:10, fontWeight:800, color:"#993556", background:"#FBEAF0", border:"1px solid #F4C0D1", borderRadius:20, padding:"2px 7px" }}><Ic name="x" size={10} color="#993556" /> breaking</span>
+                      <span style={{ marginRight:"auto", flexShrink:0, display:"inline-flex", alignItems:"center", gap:3, fontSize:10, fontWeight:800, color:"#993556", background:"#FBEAF0", border:"1px solid #F4C0D1", borderRadius:20, padding:"2px 7px" }}><Ic name="x" size={10} color="#993556" /> breaking</span>
                     )}
-                    {habit.trigger && (
-                      <span style={{ display:"inline-flex", alignItems:"center", gap:5, minWidth:0, fontSize:11.5, fontWeight:700, color: habit.kind === "bad" ? "#993556" : (identity.colorDim || T.primary), overflow:"hidden" }}>
-                        <Ic name={habit.kind === "bad" ? "warn" : "bolt"} size={12} color={habit.kind === "bad" ? "#993556" : (identity.colorDim || T.primary)} />
-                        <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.trigger}</span>
-                      </span>
-                    )}
-                  </span>
-                  <RowMenu habit={habit} identity={identity} missed={todayData[habit.id] === "miss"} onMiss={markMiss} openEditHabit={openEditHabit} openDeleteHabit={openDeleteHabit} />
-                </div>
+                    <RowMenu habit={habit} identity={identity} missed={todayData[habit.id] === "miss"} onMiss={markMiss} openEditHabit={openEditHabit} openDeleteHabit={openDeleteHabit} onReview={openReviewFor} habitNotes={habitNotes} allData={allData} setHabitNote={setHabitNote} />
+                  </div>
+                )}
                 <HabitRow
                   habit={habit}
                   identity={identity}
@@ -3408,27 +3800,43 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                   warnMissedYesterday={selectedDate === todayKey && missedYesterdayIds.has(habit.id) && todayData[habit.id] == null}
                   streak={getStreakForHabit(habit.id, habit.frequency)}
                   toggle={toggle}
+                  onMiss={markMiss}
                   first={true}
                   showIdentity={false}
                   hideTime={true}
-                  history={[...Array(7)].map((_, i) => {
-                    const k = addDaysKey(todayKey, i - 6);
-                    const v = (allData[k] || {})[habit.id];
-                    const d = new Date(k + "T00:00");
-                    return { status: v === true ? "done" : v === "miss" ? "miss" : "none", letter: "SMTWTFS"[d.getDay()], today: i === 6 };
-                  })}
-                  votes={Object.values(allData).reduce((n, day) => n + (day && day[habit.id] === true ? 1 : 0), 0)}
+                  history={(() => {
+                    const startKey = habitStartKey(habit, allData);
+                    return [...Array(7)].map((_, i) => {
+                      const k = addDaysKey(todayKey, i - 6);
+                      const v = (allData[k] || {})[habit.id];
+                      const d = new Date(k + "T00:00");
+                      const pre = startKey && k < startKey;
+                      const off = !isScheduledOn(habit.frequency, k); // not due this day
+                      return { status: v === true ? "done" : v === "miss" ? "miss" : "none", letter: "SMTWTFS"[d.getDay()], today: i === 6, pre, off };
+                    });
+                  })()}
+                  votes={Object.entries(allData).reduce((n, [k, day]) => n + (day && day[habit.id] === true && isScheduledOn(habit.frequency, k) ? 1 : 0), 0)}
+                  voteTotal={scheduledDaysSince(habit.frequency, habitStartKey(habit, allData), todayKey)}
+                  note={(habitNotes[selectedDate] || {})[habit.id] || ""}
+                  allData={allData}
+                  habitNotes={habitNotes}
+                  setHabitNote={setHabitNote}
                 />
               </div>
-            ))}
+              );
+            })}
           </div>
         );
       })()}
 
-      {/* Completed section — collapsed by default, tap the header to expand */}
+      {/* Completed section — resolved habits (done + missed), collapsed by default */}
       {(() => {
-        const done = scheduledHabits.filter(({habit}) => todayData[habit.id] === true && habit.id !== justChecked);
-        if (done.length === 0) return null;
+        // Both outcomes land here: a tap on the ring (done) or the ✕ Miss pill (missed).
+        const resolved = scheduledHabits.filter(({habit}) => {
+          const st = todayData[habit.id];
+          return st === true || st === "miss";
+        });
+        if (resolved.length === 0) return null;
         return (
           <div style={{ marginTop:8 }}>
             <button
@@ -3443,12 +3851,38 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
             >
               <span style={{ fontSize:16 }} aria-hidden="true">✅</span>
               <span style={{ fontSize:14, fontWeight:700, color:T.primary, fontFamily:FONT_DISPLAY }}>Completed</span>
-              <span style={{ fontSize:12, color:T.primary, marginLeft:"auto", fontWeight:700, background:T.primary+"18", borderRadius:20, padding:"2px 9px" }} aria-label={`${done.length} completed`}>{done.length}</span>
+              <span style={{ fontSize:12, color:T.primary, marginLeft:"auto", fontWeight:700, background:T.primary+"18", borderRadius:20, padding:"2px 9px" }} aria-label={`${resolved.length} resolved`}>{resolved.length}</span>
               <span aria-hidden="true" style={{ fontSize:11, color:T.primary, transition:"transform 0.2s", display:"inline-block", transform: doneOpen ? "rotate(180deg)" : "none" }}>▼</span>
             </button>
             {doneOpen && (
             <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-              {done.map(({ habit, identity }) => {
+              {resolved.map(({ habit, identity }) => {
+                const isMiss = todayData[habit.id] === "miss";
+                if (isMiss) {
+                  return (
+                    <button
+                      key={habit.id}
+                      onClick={() => markMiss(habit.id)}
+                      aria-label={`Undo missed: ${habit.label}`}
+                      style={{
+                        display:"flex", alignItems:"center", gap:10,
+                        background:"#FBEAF1", border:"1.5px solid #F0C4D7",
+                        borderRadius:14, padding:"10px 14px",
+                        cursor:"pointer", textAlign:"left", width:"100%",
+                        WebkitTapHighlightColor:"transparent", transition:"opacity 0.2s",
+                      }}
+                    >
+                      <div aria-hidden="true" style={{ width:32, height:32, borderRadius:"50%", flexShrink:0, background:"#D98AA9", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                        <Ic name="x" size={16} color="#fff" />
+                      </div>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:15, fontWeight:600, color:"#8A3A5E", lineHeight:1.2 }}>{habit.label}</div>
+                        <div style={{ fontSize:12, color:T.muted, marginTop:2 }}><span aria-hidden="true">{identity.icon}</span> {shortLabel(identity.label)} · {habit.kind === "bad" ? "slipped" : "missed"}</div>
+                      </div>
+                      <span style={{ fontSize:12, color:T.muted, flexShrink:0, opacity:0.6 }}>undo</span>
+                    </button>
+                  );
+                }
                 const streak = getStreakForHabit(habit.id, habit.frequency);
                 const milestone = getMilestone(streak);
                 return (
@@ -3616,31 +4050,36 @@ const WeekView = memo(function WeekView({ data, todayKey, identities }) {
                 {weekDates.map((d,i)=>(
                   <div key={d} style={{...S.weekDayH,color:d===todayKey?identity.color:T.muted,fontWeight:d===todayKey?700:500}}>{DAY_LABELS[i]}</div>
                 ))}
-                {[...identity.habits].sort(byHabitTime).map(habit=>(
+                {[...identity.habits].sort(byHabitTime).map(habit=>{
+                  const startKey = habitStartKey(habit, data);
+                  return (
                   <Fragment key={habit.id}>
                     <div style={S.weekHabitLabel}>{habit.label}</div>
                     {weekDates.map(d=>{
                       const val       = data[d] && data[d][habit.id];
                       const done      = val === true;
                       const missed    = val === "miss";
-                      const scheduled = isScheduledOn(habit.frequency, d);
+                      const pre       = startKey && d < startKey;
+                      const scheduled = !pre && isScheduledOn(habit.frequency, d);
                       const future    = d > todayKey;
-                      const dotLabel  = done ? "Done" : missed ? "Missed" : future ? "Future" : scheduled ? "Not done" : "Not scheduled";
+                      const dotLabel  = pre ? "Before start" : done ? "Done" : missed ? "Missed" : future ? "Future" : scheduled ? "Not done" : "Not scheduled";
                       return (
                         <div key={d} aria-label={dotLabel} style={{
                           ...S.weekDot,
-                          background: done ? identity.color : missed ? T.red+"1c" : scheduled ? T.surf2 : "transparent",
-                          border: done ? `1px solid ${identity.color}` : missed ? `1px solid ${T.red}66` : scheduled ? `1px solid ${T.border}` : `1px dashed ${T.border}`,
-                          opacity: future ? 0.35 : scheduled ? 1 : 0.4,
+                          background: done ? identity.color : missed ? T.red+"1c" : (scheduled && !pre) ? T.surf2 : "transparent",
+                          border: pre ? "1px solid transparent" : done ? `1px solid ${identity.color}` : missed ? `1px solid ${T.red}66` : scheduled ? `1px solid ${T.border}` : `1px dashed ${T.border}`,
+                          opacity: pre ? 0.25 : future ? 0.35 : scheduled ? 1 : 0.4,
                           display:"flex", alignItems:"center", justifyContent:"center",
                         }}>
+                          {pre && <span style={{width:3,height:3,borderRadius:"50%",background:T.border2}} aria-hidden="true" />}
                           {done && <span style={{fontSize:12,color:"#fff",fontWeight:900,lineHeight:1}} aria-hidden="true">✓</span>}
                           {missed && <span style={{fontSize:12,color:T.red,fontWeight:900,lineHeight:1}} aria-hidden="true">✕</span>}
                         </div>
                       );
                     })}
                   </Fragment>
-                ))}
+                  );
+                })}
               </div>
             )
           }
@@ -3653,7 +4092,10 @@ const WeekView = memo(function WeekView({ data, todayKey, identities }) {
             a + identity.habits.filter(h => isScheduledOn(h.frequency, d) && data[d]?.[h.id] === true).length, 0);
           const possible = weekDates
             .filter(d => d <= todayKey)
-            .reduce((a,d) => a + identity.habits.filter(h => isScheduledOn(h.frequency, d)).length, 0);
+            .reduce((a,d) => a + identity.habits.filter(h => {
+              const sKey = habitStartKey(h, data);
+              return isScheduledOn(h.frequency, d) && (!sKey || d >= sKey);
+            }).length, 0);
           const pct=possible>0?Math.round((done/possible)*100):0;
           return (
             <div key={identity.id} style={S.summaryRow}>
@@ -3835,8 +4277,6 @@ html, body, #root { height: 100%; }
 #root ::-webkit-scrollbar { display: none; }
 #root * { scrollbar-width: none; }
 .habit-toggle:active { opacity: 0.7; transform: scale(0.98); }
-.plan-panel { display: none; }
-.habit-card.plan-open .plan-panel { display: flex; }
 .check-pop { animation: pop 0.25s cubic-bezier(0.34,1.56,0.64,1) both; }
 .card-leaving { animation: fadeOut 0.3s ease forwards; }
 .row-leaving { animation: fadeOut 0.35s ease 3s forwards; }

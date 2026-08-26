@@ -9,27 +9,124 @@
 //   4. firebase deploy --only functions:askJamesClear   (requires the Blaze plan)
 
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { GoogleGenAI } = require("@google/genai");
+const admin = require("firebase-admin");
+
+admin.initializeApp();
 
 const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
 
 setGlobalOptions({ region: "us-central1", maxInstances: 5 });
 
-const SYSTEM_PROMPT = `You are James Clear, author of Atomic Habits. You help people BUILD good habits and BREAK bad ones using the Four Laws of Behavior Change and their inversion.
+// Same schedule logic as the client, so reminders only fire on days a habit is due.
+function isScheduledOn(frequency, dateKey) {
+  const freq = frequency || { cadence: "weekly", days: [0, 1, 2, 3, 4, 5, 6] };
+  const [y, mo, d] = dateKey.split("-").map(Number);
+  const date = new Date(y, mo - 1, d);
+  if (freq.cadence === "monthly") {
+    const dates = freq.dates || [1];
+    const lastDay = new Date(y, mo, 0).getDate();
+    return dates.some((dt) => (dt === 32 ? d === lastDay : dt === d));
+  }
+  const jsDay = date.getDay();
+  const ourDay = jsDay === 0 ? 6 : jsDay - 1;
+  return (freq.days || [0, 1, 2, 3, 4, 5, 6]).includes(ourDay);
+}
+const lower = (s) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
 
-To BUILD a good habit:
-1. Make it obvious   2. Make it attractive   3. Make it easy   4. Make it satisfying
+// ─── Per-habit reminders — runs every minute, pushes for habits due right now ──
+exports.sendHabitReminders = onSchedule(
+  { schedule: "every 1 minutes", region: "us-central1", timeoutSeconds: 120, maxInstances: 1 },
+  async () => {
+    const db = admin.firestore();
+    const snap = await db.collection("pushTokens").get();
+    if (snap.empty) return;
+    const now = new Date();
 
-To BREAK a bad habit (invert every law):
-1. Make it invisible   2. Make it unattractive   3. Make it difficult   4. Make it unsatisfying
+    for (const tokenDoc of snap.docs) {
+      const { token, timezone, uid } = tokenDoc.data() || {};
+      if (!token || !uid) continue;
 
-Give concrete, specific, actionable suggestions grounded in the person's habit, identity, time and place — never generic advice. Speak plainly and warmly, the way the book does.
+      // The user's local date + HH:MM, so a 21:00 habit fires at their 21:00.
+      let dateKey, hhmm;
+      try {
+        const parts = new Intl.DateTimeFormat("en-CA", {
+          timeZone: timezone || "UTC", year: "numeric", month: "2-digit", day: "2-digit",
+          hour: "2-digit", minute: "2-digit", hour12: false,
+        }).formatToParts(now);
+        const g = (t) => (parts.find((p) => p.type === t) || {}).value;
+        let hh = g("hour"); if (hh === "24") hh = "00";
+        dateKey = `${g("year")}-${g("month")}-${g("day")}`;
+        hhmm = `${hh}:${g("minute")}`;
+      } catch (e) { continue; }
+
+      let idSnap, ciSnap;
+      try {
+        [idSnap, ciSnap] = await Promise.all([
+          db.doc(`users/${uid}/atomicHabits/identities`).get(),
+          db.doc(`users/${uid}/atomicHabits/checkIns`).get(),
+        ]);
+      } catch (e) { continue; }
+      const identities = (idSnap.exists && idSnap.data().data) || [];
+      const checkIns = (ciSnap.exists && ciSnap.data().data) || {};
+      const today = checkIns[dateKey] || {};
+
+      for (const identity of identities) {
+        for (const habit of identity.habits || []) {
+          if (!habit || habit.archived || !habit.time) continue;
+          if (habit.time !== hhmm) continue;                  // exact-minute match
+          if (!isScheduledOn(habit.frequency, dateKey)) continue;
+          const st = today[habit.id];
+          if (st === true || st === "miss") continue;          // already resolved today
+
+          const breaking = habit.kind === "bad";
+          const label = String(habit.label || "your habit").trim();
+          const title = breaking ? `Stay strong — don't ${lower(label)}` : `Time to ${lower(label)}`;
+          const bits = [habit.trigger, habit.location].filter(Boolean);
+          const body = bits.length ? bits.join(" · ")
+            : (breaking ? "You've got this." : `Cast a vote for ${identity.label || "who you want to be"}.`);
+
+          try {
+            // Data-only message — the service worker builds the notification (no duplicates).
+            await admin.messaging().send({
+              token,
+              data: { title, body, habitId: String(habit.id), link: "https://budgetbuddy-9d7da.web.app/" },
+              webpush: { headers: { Urgency: "high", TTL: "300" } },
+            });
+            console.log(`reminder sent to ${uid} for "${habit.label}" at ${hhmm}`);
+          } catch (err) {
+            console.error("reminder push failed for", uid, err && err.code);
+            if (err && (err.code === "messaging/registration-token-not-registered" ||
+                        err.code === "messaging/invalid-registration-token")) {
+              await tokenDoc.ref.delete().catch(() => {});   // prune dead tokens
+            }
+          }
+        }
+      }
+    }
+  }
+);
+
+const SYSTEM_PROMPT = `You are James Clear, author of Atomic Habits. EVERY suggestion you give must embody the book's philosophy — never generic self-help, never "try harder."
+
+CORE PRINCIPLES you apply to every single suggestion:
+- SYSTEMS OVER GOALS & MOTIVATION: Never rely on willpower, motivation, discipline, or "remember to." Design the system and the environment so the desired behavior is the path of least resistance. "You do not rise to the level of your goals; you fall to the level of your systems."
+- IDENTITY-BASED HABITS: Every habit is a vote for the type of person the user wishes to become. Anchor every field to their stated identity — the aim is not to do the task, but to BECOME that person. Never suggest anything that conflicts with that identity.
+- ATOMIC — SMALL & SUSTAINABLE: Always prefer the smallest sustainable step over an ambitious one. 1% better, repeated, compounds. Favor two-minute versions, tiny wins, and consistency over intensity. Never propose something big, vague, or dependent on a burst of willpower.
+- HABIT STACKING & IMPLEMENTATION INTENTIONS: Anchor the cue to an existing daily habit or a specific time + place — the form "After [current habit], I will [new habit]." Make cues concrete in time and space so they are impossible to miss.
+
+THE FOUR LAWS OF BEHAVIOR CHANGE (and how each maps to a field):
+  BUILD a good habit:  1) Make it OBVIOUS (environment design + habit stacking)  2) Make it ATTRACTIVE (temptation bundling / a compelling reframe)  3) Make it EASY (reduce friction / the two-minute rule)  4) Make it SATISFYING (an immediate reward or tracking).
+  BREAK a bad habit — invert each law:  1) Make it INVISIBLE (remove/hide the cue)  2) Make it UNATTRACTIVE (highlight the real cost)  3) Make it DIFFICULT (add friction / a commitment device)  4) Make it UNSATISFYING (accountability or an immediate cost).
+
+Speak plainly and warmly, the way the book does.
 
 Two rules for EVERY suggestion:
 1. KEEP IT SHORT — a concrete phrase, not a sentence or paragraph. No filler and no explanation inside a field value.
-2. ANCHOR TO THE IDENTITY — every field must reinforce and stay consistent with the person's stated identity. Never suggest anything that conflicts with that identity; all fields should cohere as one identity.`;
+2. ANCHOR TO THE IDENTITY — every field must reinforce and cohere with the person's stated identity; all fields together should read as one consistent identity.`;
 
 // Both variants use the SAME JSON keys so the app maps each one to the same
 // form field regardless of good/bad — only the meaning of each field inverts.
@@ -93,7 +190,9 @@ exports.askJamesClear = onCall(
     const { mode = "create", habit = {}, field = "" } = request.data || {};
     const kind = habit.kind === "bad" ? "bad" : "good";
     const label = String(habit.label || "").trim().slice(0, 120);
-    if (!label) {
+    // A name is required for everything EXCEPT suggesting the name itself,
+    // which is generated from the chosen identity.
+    if (!label && field !== "label") {
       throw new HttpsError("invalid-argument", "A habit name is required.");
     }
 
@@ -123,10 +222,17 @@ exports.askJamesClear = onCall(
     };
 
     const userPrompt = wantField
-      ? `${kindLine} Improve ONLY the "${wantField}" field for the habit "${label}". This field means: ${FIELD_DEFS[kind][wantField]}` +
-        `\nContext — Identity: ${identity || "(none)"} · Time: ${time || "(none)"} · Place: ${location || "(none)"} · Frequency: ${frequency || "(none)"}.` +
-        `\nThe current value is: "${currentByField[wantField] || "(empty)"}". Give a NEW, clearly different and better value for just this field — do not repeat the current one. Keep it SHORT and fully consistent with the identity "${identity || "(none)"}".` +
-        `\n\nRespond with ONLY a JSON object (no markdown, no code fences): {"value": "<the improved value>", "note": "<one short reason in James Clear's voice>"}`
+      ? (wantField === "label"
+          // Suggest the habit NAME itself, generated from the chosen identity.
+          ? `${kindLine} Suggest ONE specific habit NAME — the "I will ..." action (a verb + object, optionally a quantity), with NO "I will" prefix — for a person becoming: "${identity || "(none given)"}".` +
+            (label ? ` Their current draft name is "${label}"; offer a clearer, more specific and sustainable alternative — do not just repeat it.` : ` It should be a small, sustainable, identity-reinforcing habit (think two-minute-rule small, not ambitious).`) +
+            `\nContext — Time: ${time || "(none)"} · Place: ${location || "(none)"} · Frequency: ${frequency || "(none)"}. Keep it SHORT and concrete.` +
+            `\n\nRespond with ONLY a JSON object (no markdown, no code fences): {"value": "<the habit name>", "note": "<one short reason in James Clear's voice>"}`
+          : `${kindLine} Improve ONLY the "${wantField}" field for the habit "${label}". This field means: ${FIELD_DEFS[kind][wantField]}` +
+            `\nContext — Identity: ${identity || "(none)"} · Time: ${time || "(none)"} · Place: ${location || "(none)"} · Frequency: ${frequency || "(none)"}.` +
+            `\nThe rest of this habit so far — cue: "${current.cue || "(empty)"}"; attractive: "${current.bundle || "(empty)"}"; easy: "${current.environment || "(empty)"}"; two-minute: "${current.twoMinute || "(empty)"}"; reward: "${current.reward || "(empty)"}". Your suggestion MUST fit and cohere with these and reinforce the identity — do not contradict them.` +
+            `\nThe current value of "${wantField}" is: "${currentByField[wantField] || "(empty)"}". Give a NEW, clearly different and better value for just this field — do not repeat the current one. Keep it SHORT and fully consistent with the identity "${identity || "(none)"}".` +
+            `\n\nRespond with ONLY a JSON object (no markdown, no code fences): {"value": "<the improved value>", "note": "<one short reason in James Clear's voice>"}`)
       :
       (mode === "review"
         ? `${kindLine} Review and improve it against the ${kind === "bad" ? "inverted " : ""}Four Laws. Rewrite each field so it is more specific and effective; keep what already works. Habit: "${label}".` +
