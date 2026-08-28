@@ -130,6 +130,12 @@ function shortLabel(label) {
   return label.replace(/^I am an? /i, "").replace(/^I am /i, "");
 }
 
+// Capitalize only the first letter for display — e.g. a trigger typed in
+// lowercase renders as "After i finish my morning walk".
+function capFirst(s) {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
 // ─── FREQUENCY HELPERS ────────────────────────────────────────────────────────
 // shape: { cadence:"weekly"|"monthly", days:[0-6], dates:[1-31,32] }
 // days: 0=Mon … 6=Sun  |  dates: 1-31 = day of month, 32 = last day of month
@@ -1052,8 +1058,12 @@ export default function App() {
 
   // ── Scores — must be before early returns (Rules of Hooks) ──
   const scheduledToday = useMemo(
-    () => allHabits.filter(h => isScheduledOn(h.frequency, selectedDate)),
-    [allHabits, selectedDate]
+    () => allHabits.filter(h => {
+      if (!isScheduledOn(h.frequency, selectedDate)) return false;
+      const sKey = habitStartKey(h, data);          // exclude days before the habit existed
+      return !sKey || selectedDate >= sKey;
+    }),
+    [allHabits, selectedDate, data]
   );
   const { totalDone, totalTotal, pct } = useMemo(() => {
     const done  = scheduledToday.filter(h => selectedData[h.id] === true).length;
@@ -3663,12 +3673,17 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
     ), [identities]);
 
   const [scheduledHabits, notTodayHabits] = useMemo(() => {
-    const scheduled = enrichedHabits
+    // A habit only exists from its start date on — never show it on earlier days.
+    const existing = enrichedHabits.filter(({habit}) => {
+      const sKey = habitStartKey(habit, allData);
+      return !sKey || selectedDate >= sKey;
+    });
+    const scheduled = existing
       .filter(({habit}) => isScheduledOn(habit.frequency, selectedDate))
       .sort((a, b) => a.sortMinutes - b.sortMinutes); // earliest time first; no-time habits (Infinity) go last
-    const notToday  = enrichedHabits.filter(({habit}) => !isScheduledOn(habit.frequency, selectedDate));
+    const notToday  = existing.filter(({habit}) => !isScheduledOn(habit.frequency, selectedDate));
     return [scheduled, notToday];
-  }, [enrichedHabits, selectedDate]);
+  }, [enrichedHabits, selectedDate, allData]);
 
   const quote = useMemo(() => getDailyQuote(), []);
 
@@ -3992,7 +4007,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                     })()}
                     <span style={{ flex:1, minWidth:0, fontSize:14.5, fontWeight:800, letterSpacing:"-0.005em", color: habit.kind === "bad" ? "#8A2F52" : "#1C4A8C", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                       {habit.kind === "bad" && <span style={{ fontSize:9.5, fontWeight:900, letterSpacing:"0.09em", color:"#B23A6B", marginRight:6 }}>BREAKING</span>}
-                      {habit.trigger || (habit.kind === "bad" ? "When tempted" : "Reminder")}
+                      {capFirst(habit.trigger) || (habit.kind === "bad" ? "When tempted" : "Reminder")}
                     </span>
                     <RowMenu habit={habit} identity={identity} missed={todayData[habit.id] === "miss"} onMiss={markMiss} openEditHabit={openEditHabit} openDeleteHabit={openDeleteHabit} onReview={openReviewFor} habitNotes={habitNotes} allData={allData} setHabitNote={setHabitNote} />
                   </div>
