@@ -1,4 +1,4 @@
-# Deploys the app to Firebase Hosting + Firestore rules on push to main.
+# Deploys the app to Firebase Hosting + Firestore rules on push to 2608-rls.
 #
 # Required GitHub configuration (Settings → Secrets and variables → Actions):
 #
@@ -24,7 +24,7 @@ name: Deploy to Firebase
 
 on:
   push:
-    branches: [main]
+    branches: [2608-rls]
   workflow_dispatch:
 
 permissions:
