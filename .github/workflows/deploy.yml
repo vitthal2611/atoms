@@ -64,7 +64,15 @@ jobs:
       - name: Write service account key
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        run: printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT secret is not set. Add it under Settings → Secrets and variables → Actions (the full service-account JSON key). Firebase cannot authenticate without it."
+            exit 1
+          fi
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"
+          # Sanity-check it parses as JSON so a malformed paste fails here, not deep in deploy.
+          node -e "JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP + '/sa.json','utf8'))" \
+            || { echo "::error::FIREBASE_SERVICE_ACCOUNT is not valid JSON. Paste the entire service-account key file contents."; exit 1; }
 
       - name: Deploy to Firebase
         env:
