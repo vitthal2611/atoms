@@ -3904,29 +3904,6 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
 
       </div>
 
-      {/* Empty identities — one compact block of "add a habit" chips (not N full cards) */}
-      {(() => {
-        const empties = identities.filter(i => i.habits.length === 0);
-        if (empties.length === 0) return null;
-        return (
-          <div style={{ borderRadius:14, border:`1px dashed ${T.border2}`, background:T.surface, padding:"11px 13px" }}>
-            <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.muted, marginBottom:9 }}>
-              {empties.length === 1 ? "This identity needs a habit" : "These identities need a habit"}
-            </div>
-            <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
-              {empties.map(i => (
-                <button key={i.id} onClick={()=>openAddHabit(i.id)}
-                  style={{ display:"inline-flex", alignItems:"center", gap:6, background:`${i.color}14`, border:`1px solid ${i.color}44`,
-                    borderRadius:20, padding:"6px 12px", cursor:"pointer", fontFamily:"inherit", fontSize:13, fontWeight:700,
-                    color:i.colorDim || i.color, WebkitTapHighlightColor:"transparent" }}>
-                  <span aria-hidden="true">{i.icon}</span> {shortLabel(i.label)} <span aria-hidden="true" style={{ fontWeight:900, opacity:0.65 }}>＋</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
-
       {/* Never-miss-twice alert — habits missed yesterday and still pending today */}
       {missedWarnCount > 0 && (
         <div role="alert" style={{ display:"flex", alignItems:"center", gap:11, background:T.red+"10", border:`1.5px solid ${T.red}44`, borderRadius:14, padding:"11px 14px" }}>
