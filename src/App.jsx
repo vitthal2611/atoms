@@ -2612,29 +2612,29 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
       <div style={{ padding: "10px 12px 12px" }}>
         {/* ⏱ time · ✓ ring · intention sentence (place lives in the header banner) */}
         <div style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
-          {(habit.time || habit.location) && (
-            <span style={{ flexShrink:0, width:50, paddingTop:3, display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
-              {habit.time && (
-                <span style={{ fontSize:12.5, fontWeight:800, lineHeight:1.05, color: checked ? T.muted : breaking ? "#B23A6B" : "#2F6FD0", fontVariantNumeric:"tabular-nums" }}>
-                  {to24h(habit.time)}
-                </span>
-              )}
-              {habit.location && (
-                <span style={{ fontSize:9.5, fontWeight:700, lineHeight:1.15, color:T.muted, textAlign:"center" }}>
-                  {habit.location}
-                </span>
-              )}
-            </span>
-          )}
-          <HabitRing
-            checked={checked}
-            missed={missed}
-            color={identity.color}
-            streak={streak}
-            next={next}
-            onClick={() => toggle(habit.id, habit.frequency, identity)}
-            label={checked ? `Uncheck: ${habit.label}` : (breaking ? `Mark clean: ${habit.label}` : `Check: ${habit.label}`)}
-          />
+          {/* Left part — check-in on top, then time & place, divided from the action */}
+          <span style={{ flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", gap:6,
+            ...((habit.time || habit.location) ? { minWidth:46, paddingRight:11, borderRight:`1.5px solid ${T.surf2}` } : {}) }}>
+            <HabitRing
+              checked={checked}
+              missed={missed}
+              color={identity.color}
+              streak={streak}
+              next={next}
+              onClick={() => toggle(habit.id, habit.frequency, identity)}
+              label={checked ? `Uncheck: ${habit.label}` : (breaking ? `Mark clean: ${habit.label}` : `Check: ${habit.label}`)}
+            />
+            {habit.time && (
+              <span style={{ fontSize:13, fontWeight:900, lineHeight:1.05, color: checked ? T.muted : breaking ? "#B23A6B" : "#2F6FD0", fontVariantNumeric:"tabular-nums" }}>
+                {to24h(habit.time)}
+              </span>
+            )}
+            {habit.location && (
+              <span style={{ fontSize:9.5, fontWeight:700, lineHeight:1.1, color:T.muted, textAlign:"center", maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                {habit.location}
+              </span>
+            )}
+          </span>
           <span
             onClick={() => toggle(habit.id, habit.frequency, identity)}
             role="button"
