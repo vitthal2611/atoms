@@ -2044,21 +2044,6 @@ export default function App() {
           )}
         </div>
         <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
-          <button onClick={()=>fbSignOut(_auth)} title={user.email||undefined} style={{ background:"transparent", border:`1px solid ${T.border}`, borderRadius:20, fontSize:12, color:T.muted, padding:"3px 10px", cursor:"pointer", fontFamily:"inherit", maxWidth:120, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-            {user.displayName ? `${user.displayName.split(" ")[0]} · Sign out` : "Sign out"}
-          </button>
-          {notifStatus !== "unsupported" && (
-            notifStatus === "granted" ? (
-              <span title="You'll get a reminder at each habit's time" style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:11, fontWeight:700, color:T.primary }}>
-                <Ic name="check" size={11} color={T.primary} /> Reminders on
-              </span>
-            ) : (
-              <button onClick={handleEnableReminders} disabled={notifBusy} title="Get a reminder at each habit's time"
-                style={{ background:"transparent", border:`1px solid ${T.primary}55`, borderRadius:20, fontSize:11, fontWeight:700, color:T.primary, padding:"3px 10px", cursor: notifBusy ? "default" : "pointer", fontFamily:"inherit", opacity: notifBusy ? 0.6 : 1, WebkitTapHighlightColor:"transparent" }}>
-                🔔 {notifBusy ? "Enabling…" : "Reminders"}
-              </button>
-            )
-          )}
           <div style={S.ringWrap}>
             {(() => {
               const ringTitleId = "ring-title-" + view;
@@ -2148,6 +2133,12 @@ export default function App() {
             onAddIdentity={openAddIdentity}
             onEditIdentity={openEditIdentity}
             onDeleteIdentity={openDeleteIdentity}
+            userName={user.displayName || ""}
+            userEmail={user.email || ""}
+            onSignOut={()=>fbSignOut(_auth)}
+            notifStatus={notifStatus}
+            notifBusy={notifBusy}
+            onEnableReminders={handleEnableReminders}
           />
         )}
       </main>
@@ -2205,7 +2196,7 @@ export default function App() {
 }
 
 // ─── MANAGE VIEW ──────────────────────────────────────────────────────────────
-const ManageView = memo(function ManageView({ identities, onAddHabit, onEditHabit, onDeleteHabit, onAddIdentity, onEditIdentity, onDeleteIdentity }) {
+const ManageView = memo(function ManageView({ identities, onAddHabit, onEditHabit, onDeleteHabit, onAddIdentity, onEditIdentity, onDeleteIdentity, userName, userEmail, onSignOut, notifStatus, notifBusy, onEnableReminders }) {
   return (
     <div style={S.content}>
 
@@ -2264,6 +2255,45 @@ const ManageView = memo(function ManageView({ identities, onAddHabit, onEditHabi
       ))}
 
       <button onClick={onAddIdentity} style={S.addIdentityBtn}>+ Add New Identity</button>
+
+      {/* Account & settings — sign out + reminders live here, keeping the header clean */}
+      <div style={{ ...S.card, marginTop:18 }}>
+        <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.08em", textTransform:"uppercase", color:T.muted, marginBottom:12 }}>Account &amp; settings</div>
+
+        {notifStatus !== "unsupported" && (
+          <div style={{ display:"flex", alignItems:"center", gap:10, paddingBottom:12, marginBottom:12, borderBottom:`1px solid ${T.surf2}` }}>
+            <span style={{ fontSize:18 }} aria-hidden="true">🔔</span>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:14, fontWeight:700, color:T.text }}>Habit reminders</div>
+              <div style={{ fontSize:12.5, color:T.muted, marginTop:1 }}>A push at each habit's time.</div>
+            </div>
+            {notifStatus === "granted" ? (
+              <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:12.5, fontWeight:700, color:T.primary, flexShrink:0 }}>
+                <Ic name="check" size={13} color={T.primary} /> On
+              </span>
+            ) : (
+              <button onClick={onEnableReminders} disabled={notifBusy}
+                style={{ background:T.primary, border:"none", borderRadius:20, fontSize:13, fontWeight:700, color:"#fff", padding:"7px 15px", cursor: notifBusy ? "default" : "pointer", fontFamily:"inherit", opacity: notifBusy ? 0.6 : 1, flexShrink:0, WebkitTapHighlightColor:"transparent" }}>
+                {notifBusy ? "Enabling…" : "Turn on"}
+              </button>
+            )}
+          </div>
+        )}
+
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <span style={{ width:34, height:34, borderRadius:"50%", background:T.surf2, display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, fontWeight:800, color:T.primary, flexShrink:0 }} aria-hidden="true">
+            {(userName || userEmail || "?").charAt(0).toUpperCase()}
+          </span>
+          <div style={{ flex:1, minWidth:0 }}>
+            {userName && <div style={{ fontSize:14, fontWeight:700, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{userName}</div>}
+            {userEmail && <div style={{ fontSize:12.5, color:T.muted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{userEmail}</div>}
+          </div>
+          <button onClick={onSignOut}
+            style={{ background:"transparent", border:`1px solid ${T.border}`, borderRadius:20, fontSize:13, fontWeight:700, color:T.text2, padding:"7px 15px", cursor:"pointer", fontFamily:"inherit", flexShrink:0, WebkitTapHighlightColor:"transparent" }}>
+            Sign out
+          </button>
+        </div>
+      </div>
     </div>
   );
 });
@@ -2580,8 +2610,22 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
       {/* ── Card body — cue, action, coaching (same layout as the Up Next hero) ── */}
       <div style={{ padding: "10px 12px 12px" }}>
-        {/* ✓ ring · intention sentence (time & place live in the header banner) */}
+        {/* ⏱ time · ✓ ring · intention sentence (place lives in the header banner) */}
         <div style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
+          {(habit.time || habit.location) && (
+            <span style={{ flexShrink:0, width:50, paddingTop:3, display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
+              {habit.time && (
+                <span style={{ fontSize:12.5, fontWeight:800, lineHeight:1.05, color: checked ? T.muted : breaking ? "#B23A6B" : "#2F6FD0", fontVariantNumeric:"tabular-nums" }}>
+                  {to24h(habit.time)}
+                </span>
+              )}
+              {habit.location && (
+                <span style={{ fontSize:9.5, fontWeight:700, lineHeight:1.15, color:T.muted, textAlign:"center" }}>
+                  {habit.location}
+                </span>
+              )}
+            </span>
+          )}
           <HabitRing
             checked={checked}
             missed={missed}
@@ -2600,12 +2644,17 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
           >
             <span style={{
-              display:"block", wordBreak:"break-word", fontSize:15, lineHeight: 1.45,
+              display:"block", wordBreak:"break-word", fontSize:16, lineHeight: 1.45,
               color: checked ? T.text2 : missed ? T.muted : T.text,
               textDecoration: checked ? "line-through" : "none",
               textDecorationColor: identity.color + "88",
             }}>
-              {breaking ? "I won't" : "I will"} <span style={{ fontWeight:700, color: breaking ? "#993556" : "inherit" }}>{habitPhrase}</span>, because I am <span style={{ fontWeight:700, color: identity.colorDim || identity.color }}>{shortLabel(identity.label)}</span>.
+              {breaking ? "I won't" : "I will"} <span style={{ fontWeight:800, color: breaking ? "#993556" : "inherit" }}>{habitPhrase}</span>, because I am{" "}
+              <span style={{
+                fontWeight:900, letterSpacing:"-0.01em",
+                color: identity.colorDim || identity.color,
+                borderBottom: `2px solid ${identity.color}55`,
+              }}>{shortLabel(identity.label)}</span>.
             </span>
           </span>
           {/* "Mark as missed" lives in the ⋯ menu, so no ✕ ring on the card face. */}
@@ -2660,13 +2709,15 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           </div>
         ))}
 
-        {/* Details toggle — reveals Plan + Your proof + note below */}
+        {/* Details toggle — a quiet, centered pill (not a heavy full-width bar) */}
         {!checked && !missed && (
-          <button type="button" onClick={() => setShowDetails(p => !p)} aria-expanded={showDetails}
-            aria-label={showDetails ? "Hide details" : "Show plan and proof"}
-            style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, width:"100%", marginTop:12, padding:"9px 10px", borderRadius:9, border:"none", background:T.surf2, cursor:"pointer", fontFamily:"inherit", fontSize:12, fontWeight:700, color:T.text2, WebkitTapHighlightColor:"transparent" }}>
-            Details <span aria-hidden="true" style={{ color:T.muted }}>{showDetails ? "▴" : "▾"}</span>
-          </button>
+          <div style={{ display:"flex", justifyContent:"center", marginTop:10 }}>
+            <button type="button" onClick={() => setShowDetails(p => !p)} aria-expanded={showDetails}
+              aria-label={showDetails ? "Hide details" : "Show plan and proof"}
+              style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 13px", borderRadius:20, border:`1px solid ${showDetails ? T.border2 : T.border}`, background: showDetails ? T.surf2 : "transparent", cursor:"pointer", fontFamily:"inherit", fontSize:11.5, fontWeight:700, letterSpacing:"0.02em", color:T.muted, WebkitTapHighlightColor:"transparent" }}>
+              {showDetails ? "Hide details" : "Details"} <span aria-hidden="true">{showDetails ? "▴" : "▾"}</span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -3172,7 +3223,6 @@ function FocusSlotAdd({ index, onAdd, onClose }) {
   };
   return (
     <div style={{ display:"flex", alignItems:"center", gap:11, padding:"8px 8px 8px 11px", borderRadius:12, marginBottom:7, background:"#F7FBF9", border:"1.5px solid #9FE1CB" }}>
-      <span aria-hidden="true" style={{ width:20, height:20, borderRadius:"50%", background:"#DFF0E9", color:"#12694E", fontSize:11, fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{index + 1}</span>
       <input ref={inputRef} value={val} onChange={e => setVal(e.target.value)}
         onKeyDown={e => { if (e.key === "Enter") add(); if (e.key === "Escape") { setVal(""); onClose(); } }}
         onBlur={() => { if (!val.trim()) onClose(); }}
@@ -3877,7 +3927,6 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
               {/* Focus slots (chosen tasks) */}
               {focusTasks.map((t, i) => (
                 <div key={t.id} style={{ display:"flex", alignItems:"center", gap:11, padding:"10px 11px", borderRadius:12, marginBottom:7, background:"#F7FBF9", border:"1px solid #E6F0EA" }}>
-                  <span aria-hidden="true" style={{ width:20, height:20, borderRadius:"50%", background:"#DFF0E9", color:"#12694E", fontSize:11, fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{i + 1}</span>
                   <button onClick={() => toggleTask(selectedDate, t.id)} aria-label={`Complete: ${t.text}`}
                     style={{ width:22, height:22, borderRadius:"50%", flexShrink:0, boxSizing:"border-box", border:`2px solid ${T.primary}`, background: t.done ? T.primary : "transparent", cursor:"pointer", padding:0, display:"flex", alignItems:"center", justifyContent:"center", WebkitTapHighlightColor:"transparent" }}>
                     {t.done && <Ic name="check" size={12} color="#fff" />}
@@ -3975,17 +4024,28 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
 
       </div>
 
-      {/* Empty-identity nudge — show a contextual CTA for each identity with no habits */}
-      {identities.filter(i => i.habits.length === 0).map(i => (
-        <div key={i.id} style={{ borderRadius:16, border:`1.5px dashed ${i.color}66`, padding:"14px 16px", background:`${i.color}08`, display:"flex", alignItems:"center", gap:12 }}>
-          <span style={{fontSize:22, flexShrink:0}} aria-hidden="true">{i.icon}</span>
-          <div style={{flex:1, minWidth:0}}>
-            <div style={{fontSize:15,fontWeight:700,color:i.color,lineHeight:1.2}}>{shortLabel(i.label)}</div>
-            <div style={{fontSize:13,color:T.muted,marginTop:2}}>No habits yet — add one to start tracking</div>
+      {/* Empty identities — one compact block of "add a habit" chips (not N full cards) */}
+      {(() => {
+        const empties = identities.filter(i => i.habits.length === 0);
+        if (empties.length === 0) return null;
+        return (
+          <div style={{ borderRadius:14, border:`1px dashed ${T.border2}`, background:T.surface, padding:"11px 13px" }}>
+            <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.muted, marginBottom:9 }}>
+              {empties.length === 1 ? "This identity needs a habit" : "These identities need a habit"}
+            </div>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+              {empties.map(i => (
+                <button key={i.id} onClick={()=>openAddHabit(i.id)}
+                  style={{ display:"inline-flex", alignItems:"center", gap:6, background:`${i.color}14`, border:`1px solid ${i.color}44`,
+                    borderRadius:20, padding:"6px 12px", cursor:"pointer", fontFamily:"inherit", fontSize:13, fontWeight:700,
+                    color:i.colorDim || i.color, WebkitTapHighlightColor:"transparent" }}>
+                  <span aria-hidden="true">{i.icon}</span> {shortLabel(i.label)} <span aria-hidden="true" style={{ fontWeight:900, opacity:0.65 }}>＋</span>
+                </button>
+              ))}
+            </div>
           </div>
-          <button onClick={()=>openAddHabit(i.id)} style={{...S.btnPrimary, padding:"8px 14px", fontSize:13, minHeight:36, flex:"none", width:"auto"}}>+ Add</button>
-        </div>
-      ))}
+        );
+      })()}
 
       {/* Never-miss-twice alert — habits missed yesterday and still pending today */}
       {missedWarnCount > 0 && (
@@ -4000,14 +4060,19 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
         </div>
       )}
 
-      {/* Focus entry */}
-      {selectedDate === todayKey && scheduledHabits.some(({ habit }) => todayData[habit.id] == null) && (
-        <div style={{ margin:"0 2px" }}>
-          <button onClick={startFocus} style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12.5, fontWeight:800, color:"#fff", background:T.primary, border:"none", borderRadius:20, padding:"7px 15px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
-            <Ic name="play" size={12} color="#fff" /> Focus
+      {/* Focus entry — a guided, one-at-a-time run through today's pending habits */}
+      {selectedDate === todayKey && (() => {
+        const pending = scheduledHabits.filter(({ habit }) => todayData[habit.id] == null).length;
+        if (!pending) return null;
+        return (
+          <button onClick={startFocus}
+            style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, width:"100%",
+              padding:"11px 14px", borderRadius:12, border:`1.5px solid ${T.primary}55`, background:T.primary+"0e",
+              cursor:"pointer", fontFamily:"inherit", fontSize:14, fontWeight:800, color:T.primary, WebkitTapHighlightColor:"transparent" }}>
+            <Ic name="play" size={14} color={T.primary} /> Focus mode · {pending} to go
           </button>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Focus mode overlay */}
       {focusItems && (
@@ -4025,7 +4090,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
         const firstPending = scheduledHabits.find(({ habit }) => todayData[habit.id] == null);
         const firstPendingId = firstPending ? firstPending.habit.id : null;
         return (
-          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
             {visible.map(({ habit, identity }) => {
               // Missed yesterday & still pending today → flag the whole card red (never miss twice).
               const warnMissed = selectedDate === todayKey && missedYesterdayIds.has(habit.id) && todayData[habit.id] == null;
@@ -4036,18 +4101,18 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                   ? "1px solid #F0B4B4"
                   : habit.kind === "bad"
                   ? (habit.id === firstPendingId ? "1.5px solid #D4537E" : "1px solid #F4C0D1")
-                  : (habit.id === firstPendingId ? `1.5px solid ${identity.color}` : `1px solid ${T.border}`),
+                  : (habit.id === firstPendingId ? `1.5px solid ${identity.color}` : `1px solid #C7DDEB`),
                 // Left accent — red when missed yesterday, else the identity colour
                 borderLeft: `4px solid ${warnMissed ? "#E24B4A" : (habit.kind === "bad" ? "#D4537E" : identity.color)}`,
                 boxShadow: warnMissed
                   ? "0 6px 20px #E24B4A22"
                   : habit.id === firstPendingId
-                  ? (habit.kind === "bad" ? "0 6px 20px #D4537E22" : `0 6px 20px ${identity.color}22`)
-                  : "0 4px 16px rgba(2,80,130,0.05)",
+                  ? (habit.kind === "bad" ? "0 8px 22px #D4537E2e" : `0 8px 22px ${identity.color}2e`)
+                  : "0 1px 2px rgba(9,45,75,0.06), 0 5px 14px rgba(9,45,75,0.10)",
                 overflow:"hidden",
               }}>
-                {/* Header — full-width cue BANNER (trigger + time + place) · ⋯ menu. */}
-                {(habit.trigger || habit.time || habit.location) ? (
+                {/* Header — full-width cue BANNER (trigger) · ⋯ menu. Time & place sit by the ring. */}
+                {habit.trigger ? (
                   <div style={{ display:"flex", alignItems:"center", gap:9, padding:"10px 8px 10px 13px",
                     background: habit.kind === "bad" ? "#FBEAF0" : "#EAF1FC",
                     borderBottom: `1px solid ${habit.kind === "bad" ? "#F4C0D1" : "#D7E4F7"}` }}>
@@ -4060,16 +4125,10 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                         </span>
                       );
                     })()}
-                    <span style={{ flex:1, minWidth:0, fontSize:14, fontWeight:800, letterSpacing:"-0.01em", color: habit.kind === "bad" ? "#8A2F52" : "#1C4A8C", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                      {habit.kind === "bad" && <span style={{ fontSize:9.5, fontWeight:900, letterSpacing:"0.08em", color:"#B23A6B", marginRight:6 }}>BREAKING</span>}
+                    <span style={{ flex:1, minWidth:0, fontSize:14.5, fontWeight:800, letterSpacing:"-0.005em", color: habit.kind === "bad" ? "#8A2F52" : "#1C4A8C", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      {habit.kind === "bad" && <span style={{ fontSize:9.5, fontWeight:900, letterSpacing:"0.09em", color:"#B23A6B", marginRight:6 }}>BREAKING</span>}
                       {habit.trigger || (habit.kind === "bad" ? "When tempted" : "Reminder")}
                     </span>
-                    {(habit.time || habit.location) && (
-                      <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:4, fontSize:12, fontWeight:700, color: habit.kind === "bad" ? "#B23A6B" : "#2F6FD0", whiteSpace:"nowrap" }}>
-                        <Ic name="clock" size={12} color={habit.kind === "bad" ? "#B23A6B" : "#2F6FD0"} />
-                        {habit.time && to24h(habit.time)}{habit.time && habit.location ? " · " : ""}{habit.location}
-                      </span>
-                    )}
                     <RowMenu habit={habit} identity={identity} missed={todayData[habit.id] === "miss"} onMiss={markMiss} openEditHabit={openEditHabit} openDeleteHabit={openDeleteHabit} onReview={openReviewFor} habitNotes={habitNotes} allData={allData} setHabitNote={setHabitNote} />
                   </div>
                 ) : (
