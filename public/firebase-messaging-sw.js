@@ -21,9 +21,11 @@ messaging.onBackgroundMessage((payload) => {
   const d = payload.data || {};
   self.registration.showNotification(d.title || "Habit reminder", {
     body: d.body || "",
-    icon: "/icon-192.png",
-    badge: "/icon-192.png",
+    icon: "/icon-512.png",         // crisp large icon
+    badge: "/icon-192.png",        // small status-bar mark
     tag: d.habitId || undefined,   // one habit → one notification, replaced not stacked
+    renotify: true,                // re-alert if it replaces an earlier one
+    vibrate: [180, 80, 180],
     data: d,
   });
 });

@@ -94,6 +94,23 @@ const MILESTONES = [
 function getMilestone(s) { let b=null; for(const m of MILESTONES) if(s>=m.days) b=m; return b; }
 function getNextMilestone(s) { return MILESTONES.find(m=>m.days>s)||null; }
 
+// Short rotating lines under the check-in celebration headline (kept fresh each time).
+const CHEERS_GOOD = [
+  "Small steps, every day.",
+  "You showed up — that's the whole game.",
+  "Momentum is building.",
+  "Another brick laid.",
+  "This is who you are now.",
+  "One rep closer.",
+];
+const CHEERS_BAD = [
+  "Resisted — well held.",
+  "Discomfort now, freedom later.",
+  "You chose who you want to be.",
+  "Urge came, urge passed.",
+  "Stronger than yesterday.",
+];
+
 function to24h(timeStr) {
   if (!timeStr) return timeStr;
   const t = timeStr.toLowerCase().trim();
@@ -163,6 +180,46 @@ function getFreqLabel(frequency) {
   const labels = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   return [...days].sort((a,b)=>a-b).map(d=>labels[d]).join(" · ");
 }
+
+// A contextual emoji for a habit's cue/action (🪥 for "brush", ☕ for "coffee"…).
+// Returns "" when nothing matches, so the card falls back to the generic bolt.
+const CUE_EMOJI = [
+  [/brush|teeth|floss|dental/, "🪥"],
+  [/coffee/, "☕"],
+  [/\btea\b/, "🍵"],
+  [/dinner|lunch|breakfast|\bmeal|\beat|food|hungry|nutrition/, "🍽️"],
+  [/medic|syrup|pill|tablet|\bdrop|nasal|nosal|dose/, "💊"],
+  [/\bbed\b|sleep|goodnight|\bnight\b/, "🛏️"],
+  [/alarm|\bclock|wake|\bam\b|\bpm\b/, "⏰"],
+  [/\bcab\b|\bcar\b|driv|commut|taxi|travel/, "🚗"],
+  [/\bcall|phone|whatsapp/, "📞"],
+  [/walk|stroll|steps/, "🚶"],
+  [/meditat|mindful|breath/, "🧘"],
+  [/office|\bwork|desk|logout|login|meeting|promotion|task/, "💼"],
+  [/\bhome\b|return|arrive/, "🏠"],
+  [/shower|bath/, "🚿"],
+  [/\bwater\b|hydrat/, "💧"],
+  [/gym|workout|exercise|lift/, "🏋️"],
+  [/\bread\b|book|study|learn/, "📖"],
+  [/pray|spiritual|worship|temple|god/, "🙏"],
+  [/kid|child|daughter|\bson\b|yashashri|story/, "🧒"],
+  [/wife|husband|partner|spouse/, "💑"],
+  [/laptop|code|coding|comput|side income|income/, "💻"],
+  [/money|expense|budget|finance|payment/, "💰"],
+];
+function cueEmoji(text) {
+  const s = (text || "").toLowerCase();
+  for (const [re, emoji] of CUE_EMOJI) if (re.test(s)) return emoji;
+  return "";
+}
+// Palette the user can pick from to override the auto-mapped cue icon.
+// Covers every trigger in CUE_EMOJI plus common extras.
+const CUE_ICONS = [
+  "🪥","🦷","☕","🍵","🍽️","🍔","🥤","💊","🛏️","⏰","🌅","🌙",
+  "🚗","🚶","🏃","📞","💻","💼","🏠","🚿","💧","🧘","🙏",
+  "🏋️","📖","✍️","🎨","🎵","🎧","🧒","💑","💰","🧹","🐕",
+  "🎯","🔔","⚡","🚭","📵","🌿",
+];
 
 function getFreqColor(frequency) {
   const freq = frequency || DEFAULT_FREQUENCY;
@@ -608,6 +665,7 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     satisfying: initial.satisfying || "",
     time:       initial.time       || "",
     location:   initial.location   || "",
+    icon:       initial.icon       || "",
     identityId: initial.identityId || identities[0]?.id || "",
     frequency:  initial.frequency  || DEFAULT_FREQUENCY,
     kind:       initial.kind       || "good",
@@ -795,6 +853,28 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
         {cueOptions.map(o => <option key={o} value={o} />)}
       </datalist>
       <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>Pick a suggestion or type your own.</div>
+
+      {/* Cue icon — auto-picked from the trigger words; tap any to override */}
+      <label style={S.fieldLabel}>Cue icon</label>
+      <div style={{ display:"flex", flexWrap:"wrap", gap:7 }} role="group" aria-label="Choose the cue icon">
+        <button type="button" onClick={()=>set("icon","")} aria-pressed={!form.icon}
+          title="Match the icon to your cue words automatically"
+          style={{ display:"inline-flex", alignItems:"center", gap:5, height:38, padding:"0 11px", borderRadius:10, cursor:"pointer",
+            border:`2px solid ${!form.icon ? T.gold : T.border}`, background:!form.icon ? T.surf2 : "transparent",
+            fontSize:13, fontWeight:800, color:T.text, WebkitTapHighlightColor:"transparent" }}>
+          <span aria-hidden="true" style={{ fontSize:17 }}>{cueEmoji(form.trigger) || "⚡"}</span> Auto
+        </button>
+        {CUE_ICONS.map(ic=>(
+          <button key={ic} type="button" onClick={()=>set("icon",ic)} aria-pressed={form.icon===ic} aria-label={`${ic} cue icon`}
+            style={{ width:38, height:38, borderRadius:10, cursor:"pointer", fontSize:19,
+              display:"flex", alignItems:"center", justifyContent:"center", WebkitTapHighlightColor:"transparent",
+              border:`2px solid ${form.icon===ic ? T.gold : T.border}`, background:form.icon===ic ? T.surf2 : "transparent" }}>
+            <span aria-hidden="true">{ic}</span>
+          </button>
+        ))}
+      </div>
+      <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>{form.icon ? "Custom icon set." : "Auto-matched from your cue — tap an icon to override."}</div>
+
       <div style={{ display:"flex", gap:10, marginTop:10 }}>
         <div style={{ flex:1, minWidth:0 }}>
           <label htmlFor={ids.time} style={S.fieldLabel}>Time</label>
@@ -924,7 +1004,7 @@ export default function App() {
   const [view,         setView]        = useState("today");
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
   const [justChecked,  setJustChecked]  = useState(null);
-  const [celebrationHabit, setCelebrationHabit] = useState(null);
+  const [celebration, setCelebration] = useState(null);
   const [syncing,      setSyncing]     = useState(false);
   const [saveError,    setSaveError]   = useState(false);
   const [signInError,  setSignInError] = useState(null);
@@ -1018,6 +1098,14 @@ export default function App() {
   const celebrationTimerRef = useRef(null);
   const justCheckedTimerRef = useRef(null);
   const undoTimerRef        = useRef(null);
+  // Latest habit list, read inside toggle without adding it to the callback deps
+  // (keeps `toggle` stable so memo'd rows don't re-render on every check-in).
+  const allHabitsRef        = useRef([]);
+  allHabitsRef.current      = allHabits;
+  // Latest check-in data, so toggle can compute votes/month reliably (not inside the
+  // setData updater, which React only runs synchronously by its eager-state luck).
+  const dataRef             = useRef({});
+  dataRef.current           = data;
   const dtTimer             = useRef(null);
   const isFirstDt           = useRef(true);
   const hnTimer             = useRef(null);
@@ -1236,25 +1324,48 @@ export default function App() {
 
   // ── Toggle — must be before early returns ──
   const toggle = useCallback((habitId, frequency, identity) => {
-    let wasChecked;
+    // Read the committed data up front (a ref, always current) — do NOT compute
+    // totals inside the setData updater; React may not run it synchronously.
+    const cur = dataRef.current;
+    const wasChecked = cur[selectedDate]?.[habitId] === true;
     setData(prev=>{
       const day=prev[selectedDate]||{};
-      wasChecked = day[habitId] === true;
       // Checking a habit always sets done — including from the "miss" state
       const next = {...day};
-      if (wasChecked) delete next[habitId]; else next[habitId] = true;
+      if (day[habitId] === true) delete next[habitId]; else next[habitId] = true;
       return {...prev,[selectedDate]:next};
     });
     clearTimeout(justCheckedTimerRef.current);
     setJustChecked(habitId);
     // Long enough to read the reward before the row fades out (see .row-leaving delay)
     justCheckedTimerRef.current = setTimeout(()=>setJustChecked(null),3400);
-    const streak = getStreakForHabit(habitId, frequency) + 1;
-    const milestone = MILESTONES.find(m=>m.days===streak);
-    if(milestone && !wasChecked) {
+    // ── Celebrate every check-in: streak + votes + identity, richer on milestones ──
+    if(!wasChecked) {
+      // Lifetime votes = every scheduled day this habit was done, plus today's new check.
+      let votes = 1;
+      for (const k in cur) if (k !== selectedDate && cur[k]?.[habitId] === true && isScheduledOn(frequency, k)) votes++;
+      // This month's completion % (today counts as done).
+      const ym = selectedDate.slice(0,7), dToday = +selectedDate.slice(8,10);
+      let sched = 0, done = 0;
+      for (let d=1; d<=dToday; d++) {
+        const key = `${ym}-${String(d).padStart(2,"0")}`;
+        if (!isScheduledOn(frequency, key)) continue;
+        sched++;
+        if (key === selectedDate || cur[key]?.[habitId] === true) done++;
+      }
+      const monthPct = sched ? Math.round(done/sched*100) : 100;
+      const streak = getStreakForHabit(habitId, frequency) + 1;
+      const milestone = MILESTONES.find(m=>m.days===streak) || null;
+      const habitObj = allHabitsRef.current.find(h=>h.id===habitId);
+      const isBad = habitObj?.kind === "bad";
+      const habitLabel = habitObj?.label || "";
+      const identityLabel = shortLabel((identity && identity.label) || "");
+      const cheers = isBad ? CHEERS_BAD : CHEERS_GOOD;
+      const cheer = cheers[Math.floor(Math.random()*cheers.length)];
+      const quote = QUOTES[Math.floor(Math.random()*QUOTES.length)];
       clearTimeout(celebrationTimerRef.current);
-      setCelebrationHabit({habitId,milestone});
-      celebrationTimerRef.current = setTimeout(()=>setCelebrationHabit(null),3500);
+      setCelebration({ habitId, habitLabel, streak, votes, monthPct, identityLabel, isBad, milestone, cheer, quote });
+      celebrationTimerRef.current = setTimeout(()=>setCelebration(null), 30000);
     }
   }, [selectedDate, getStreakForHabit]);
 
@@ -1373,6 +1484,16 @@ export default function App() {
     });
   }, []);
 
+  // Add a task straight into a vacant Top-3 slot (created already focused).
+  const FOCUS_CAP_ADD = 3;
+  const addFocusTask = useCallback((dateKey, text) => {
+    setDailyTasks(prev => {
+      const existing = prev[dateKey] || [];
+      if (existing.filter(t => t.focus && !t.done).length >= FOCUS_CAP_ADD) return prev; // no free slot
+      return { ...prev, [dateKey]: [...existing, { id: uid(), text, done: false, priority: "med", focus: true, focusAt: Date.now() }] };
+    });
+  }, []);
+
   // Cycle a task's priority: High → Med → Low → High. (Kept the name `toggleStar`
   // so the prop threading through TodayView/TopTasksCard stays intact.)
   const toggleStar = useCallback((dateKey, taskId) => {
@@ -1390,6 +1511,22 @@ export default function App() {
           return { ...rest, priority: next };
         }),
       };
+    });
+  }, []);
+
+  // Promote/demote a task to "Top 3 focus" — at most 3 focus tasks per day.
+  const FOCUS_CAP = 3;
+  const toggleFocus = useCallback((dateKey, taskId) => {
+    setDailyTasks(prev => {
+      const list = prev[dateKey] || [];
+      const target = list.find(t => t.id === taskId);
+      if (!target) return prev;
+      if (!target.focus && list.filter(t => t.focus && !t.done).length >= FOCUS_CAP) return prev; // cap counts only live focus tasks; a completed one frees its slot
+      return { ...prev, [dateKey]: list.map(t => {
+        if (t.id !== taskId) return t;
+        // focusAt records selection order so slots read first-picked → last-picked.
+        return t.focus ? { ...t, focus: false } : { ...t, focus: true, focusAt: Date.now() };
+      }) };
     });
   }, []);
 
@@ -1616,29 +1753,29 @@ export default function App() {
   }
 
   // ── CRUD: Habits ──
-  const addHabit = ({ label, trigger, attractive, easy, starter, satisfying, time, location, identityId, frequency, kind }) => {
+  const addHabit = ({ label, trigger, attractive, easy, starter, satisfying, time, location, icon, identityId, frequency, kind }) => {
     setIdentities(prev => prev.map(ident =>
       ident.id !== identityId ? ident :
-      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, attractive, easy, starter, satisfying, time, location, kind: kind || "good", frequency: frequency || DEFAULT_FREQUENCY, createdAt: getTodayKey() }] }
+      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: kind || "good", frequency: frequency || DEFAULT_FREQUENCY, createdAt: getTodayKey() }] }
     ));
     setModal(null);
   };
 
-  const updateHabit = ({ label, trigger, attractive, easy, starter, satisfying, time, location, identityId: newIdentityId, frequency, kind }) => {
+  const updateHabit = ({ label, trigger, attractive, easy, starter, satisfying, time, location, icon, identityId: newIdentityId, frequency, kind }) => {
     const { identityId: oldIdentityId, habitId } = modalCtx;
     const freq = frequency || DEFAULT_FREQUENCY;
     const k = kind || "good";
     if (newIdentityId === oldIdentityId) {
       setIdentities(prev => prev.map(ident =>
         ident.id !== oldIdentityId ? ident :
-        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, attractive, easy, starter, satisfying, time, location, kind: k, frequency: freq }) }
+        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: k, frequency: freq }) }
       ));
     } else {
       setIdentities(prev => {
         const habitData = prev.find(i => i.id === oldIdentityId)?.habits.find(h => h.id === habitId);
         return prev.map(ident => {
           if (ident.id === oldIdentityId) return { ...ident, habits: ident.habits.filter(h => h.id !== habitId) };
-          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, attractive, easy, starter, satisfying, time, location, kind: k, frequency: freq }] };
+          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: k, frequency: freq }] };
           return ident;
         });
       });
@@ -1740,33 +1877,92 @@ export default function App() {
         </div>
       )}
 
-      {/* ── Celebration Toast — dead center of the screen; shifts up a touch if the vote toast is also showing ── */}
-      {/* Milestone celebration — a brief center card only on hitting a streak badge */}
-      {celebrationHabit && (
-        <div style={{
-          position: "fixed",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -50%)",
-          width: "calc(100% - 48px)",
-          maxWidth: 360,
-          background: T.surface,
-          border: `2px solid ${T.gold}`,
-          borderRadius: 18,
-          padding: "16px 20px",
-          display: "flex",
-          alignItems: "center",
-          gap: 14,
-          zIndex: 999,
-          boxShadow: "0 12px 40px #00000030",
-        }} className="toast-in-center" role="alert" aria-live="assertive">
-          <span style={{fontSize:28}} aria-hidden="true">{celebrationHabit.milestone.emoji}</span>
-          <div>
-            <div style={{fontWeight:700,fontSize:15,color:T.text}}>{celebrationHabit.milestone.label}!</div>
-            <div style={{fontSize:13,color:T.muted}}>{celebrationHabit.milestone.days}-day streak achieved 🎉</div>
+      {/* ── Check-in celebration — every check-in gets a streak + votes card; ── */}
+      {/* ── richer on milestone days (stat chips + quote), green tone for bad habits. ── */}
+      {celebration && (() => {
+        const c = celebration;
+        const accent      = c.isBad ? "#0F6E56" : T.gold;
+        const statColor   = c.isBad ? "#0F6E56" : T.primary;
+        const bigEmoji    = c.milestone ? c.milestone.emoji : (c.isBad ? "🛡️" : "🔥");
+        const headline    = c.milestone
+          ? `${c.milestone.label}!`
+          : (c.isBad ? "Well held." : (c.streak === 1 ? "You've started! 🎉" : `${c.streak}-day streak!`));
+        // Sub names the habit so the card says exactly what was completed.
+        const sub = c.milestone
+          ? `${c.streak} ${c.isBad ? "days clean" : "day streak"} 🎉`
+          : c.cheer;
+        const next        = getNextMilestone(c.streak);
+        const pct         = next ? Math.min(100, Math.round(c.streak / next.days * 100)) : 100;
+        const voteBg      = c.isBad ? "#EAF7F1" : "#FFF7E6";
+        const voteBorder  = c.isBad ? "#BCE9D6" : "#F3DBA0";
+        const voteColor   = c.isBad ? "#0B6B4F" : "#854F0B";
+        const chips       = [
+          [c.streak, "STREAK"],
+          [c.votes, c.isBad ? "DAYS CLEAN" : "VOTES"],
+          [c.monthPct + "%", "THIS MO."],
+        ];
+        const dismiss     = () => { clearTimeout(celebrationTimerRef.current); setCelebration(null); };
+        return (
+          <div onClick={dismiss} style={{ position:"fixed", top:0, bottom:0, left:"50%", transform:"translateX(-50%)",
+            width:"100%", maxWidth:430, zIndex:999, background:"#00283d2e",
+            display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+            <div className="celebrate-in" role="alert" aria-live="assertive" onClick={e=>e.stopPropagation()}
+              style={{ position:"relative", width:"calc(100% - 40px)", maxWidth:330, background:T.surface, border:`2px solid ${accent}`,
+                borderRadius:20, boxShadow:"0 16px 44px #00283d38", padding:"20px 18px 16px", textAlign:"center" }}>
+              <button onClick={dismiss} aria-label="Close"
+                style={{ position:"absolute", top:10, right:10, width:30, height:30, borderRadius:"50%", border:"none",
+                  background:T.surf2, color:T.muted, fontSize:16, lineHeight:1, cursor:"pointer",
+                  display:"flex", alignItems:"center", justifyContent:"center", WebkitTapHighlightColor:"transparent" }}>
+                <Ic name="x" size={14} color={T.muted} />
+              </button>
+              <div style={{ fontSize:34, lineHeight:1 }} aria-hidden="true">{bigEmoji}</div>
+              <div style={{ fontWeight:800, fontSize:17, color:T.text, letterSpacing:"-0.01em", marginTop:6 }}>{headline}</div>
+              {c.habitLabel && (
+                <div style={{ fontSize:13, fontWeight:700, color:statColor, marginTop:3 }}>
+                  {c.isBad ? "🛡️ " : "✓ "}{c.habitLabel}
+                </div>
+              )}
+              <div style={{ fontSize:12.5, color:T.text2, marginTop:2 }}>{sub}</div>
+
+              {/* Live stats every time — streak, lifetime votes, this month's completion */}
+              <div style={{ display:"flex", gap:8, margin:"13px 0 0" }}>
+                {chips.map(([v,l])=>(
+                  <div key={l} style={{ flex:1, background:T.surf2, borderRadius:12, padding:"9px 4px" }}>
+                    <div style={{ fontSize:19, fontWeight:800, color:statColor, lineHeight:1 }}>{v}</div>
+                    <div style={{ fontSize:9.5, fontWeight:700, color:T.muted, marginTop:3, letterSpacing:"0.03em" }}>{l}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Progress toward the next badge */}
+              {next && (
+                <div style={{ marginTop:13 }}>
+                  <div style={{ height:7, borderRadius:99, background:T.surf2, overflow:"hidden" }}>
+                    <div style={{ height:"100%", width:`${pct}%`, borderRadius:99, background:accent }} />
+                  </div>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginTop:6, fontSize:11, fontWeight:700, color:T.muted }}>
+                    <span>{bigEmoji} {c.streak} {c.streak===1?"day":"days"}</span>
+                    <span style={{ color:accent }}>{next.emoji} {next.label} · {next.days-c.streak} to go</span>
+                  </div>
+                </div>
+              )}
+
+              {c.identityLabel && (
+                <div style={{ background:voteBg, border:`1px solid ${voteBorder}`, borderRadius:12, padding:"9px 11px",
+                  fontSize:12.5, fontWeight:600, color:voteColor, marginTop:13 }}>
+                  {c.isBad ? "🛡️ Protecting " : "🗳️ Another vote for "}<b style={{ fontWeight:800 }}>“I am {c.identityLabel}.”</b>
+                </div>
+              )}
+
+              {c.milestone && (
+                <div style={{ fontSize:12, color:T.muted, fontStyle:"italic", lineHeight:1.45, marginTop:12, padding:"0 2px" }}>
+                  “{c.quote.text}”{c.quote.author ? ` — ${c.quote.author}` : ""}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Modals ── */}
       {reviewOpen && (manualReview || reviewTarget) && (
@@ -1827,6 +2023,7 @@ export default function App() {
           <h1 style={S.title}>
             {view==="today"
               ? (selectedDate === todayKey ? "Today" : formatNavDate(selectedDate))
+              : view==="identity" ? "Identity"
               : view==="week" ? "This Week"
               : view==="streaks" ? "Streaks"
               : "Manage"}
@@ -1916,10 +2113,12 @@ export default function App() {
             todayKey={todayKey}
             dailyTasks={dailyTasks}
             addTask={addTask}
+            addFocusTask={addFocusTask}
             toggleTask={toggleTask}
             deleteTask={deleteTask}
             editTask={editTask}
             toggleStar={toggleStar}
+            toggleFocus={toggleFocus}
             deferTask={deferTask}
             reviewTarget={reviewTarget && reviewTarget.habit.id !== reviewDismissed ? reviewTarget : null}
             onOpenReview={() => setReviewOpen(true)}
@@ -1927,6 +2126,17 @@ export default function App() {
           />
         )}
 
+        {view==="identity" && (
+          <IdentityView
+            identities={liveIdentities}
+            todayData={selectedData}
+            allData={data}
+            toggle={toggle}
+            todayKey={todayKey}
+            openAddHabit={openAddHabit}
+            openAddIdentity={openAddIdentity}
+          />
+        )}
         {view==="week"    && <WeekView data={data} todayKey={todayKey} identities={liveIdentities}/>}
         {view==="streaks" && <StreaksView data={data} getStreak={getStreakForHabit} identities={liveIdentities}/>}
         {view==="manage"  && (
@@ -1975,10 +2185,11 @@ export default function App() {
       {/* ── Bottom Nav ── */}
       <nav style={S.bottomNav} aria-label="Main navigation">
         {[
-          {id:"today",   icon:"☀️",  label:"Today"},
-          {id:"week",    icon:"📅",  label:"Week"},
-          {id:"streaks", icon:"🔥",  label:"Streaks"},
-          {id:"manage",  icon:"⚙️",  label:"Manage"},
+          {id:"today",    icon:"☀️",  label:"Today"},
+          {id:"identity", icon:"🪪",  label:"Identity"},
+          {id:"week",     icon:"📅",  label:"Week"},
+          {id:"streaks",  icon:"🔥",  label:"Streaks"},
+          {id:"manage",   icon:"⚙️",  label:"Manage"},
         ].map(t=>(
           <button key={t.id} onClick={()=>{ setView(t.id); if(t.id==="today") setSelectedDate(todayKey); }}
             style={{ ...S.navBtn, background: view===t.id ? T.accent+"14" : "transparent", borderRadius:12, margin:"4px 4px 0" }}
@@ -2369,7 +2580,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
       {/* ── Card body — cue, action, coaching (same layout as the Up Next hero) ── */}
       <div style={{ padding: "10px 12px 12px" }}>
-        {/* Bookend rings: ✓ check-in (left) · ✕ miss (right), intention sentence between */}
+        {/* ✓ ring · intention sentence (time & place live in the header banner) */}
         <div style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
           <HabitRing
             checked={checked}
@@ -2394,28 +2605,10 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               textDecoration: checked ? "line-through" : "none",
               textDecorationColor: identity.color + "88",
             }}>
-              {breaking ? "I won't" : "I will"} <span style={{ fontWeight:700, color: breaking ? "#993556" : "inherit" }}>{habitPhrase}</span>
-              {habit.time && <> {breaking ? "after" : "at"} <span style={{ fontWeight:700, color:"#92400E" }}>{to24h(habit.time)}</span></>}
-              {habit.location && <> at <span style={{ fontWeight:700, color:"#92400E" }}>{habit.location}</span></>}
-              , so I can become <span style={{ fontWeight:700, color: identity.colorDim || identity.color }}>{shortLabel(identity.label)}</span>.
+              {breaking ? "I won't" : "I will"} <span style={{ fontWeight:700, color: breaking ? "#993556" : "inherit" }}>{habitPhrase}</span>, because I am <span style={{ fontWeight:700, color: identity.colorDim || identity.color }}>{shortLabel(identity.label)}</span>.
             </span>
           </span>
-          {/* Right bookend — ✕ miss ring, mirror of the check ring; files into Completed */}
-          {!checked && !missed && onMiss && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onMiss(habit.id); }}
-              aria-label={`Mark ${breaking ? "slipped" : "missed"}: ${habit.label}`}
-              style={{
-                flexShrink:0, width:28, height:28, borderRadius:"50%", marginTop:1,
-                border:"2px solid #E7A9C1", background:"transparent",
-                display:"flex", alignItems:"center", justifyContent:"center",
-                cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent",
-              }}
-            >
-              <Ic name="x" size={15} color="#C2648C" />
-            </button>
-          )}
+          {/* "Mark as missed" lives in the ⋯ menu, so no ✕ ring on the card face. */}
           {missed && (
             <span style={{
               fontSize:12, fontWeight: 800, color: T.red, flexShrink: 0, whiteSpace: "nowrap",
@@ -2426,48 +2619,16 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           )}
         </div>
 
-        {/* 2-min quick start (Law 3) + a quiet plan hint — reward shows on completion */}
-        {!checked && !missed && (habit.starter || hasPlan) && (
-          <div style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:8, marginTop:8, marginLeft:39 }}>
-            {habit.starter && (breaking ? (
-              <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12.5, fontWeight:700, color:"#712B13", background:"#FAECE7", border:"1px solid #F5C4B3", borderRadius:20, padding:"6px 13px", maxWidth:"100%" }}>
-                <Ic name="warn" size={13} color="#712B13" />
-                <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>If tempted: {habit.starter}</span>
-              </span>
-            ) : (
-              <button
-                onClick={() => toggle(habit.id, habit.frequency, identity)}
-                aria-label={`Do the two-minute version: ${habit.starter}`}
-                style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12.5, fontWeight:700, color:"#085041", background:"#E1F5EE", border:"1px solid #9FE1CB", borderRadius:20, padding:"6px 13px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", maxWidth:"100%" }}
-              >
-                <Ic name="clock" size={13} color="#085041" />
-                <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>2-min: {habit.starter}</span>
-                <Ic name="check" size={12} color="#085041" />
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Reward (Law 4) shown upfront, right after the 2-min rule — the payoff as motivation */}
-        {!checked && !missed && habit.satisfying && (
-          <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:7, marginLeft:39, fontSize:12, minWidth:0 }}>
-            <Ic name={breaking ? "warn" : "gift"} size={13} color={breaking ? "#B23A6B" : "#BA7517"} />
-            <span style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color: breaking ? "#8A2F52" : "#8A5A12" }}>
-              <span style={{ fontWeight:800 }}>{breaking ? "If you slip: " : "Reward: "}</span>{habit.satisfying}
-            </span>
-          </div>
-        )}
-
         {/* Never-miss-twice nudge — this habit was missed yesterday */}
         {warnMissedYesterday && !checked && !missed && (
-          <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 9, marginLeft: 39, fontSize:12, fontWeight: 800, color: "#C0392B" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 9, marginLeft: 0, fontSize:12, fontWeight: 800, color: "#C0392B" }}>
             <Ic name="warn" size={13} color="#C0392B" /> Missed yesterday — never miss twice!
           </div>
         )}
 
         {/* Payoff the moment it's checked — reward (build) or a clean day (break) */}
         {checked && (breaking ? (
-          <div style={{ marginTop:9, marginLeft:39, minWidth:0 }}>
+          <div style={{ marginTop:9, marginLeft:0, minWidth:0 }}>
             <div style={{ display:"flex", alignItems:"center", gap:11, background:"#EAF3DE", border:"1px solid #97C459", borderRadius:12, padding:"11px 13px" }}>
               <Ic name="check" size={22} color="#3B6D11" />
               <span style={{ flex:1, minWidth:0 }}>
@@ -2481,7 +2642,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             </div>
           </div>
         ) : (
-          <div style={{ marginTop:9, marginLeft:39, minWidth:0 }}>
+          <div style={{ marginTop:9, marginLeft:0, minWidth:0 }}>
             {habit.satisfying && (
               <div style={{ display:"flex", alignItems:"center", gap:11, background:"#FAEEDA", border:"1px solid #FAC775", borderRadius:12, padding:"11px 13px" }}>
                 <Ic name="gift" size={22} color="#854F0B" />
@@ -2517,6 +2678,32 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         return (
         <div style={{ background:T.bg, borderTop:`1px solid ${T.surf2}`, padding:"12px 12px 12px" }}
           aria-label={`${votes} of ${total} ${breaking ? "days clean" : "days kept"} toward ${shortLabel(identity.label)}, ${pct} percent${streak > 0 ? `, ${streak} ${breaking ? "days clean streak" : "day streak"}` : ""}`}>
+          {(habit.starter || habit.satisfying) && (
+            <div style={{ marginBottom:15 }}>
+              <div style={{ fontSize:10, fontWeight:800, letterSpacing:"0.05em", textTransform:"uppercase", color:T.muted, marginBottom:7 }}>{breaking ? "Make it hard" : "Make it easy"}</div>
+              {habit.starter && (breaking ? (
+                <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12.5, fontWeight:700, color:"#712B13", background:"#FAECE7", border:"1px solid #F5C4B3", borderRadius:20, padding:"6px 13px", maxWidth:"100%" }}>
+                  <Ic name="warn" size={13} color="#712B13" />
+                  <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>If tempted: {habit.starter}</span>
+                </span>
+              ) : (
+                <button onClick={() => toggle(habit.id, habit.frequency, identity)} aria-label={`Do the two-minute version: ${habit.starter}`}
+                  style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12.5, fontWeight:700, color:"#085041", background:"#E1F5EE", border:"1px solid #9FE1CB", borderRadius:20, padding:"6px 13px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", maxWidth:"100%" }}>
+                  <Ic name="clock" size={13} color="#085041" />
+                  <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>2-min: {habit.starter}</span>
+                  <Ic name="check" size={12} color="#085041" />
+                </button>
+              ))}
+              {habit.satisfying && (
+                <div style={{ display:"flex", alignItems:"center", gap:6, marginTop: habit.starter ? 8 : 0, fontSize:12, minWidth:0 }}>
+                  <Ic name={breaking ? "warn" : "gift"} size={13} color={breaking ? "#B23A6B" : "#BA7517"} />
+                  <span style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color: breaking ? "#8A2F52" : "#8A5A12" }}>
+                    <span style={{ fontWeight:800 }}>{breaking ? "If you slip: " : "Reward: "}</span>{habit.satisfying}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
           {hasPlan && (
             <div style={{ marginBottom:15 }}>
               <div style={{ fontSize:10, fontWeight:800, letterSpacing:"0.05em", textTransform:"uppercase", color:T.muted, marginBottom:7 }}>{breaking ? "Plan · invert the laws" : "Plan"}</div>
@@ -2967,6 +3154,34 @@ function QuickAddTask({ dateKey, onAdd }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// Inline input for typing a new task straight into a free Top-3 slot.
+function FocusSlotAdd({ index, onAdd, onClose }) {
+  const [val, setVal] = useState("");
+  const inputRef = useRef(null);
+  useEffect(() => { inputRef.current?.focus(); }, []);
+  const add = () => {
+    const t = val.trim();
+    if (!t) { onClose(); return; }
+    onAdd(t);
+    setVal("");
+    inputRef.current?.focus();
+  };
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:11, padding:"8px 8px 8px 11px", borderRadius:12, marginBottom:7, background:"#F7FBF9", border:"1.5px solid #9FE1CB" }}>
+      <span aria-hidden="true" style={{ width:20, height:20, borderRadius:"50%", background:"#DFF0E9", color:"#12694E", fontSize:11, fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{index + 1}</span>
+      <input ref={inputRef} value={val} onChange={e => setVal(e.target.value)}
+        onKeyDown={e => { if (e.key === "Enter") add(); if (e.key === "Escape") { setVal(""); onClose(); } }}
+        onBlur={() => { if (!val.trim()) onClose(); }}
+        placeholder="New focus task…" maxLength={80} aria-label="New focus task"
+        style={{ flex:1, minWidth:0, border:"none", background:"transparent", fontSize:15, fontWeight:600, color:T.text, outline:"none", fontFamily:"inherit", padding:"5px 0" }} />
+      <button onMouseDown={e => e.preventDefault()} onClick={add} aria-label="Add focus task"
+        style={{ flexShrink:0, width:30, height:30, borderRadius:9, border:"none", background: val.trim() ? T.primary : T.border2, color:"#fff", fontSize:19, fontWeight:800, lineHeight:1, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
+        <span aria-hidden="true">+</span>
+      </button>
     </div>
   );
 }
@@ -3508,11 +3723,13 @@ const HabitReview = memo(function HabitReview({ target, onApply, onSnooze, onFol
 });
 
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
-const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, markMiss, habitNotes, setHabitNote, justChecked, getStreakForHabit, openEditHabit, openDeleteHabit, openReviewFor, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, toggleTask, deleteTask, editTask, toggleStar, deferTask, reviewTarget, onOpenReview, onDismissReview }) {
+const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, markMiss, habitNotes, setHabitNote, justChecked, getStreakForHabit, openEditHabit, openDeleteHabit, openReviewFor, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, addFocusTask, toggleTask, deleteTask, editTask, toggleStar, toggleFocus, deferTask, reviewTarget, onOpenReview, onDismissReview }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
   const [matrixExpanded, setMatrixExpanded] = useState(false);
+  const [laterOpen, setLaterOpen] = useState(false);
   const [doneOpen, setDoneOpen] = useState(false); // Completed section — collapsed by default
+  const [focusAdding, setFocusAdding] = useState(false); // inline "add to a free Top-3 slot" input
 
   // Focus mode — snapshot of pending habits taken when the session starts
   const [focusItems, setFocusItems] = useState(null);
@@ -3598,7 +3815,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
 
       {/* Today's Focus — compact task preview, expands into the full task list */}
       <div style={{ ...S.card, padding:"12px 14px" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom: matrixExpanded ? 10 : 8 }}>
+        <div style={{ position:"relative", display:"flex", alignItems:"center", justifyContent: matrixExpanded ? "flex-start" : "center", gap:8, marginBottom:10, minHeight:23 }}>
           <span style={{ fontSize:12, color:T.muted, letterSpacing:"0.1em", fontWeight:700, textTransform:"uppercase" }}>
             <span aria-hidden="true">🎯</span> Today's Focus
           </span>
@@ -3608,6 +3825,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
               style={{
                 fontSize:12, fontWeight:800, color:T.primary, background:T.primary + "18",
                 borderRadius:20, padding:"2px 9px", lineHeight:1.4, fontVariantNumeric:"tabular-nums",
+                ...(matrixExpanded ? {} : { position:"absolute", right:0 }),
               }}
             >
               {taskCounts.done}/{taskCounts.total} done
@@ -3641,57 +3859,115 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
             ) : null}
           />
         ) : (() => {
-          const active    = (dailyTasks[selectedDate] || []).filter(t => !t.carried);
-          const pending   = active.filter(t => !t.done).slice().sort(byPriority);
-          const editable  = selectedDate >= todayKey;
-          const CAP       = 2;
-          const shown     = pending.slice(0, CAP);
-          const remaining = pending.length - shown.length;
-          if (active.length === 0) {
+          const dayTasks   = (dailyTasks[selectedDate] || []).filter(t => !t.carried);
+          const editable   = selectedDate >= todayKey;
+          const focusTasks = dayTasks.filter(t => t.focus && !t.done).slice().sort((a, b) => (a.focusAt || 0) - (b.focusAt || 0)).slice(0, 3); // selection order; completed ones drop to the Completed strip
+          const laterTasks = dayTasks.filter(t => !t.focus && !t.done).slice().sort(byPriority);
+          const doneTasks  = dayTasks.filter(t => t.done);
+          if (dayTasks.length === 0) {
             return (
               <div style={{ fontSize:13, color:T.muted, textAlign:"center", padding:"6px 0" }}>
                 Nothing here —{" "}
-                <button onClick={() => setMatrixExpanded(true)} style={{
-                  background:"none", border:"none", color:T.primary, fontWeight:700,
-                  cursor:"pointer", padding:0, fontSize:13, WebkitTapHighlightColor:"transparent",
-                }}>
-                  add a task
-                </button>
+                <button onClick={() => setMatrixExpanded(true)} style={{ background:"none", border:"none", color:T.primary, fontWeight:700, cursor:"pointer", padding:0, fontSize:13, WebkitTapHighlightColor:"transparent" }}>add a task</button>
               </div>
             );
           }
           return (
             <>
-              {shown.map((t, i) => {
-                const pri = priorityOf(t);
-                return (
-                  <div key={t.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 2px", borderTop: i === 0 ? "none" : `1px solid ${T.surf2}` }}>
-                    <button
-                      onClick={() => toggleTask(selectedDate, t.id)}
-                      aria-label={`Complete: ${t.text}`}
-                      style={{
-                        width:21, height:21, borderRadius:"50%", flexShrink:0, boxSizing:"border-box",
-                        border:`2px solid ${PRIORITIES[pri].ring}`, background:"transparent",
-                        cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent",
-                      }}
-                    />
-                    <span onClick={() => setMatrixExpanded(true)} title="Tap for options" style={{
-                      flex:1, minWidth:0, fontSize:15, lineHeight:1.4, fontWeight:500, color:T.text, cursor:"pointer",
-                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-                    }}>{t.text}</span>
-                    {editable && <PriorityTag priority={pri} onCycle={() => toggleStar(selectedDate, t.id)} />}
-                  </div>
-                );
-              })}
-
-              {pending.length === 0 && (
-                <div style={{ fontSize:13, color:T.muted, textAlign:"center", padding:"6px 0" }}>All tasks done <span aria-hidden="true">🎉</span></div>
+              {/* Focus slots (chosen tasks) */}
+              {focusTasks.map((t, i) => (
+                <div key={t.id} style={{ display:"flex", alignItems:"center", gap:11, padding:"10px 11px", borderRadius:12, marginBottom:7, background:"#F7FBF9", border:"1px solid #E6F0EA" }}>
+                  <span aria-hidden="true" style={{ width:20, height:20, borderRadius:"50%", background:"#DFF0E9", color:"#12694E", fontSize:11, fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{i + 1}</span>
+                  <button onClick={() => toggleTask(selectedDate, t.id)} aria-label={`Complete: ${t.text}`}
+                    style={{ width:22, height:22, borderRadius:"50%", flexShrink:0, boxSizing:"border-box", border:`2px solid ${T.primary}`, background: t.done ? T.primary : "transparent", cursor:"pointer", padding:0, display:"flex", alignItems:"center", justifyContent:"center", WebkitTapHighlightColor:"transparent" }}>
+                    {t.done && <Ic name="check" size={12} color="#fff" />}
+                  </button>
+                  <span style={{ flex:1, minWidth:0, fontSize:15, fontWeight:600, lineHeight:1.35, color: t.done ? T.muted : T.text, textDecoration: t.done ? "line-through" : "none", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.text}</span>
+                  {editable && (
+                    <button onClick={() => toggleFocus(selectedDate, t.id)} aria-label="Remove from Top 3" title="Remove from Top 3"
+                      style={{ background:"none", border:"none", cursor:"pointer", padding:0, flexShrink:0, WebkitTapHighlightColor:"transparent" }}>
+                      <Ic name="star" size={15} color={T.gold} />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {editable && focusTasks.length < 3 && (
+                focusAdding ? (
+                  <FocusSlotAdd index={focusTasks.length}
+                    onAdd={text => addFocusTask(selectedDate, text)}
+                    onClose={() => setFocusAdding(false)} />
+                ) : (
+                  <button onClick={() => setFocusAdding(true)}
+                    style={{ display:"flex", alignItems:"center", gap:11, width:"100%", padding:"10px 11px", borderRadius:12, marginBottom:7, background:"transparent", border:"1.5px dashed #CFE3D9", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
+                    <span aria-hidden="true" style={{ width:22, height:22, borderRadius:"50%", border:"1.5px dashed #9FE1CB", color:"#3d9c7c", display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, flexShrink:0 }}>+</span>
+                    <span style={{ flex:1, textAlign:"left", fontSize:14, fontWeight:600, color:"#3d9c7c" }}>{focusTasks.length === 0 ? "Pick your Top 3 focus tasks" : "Add a focus task"}</span>
+                  </button>
+                )
               )}
-              <button onClick={() => setMatrixExpanded(true)} style={{
-                display:"block", width:"100%", textAlign:"center", background:"none", border:"none",
-                cursor:"pointer", fontSize:13, fontWeight:700, color:T.primary, padding:"9px 0 3px", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
-              }}>
-                {remaining > 0 ? `+ ${remaining} more · ` : ""}view all <span aria-hidden="true">▾</span>
+              {editable && focusTasks.length < 3 && laterTasks.length > 0 && !focusAdding && (
+                <div style={{ fontSize:11.5, color:T.muted, textAlign:"center", marginTop:-2, marginBottom:7 }}>or ★ a task from Later below</div>
+              )}
+
+              {/* Later bucket */}
+              {laterTasks.length > 0 && (
+                <>
+                  <button onClick={() => setLaterOpen(o => !o)} aria-expanded={laterOpen}
+                    style={{ display:"flex", alignItems:"center", gap:8, width:"100%", background:"#F4F1EB", border:"none", borderRadius:11, padding:"9px 12px", marginTop:4, cursor:"pointer", fontFamily:"inherit", fontSize:12.5, fontWeight:700, color:T.text2, WebkitTapHighlightColor:"transparent" }}>
+                    <Ic name="dots" size={13} color={T.muted} /> Later
+                    <span style={{ background:"#e5e0d7", borderRadius:20, padding:"1px 8px", fontSize:11 }}>{laterTasks.length}</span>
+                    <span style={{ marginLeft:"auto", color:T.muted }}>{laterOpen ? "▴" : "▾"}</span>
+                  </button>
+                  {laterOpen && laterTasks.map((t, i) => {
+                    const pri = priorityOf(t);
+                    const canPromote = focusTasks.length < 3;
+                    return (
+                      <div key={t.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 4px", borderTop: i === 0 ? "none" : `1px solid ${T.surf2}` }}>
+                        <button onClick={() => toggleTask(selectedDate, t.id)} aria-label={`Complete: ${t.text}`}
+                          style={{ width:19, height:19, borderRadius:"50%", flexShrink:0, boxSizing:"border-box", border:`2px solid ${PRIORITIES[pri].ring}`, background:"transparent", cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent" }} />
+                        <span onClick={() => setMatrixExpanded(true)} style={{ flex:1, minWidth:0, fontSize:14, fontWeight:500, color:T.text, cursor:"pointer", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                          {t.text}{t.carriedFrom && <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:"#9A6410", background:"#FAEEDA", borderRadius:10, padding:"1px 6px" }}>↩ carried</span>}
+                        </span>
+                        {editable && (
+                          <button onClick={() => toggleFocus(selectedDate, t.id)} disabled={!canPromote} aria-label={canPromote ? "Add to Top 3" : "Top 3 is full"} title={canPromote ? "Add to Top 3" : "Top 3 is full"}
+                            style={{ background:"none", border:"none", cursor: canPromote ? "pointer" : "default", padding:0, flexShrink:0, opacity: canPromote ? 1 : 0.3, WebkitTapHighlightColor:"transparent" }}>
+                            <Ic name="star" size={15} color={T.border2} />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+
+              {/* Completed strip — done tasks drop here; tap a row to send it back */}
+              {doneTasks.length > 0 && (
+                <div style={{ borderTop:`1px solid ${T.surf2}`, marginTop:4, paddingTop:8 }}>
+                  <button onClick={() => setDoneOpen(o => !o)} aria-expanded={doneOpen}
+                    style={{ display:"flex", alignItems:"center", gap:8, width:"100%", background:T.primary+"0e", border:"none", borderRadius:11, padding:"9px 12px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
+                    <span aria-hidden="true" style={{ width:18, height:18, borderRadius:"50%", background:T.primary, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                      <Ic name="check" size={11} color="#fff" />
+                    </span>
+                    <span style={{ flex:1, textAlign:"left", fontSize:12.5, fontWeight:700, color:T.primary }}>{doneTasks.length} completed</span>
+                    <span style={{ marginLeft:"auto", color:T.primary }}>{doneOpen ? "▴" : "▾"}</span>
+                  </button>
+                  {doneOpen && doneTasks.map((t, i) => (
+                    <button key={t.id} onClick={() => toggleTask(selectedDate, t.id)} aria-label={`Uncheck: ${t.text}`}
+                      style={{ display:"flex", alignItems:"center", gap:10, width:"100%", background:"transparent", border:"none", borderTop: i === 0 ? "none" : `1px solid ${T.surf2}`, padding:"8px 6px", cursor:"pointer", textAlign:"left", WebkitTapHighlightColor:"transparent" }}>
+                      <span aria-hidden="true" style={{ width:19, height:19, borderRadius:"50%", flexShrink:0, background:T.primary, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                        <Ic name="check" size={11} color="#fff" />
+                      </span>
+                      <span style={{ flex:1, minWidth:0, fontSize:14, color:T.muted, textDecoration:"line-through", textDecorationColor:T.border2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.text}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {focusTasks.length === 0 && laterTasks.length === 0 && doneTasks.length === 0 && (
+                <div style={{ fontSize:13, color:T.muted, textAlign:"center", padding:"6px 0" }}>All done <span aria-hidden="true">🎉</span></div>
+              )}
+
+              <button onClick={() => setMatrixExpanded(true)} style={{ display:"block", width:"100%", textAlign:"center", background:"none", border:"none", cursor:"pointer", fontSize:13, fontWeight:700, color:T.primary, padding:"10px 0 3px", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
+                view all <span aria-hidden="true">▾</span>
               </button>
             </>
           );
@@ -3770,18 +4046,30 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                   : "0 4px 16px rgba(2,80,130,0.05)",
                 overflow:"hidden",
               }}>
-                {/* Header — full-width cue BANNER (Law 1: make the trigger obvious) · ⋯ menu. */}
-                {habit.trigger ? (
+                {/* Header — full-width cue BANNER (trigger + time + place) · ⋯ menu. */}
+                {(habit.trigger || habit.time || habit.location) ? (
                   <div style={{ display:"flex", alignItems:"center", gap:9, padding:"10px 8px 10px 13px",
                     background: habit.kind === "bad" ? "#FBEAF0" : "#EAF1FC",
                     borderBottom: `1px solid ${habit.kind === "bad" ? "#F4C0D1" : "#D7E4F7"}` }}>
-                    <span aria-hidden="true" style={{ width:24, height:24, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", background: habit.kind === "bad" ? "#C85C88" : "#3B7DD8" }}>
-                      <Ic name={habit.kind === "bad" ? "warn" : "bolt"} size={14} color="#fff" />
-                    </span>
+                    {(() => {
+                      const em = habit.icon || cueEmoji(habit.trigger || "");
+                      const bad = habit.kind === "bad";
+                      return (
+                        <span aria-hidden="true" style={{ width:24, height:24, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, fontSize: em ? 14 : undefined, background: em ? (bad ? "#FBDCE7" : "#DCE8FA") : (bad ? "#C85C88" : "#3B7DD8") }}>
+                          {em || <Ic name={bad ? "warn" : "bolt"} size={14} color="#fff" />}
+                        </span>
+                      );
+                    })()}
                     <span style={{ flex:1, minWidth:0, fontSize:14, fontWeight:800, letterSpacing:"-0.01em", color: habit.kind === "bad" ? "#8A2F52" : "#1C4A8C", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                       {habit.kind === "bad" && <span style={{ fontSize:9.5, fontWeight:900, letterSpacing:"0.08em", color:"#B23A6B", marginRight:6 }}>BREAKING</span>}
-                      {habit.trigger}
+                      {habit.trigger || (habit.kind === "bad" ? "When tempted" : "Reminder")}
                     </span>
+                    {(habit.time || habit.location) && (
+                      <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:4, fontSize:12, fontWeight:700, color: habit.kind === "bad" ? "#B23A6B" : "#2F6FD0", whiteSpace:"nowrap" }}>
+                        <Ic name="clock" size={12} color={habit.kind === "bad" ? "#B23A6B" : "#2F6FD0"} />
+                        {habit.time && to24h(habit.time)}{habit.time && habit.location ? " · " : ""}{habit.location}
+                      </span>
+                    )}
                     <RowMenu habit={habit} identity={identity} missed={todayData[habit.id] === "miss"} onMiss={markMiss} openEditHabit={openEditHabit} openDeleteHabit={openDeleteHabit} onReview={openReviewFor} habitNotes={habitNotes} allData={allData} setHabitNote={setHabitNote} />
                   </div>
                 ) : (
@@ -4112,6 +4400,81 @@ const WeekView = memo(function WeekView({ data, todayKey, identities }) {
   );
 });
 
+// ─── IDENTITY VIEW — habits grouped under the person each one votes for ───────
+// Collapsible identity sections (flat + accordion): tap to open a self's habits.
+const IdentityView = memo(function IdentityView({ identities, todayData, allData, toggle, todayKey, openAddHabit, openAddIdentity }) {
+  const [open, setOpen] = useState({});
+  const linkBtn = { background:"none", border:"none", color:T.primary, fontWeight:700, cursor:"pointer", padding:0, fontSize:"inherit", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" };
+  return (
+    <div style={S.content}>
+      <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.08em", textTransform:"uppercase", color:T.muted, textAlign:"center", margin:"2px 0 14px" }}>Who you're becoming</div>
+
+      {identities.length === 0 ? (
+        <div style={{ ...S.card, padding:"22px 16px", textAlign:"center", fontSize:13.5, color:T.muted }}>
+          No identities yet — <button onClick={openAddIdentity} style={linkBtn}>add your first</button>
+        </div>
+      ) : (
+        <div style={{ ...S.card, padding:0, overflow:"hidden" }}>
+          {identities.map((identity, idx) => {
+            const habits = [...identity.habits].sort(byHabitTime);
+            const dueToday = habits.filter(h => isScheduledOn(h.frequency, todayKey));
+            const doneToday = dueToday.filter(h => todayData[h.id] === true).length;
+            const votes = habits.reduce((n, h) => n + Object.values(allData).filter(day => day && day[h.id] === true).length, 0);
+            const isOpen = !!open[identity.id];
+            const allDone = dueToday.length > 0 && doneToday === dueToday.length;
+            const cntColor = allDone ? "#12694E" : doneToday > 0 ? "#9A6410" : T.muted;
+            const cntBg    = allDone ? "#DFF3EA" : doneToday > 0 ? "#FAEEDA" : T.surf2;
+            return (
+              <div key={identity.id} style={{ borderTop: idx === 0 ? "none" : `1px solid ${T.surf2}` }}>
+                <button onClick={() => setOpen(o => ({ ...o, [identity.id]: !o[identity.id] }))} aria-expanded={isOpen} aria-label={`${shortLabel(identity.label)}, ${doneToday} of ${dueToday.length} today`}
+                  style={{ display:"flex", alignItems:"center", gap:9, width:"100%", padding:"12px 14px", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
+                  <span style={{ fontSize:16, flexShrink:0 }} aria-hidden="true">{identity.icon}</span>
+                  <span style={{ flex:1, minWidth:0, fontSize:12, fontWeight:800, letterSpacing:"0.03em", textTransform:"uppercase", color: identity.colorDim || T.text, textAlign:"left", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{shortLabel(identity.label)}</span>
+                  {dueToday.length > 0 && (
+                    <span aria-hidden="true" style={{ flexShrink:0, fontSize:11, fontWeight:800, borderRadius:20, padding:"2px 8px", color:cntColor, background:cntBg, fontVariantNumeric:"tabular-nums" }}>{doneToday}/{dueToday.length}</span>
+                  )}
+                  <span aria-hidden="true" style={{ flexShrink:0, fontSize:11, fontWeight:700, color:T.muted }}>{votes} vote{votes !== 1 ? "s" : ""}</span>
+                  <span aria-hidden="true" style={{ flexShrink:0, color:T.border2, fontSize:12, width:12, textAlign:"center" }}>{isOpen ? "▴" : "▾"}</span>
+                </button>
+                {isOpen && (
+                  <div style={{ padding:"0 14px 11px 43px" }}>
+                    {habits.length === 0 ? (
+                      <div style={{ fontSize:12.5, color:T.muted, padding:"2px 0 6px" }}>No habits yet — <button onClick={() => openAddHabit(identity.id)} style={linkBtn}>add one</button></div>
+                    ) : habits.map(h => {
+                      const done = todayData[h.id] === true;
+                      const missed = todayData[h.id] === "miss";
+                      const scheduled = isScheduledOn(h.frequency, todayKey);
+                      return (
+                        <div key={h.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 0", opacity: scheduled ? 1 : 0.55 }}>
+                          <button onClick={() => scheduled && !missed && toggle(h.id, h.frequency, identity)} disabled={!scheduled || missed}
+                            aria-label={done ? `Uncheck ${h.label}` : `Check ${h.label}`}
+                            style={{ width:18, height:18, borderRadius:"50%", flexShrink:0, boxSizing:"border-box", border:`2px solid ${done ? identity.color : missed ? T.red + "66" : "#cfcbc2"}`, background: done ? identity.color : "transparent", cursor: (scheduled && !missed) ? "pointer" : "default", padding:0, display:"flex", alignItems:"center", justifyContent:"center", WebkitTapHighlightColor:"transparent" }}>
+                            {done && <Ic name="check" size={10} color="#fff" />}
+                            {missed && <Ic name="x" size={9} color={T.red} />}
+                          </button>
+                          <span style={{ flex:1, minWidth:0, fontSize:13.5, color: done ? T.muted : T.text, textDecoration: done ? "line-through" : "none", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{h.label}</span>
+                          {!scheduled && <span style={{ fontSize:10.5, color:T.muted, flexShrink:0 }}>not today</span>}
+                          {scheduled && h.time && <span style={{ fontSize:11, color:T.muted, flexShrink:0, fontVariantNumeric:"tabular-nums" }}>{to24h(h.time)}</span>}
+                        </div>
+                      );
+                    })}
+                    <button onClick={() => openAddHabit(identity.id)} style={{ ...linkBtn, fontSize:12, marginTop:4, color:T.muted }}>＋ Add a habit</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <button onClick={openAddIdentity} style={{ ...S.addHabitBtn, marginTop:12 }}>
+        <span aria-hidden="true" style={{ fontSize:18, color:T.primary }}>＋</span>
+        <span style={{ fontSize:14, fontWeight:700, color:T.text2 }}>Add a new identity</span>
+      </button>
+    </div>
+  );
+});
+
 // ─── STREAKS VIEW ─────────────────────────────────────────────────────────────
 const StreaksView = memo(function StreaksView({ getStreak, identities }) {
   const allHabits = useMemo(() =>
@@ -4284,6 +4647,7 @@ html, body, #root { height: 100%; }
 .toast-in { animation: fadeSlideDown 0.3s cubic-bezier(0.32,0.72,0,1) both; }
 .toast-in-up { animation: fadeSlideUp 0.3s cubic-bezier(0.32,0.72,0,1) both; }
 .toast-in-center { animation: fadeScaleIn 0.25s cubic-bezier(0.34,1.56,0.64,1) both; }
+.celebrate-in { animation: celebPop 0.25s cubic-bezier(0.34,1.56,0.64,1) both; }
 .pop { animation: pop 0.35s cubic-bezier(0.34,1.56,0.64,1) both; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pop { 0%,100% { transform: scale(1); } 50% { transform: scale(1.18); } }
@@ -4292,4 +4656,5 @@ html, body, #root { height: 100%; }
 @keyframes fadeSlideDown { from { transform: translateX(-50%) translateY(-10px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
 @keyframes fadeSlideUp { from { transform: translateX(-50%) translateY(10px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
 @keyframes fadeScaleIn { from { transform: translate(-50%, -50%) scale(0.9); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+@keyframes celebPop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 `;
