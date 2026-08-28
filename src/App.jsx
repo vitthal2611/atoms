@@ -2484,11 +2484,11 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
     }}>
 
       {/* ── Card body — cue, action, coaching (same layout as the Up Next hero) ── */}
-      <div style={{ padding: "10px 12px 12px" }}>
+      <div style={{ padding: "10px 12px 9px" }}>
         {/* ⏱ time · ✓ ring · intention sentence (place lives in the header banner) */}
         <div style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
-          {/* Left part — check-in on top, then time & place, divided from the action */}
-          <span style={{ flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", gap:6,
+          {/* Left part — check-in on top, then time · place · streak, divided from the action */}
+          <span style={{ flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", gap:3,
             ...((habit.time || habit.location) ? { minWidth:46, paddingRight:11, borderRight:`1.5px solid ${T.surf2}` } : {}) }}>
             <HabitRing
               checked={checked}
@@ -2586,7 +2586,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
         {/* Details toggle — a quiet, centered pill (not a heavy full-width bar) */}
         {!checked && !missed && (
-          <div style={{ display:"flex", justifyContent:"center", marginTop:10 }}>
+          <div style={{ display:"flex", justifyContent:"center", marginTop:2 }}>
             <button type="button" onClick={() => setShowDetails(p => !p)} aria-expanded={showDetails}
               aria-label={showDetails ? "Hide details" : "Show plan and proof"}
               style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 13px", borderRadius:20, border:`1px solid ${showDetails ? T.border2 : T.border}`, background: showDetails ? T.surf2 : "transparent", cursor:"pointer", fontFamily:"inherit", fontSize:11.5, fontWeight:700, letterSpacing:"0.02em", color:T.muted, WebkitTapHighlightColor:"transparent" }}>
@@ -3974,6 +3974,15 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
             {visible.map(({ habit, identity }) => {
               // Missed yesterday & still pending today → flag the whole card red (never miss twice).
               const warnMissed = selectedDate === todayKey && missedYesterdayIds.has(habit.id) && todayData[habit.id] == null;
+              // Streak badge for the card header — current run for this habit.
+              const st = getStreakForHabit(habit.id, habit.frequency);
+              const bad = habit.kind === "bad";
+              const streakBadge = st > 0 ? (
+                <span aria-label={`${st} ${bad ? "days clean" : "day"} streak`} style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:3, fontSize:11.5, fontWeight:900, lineHeight:1,
+                  color: bad ? "#3B6D11" : "#C2751A", background: bad ? "#EAF3DE" : "#FBF0DA", borderRadius:20, padding:"3px 9px" }}>
+                  <Ic name={bad ? "check" : "flame"} size={12} color={bad ? "#3B6D11" : "#C2751A"} />{st}
+                </span>
+              ) : null;
               return (
               <div key={habit.id} style={{
                 background: warnMissed ? "#FEF4F4" : T.surface, borderRadius:14,
@@ -4009,6 +4018,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                       {habit.kind === "bad" && <span style={{ fontSize:9.5, fontWeight:900, letterSpacing:"0.09em", color:"#B23A6B", marginRight:6 }}>BREAKING</span>}
                       {capFirst(habit.trigger) || (habit.kind === "bad" ? "When tempted" : "Reminder")}
                     </span>
+                    {streakBadge}
                     <RowMenu habit={habit} identity={identity} missed={todayData[habit.id] === "miss"} onMiss={markMiss} openEditHabit={openEditHabit} openDeleteHabit={openDeleteHabit} onReview={openReviewFor} habitNotes={habitNotes} allData={allData} setHabitNote={setHabitNote} />
                   </div>
                 ) : (
@@ -4016,6 +4026,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                     {habit.kind === "bad" && (
                       <span style={{ marginRight:"auto", flexShrink:0, display:"inline-flex", alignItems:"center", gap:3, fontSize:10, fontWeight:800, color:"#993556", background:"#FBEAF0", border:"1px solid #F4C0D1", borderRadius:20, padding:"2px 7px" }}><Ic name="x" size={10} color="#993556" /> breaking</span>
                     )}
+                    {streakBadge}
                     <RowMenu habit={habit} identity={identity} missed={todayData[habit.id] === "miss"} onMiss={markMiss} openEditHabit={openEditHabit} openDeleteHabit={openDeleteHabit} onReview={openReviewFor} habitNotes={habitNotes} allData={allData} setHabitNote={setHabitNote} />
                   </div>
                 )}
