@@ -1339,35 +1339,9 @@ export default function App() {
     setJustChecked(habitId);
     // Long enough to read the reward before the row fades out (see .row-leaving delay)
     justCheckedTimerRef.current = setTimeout(()=>setJustChecked(null),3400);
-    // ── Celebrate every check-in: streak + votes + identity, richer on milestones ──
-    if(!wasChecked) {
-      // Lifetime votes = every scheduled day this habit was done, plus today's new check.
-      let votes = 1;
-      for (const k in cur) if (k !== selectedDate && cur[k]?.[habitId] === true && isScheduledOn(frequency, k)) votes++;
-      // This month's completion % (today counts as done).
-      const ym = selectedDate.slice(0,7), dToday = +selectedDate.slice(8,10);
-      let sched = 0, done = 0;
-      for (let d=1; d<=dToday; d++) {
-        const key = `${ym}-${String(d).padStart(2,"0")}`;
-        if (!isScheduledOn(frequency, key)) continue;
-        sched++;
-        if (key === selectedDate || cur[key]?.[habitId] === true) done++;
-      }
-      const monthPct = sched ? Math.round(done/sched*100) : 100;
-      const streak = getStreakForHabit(habitId, frequency) + 1;
-      const milestone = MILESTONES.find(m=>m.days===streak) || null;
-      const habitObj = allHabitsRef.current.find(h=>h.id===habitId);
-      const isBad = habitObj?.kind === "bad";
-      const habitLabel = habitObj?.label || "";
-      const identityLabel = shortLabel((identity && identity.label) || "");
-      const cheers = isBad ? CHEERS_BAD : CHEERS_GOOD;
-      const cheer = cheers[Math.floor(Math.random()*cheers.length)];
-      const quote = QUOTES[Math.floor(Math.random()*QUOTES.length)];
-      clearTimeout(celebrationTimerRef.current);
-      setCelebration({ habitId, habitLabel, streak, votes, monthPct, identityLabel, isBad, milestone, cheer, quote });
-      celebrationTimerRef.current = setTimeout(()=>setCelebration(null), 30000);
-    }
-  }, [selectedDate, getStreakForHabit]);
+    // Check-in celebration popup intentionally disabled — a check-in shows only
+    // the inline row reward (justChecked), no full-screen popup message.
+  }, [selectedDate]);
 
   // ── Mark a habit as missed (tap again to clear) — "miss" breaks the streak
   // and feeds the never-miss-twice warning the next day ──
