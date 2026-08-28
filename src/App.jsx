@@ -94,22 +94,6 @@ const MILESTONES = [
 function getMilestone(s) { let b=null; for(const m of MILESTONES) if(s>=m.days) b=m; return b; }
 function getNextMilestone(s) { return MILESTONES.find(m=>m.days>s)||null; }
 
-// Short rotating lines under the check-in celebration headline (kept fresh each time).
-const CHEERS_GOOD = [
-  "Small steps, every day.",
-  "You showed up — that's the whole game.",
-  "Momentum is building.",
-  "Another brick laid.",
-  "This is who you are now.",
-  "One rep closer.",
-];
-const CHEERS_BAD = [
-  "Resisted — well held.",
-  "Discomfort now, freedom later.",
-  "You chose who you want to be.",
-  "Urge came, urge passed.",
-  "Stronger than yesterday.",
-];
 
 function to24h(timeStr) {
   if (!timeStr) return timeStr;
@@ -1004,7 +988,6 @@ export default function App() {
   const [view,         setView]        = useState("today");
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
   const [justChecked,  setJustChecked]  = useState(null);
-  const [celebration, setCelebration] = useState(null);
   const [syncing,      setSyncing]     = useState(false);
   const [saveError,    setSaveError]   = useState(false);
   const [signInError,  setSignInError] = useState(null);
@@ -1095,15 +1078,10 @@ export default function App() {
   const streakCacheRef      = useRef({});
   const streakDataRef       = useRef(null);   // tracks the data ref the cache was built against
   // ── Timers stored in refs so they can be cleared on re-fire or unmount ──
-  const celebrationTimerRef = useRef(null);
   const justCheckedTimerRef = useRef(null);
   const undoTimerRef        = useRef(null);
-  // Latest habit list, read inside toggle without adding it to the callback deps
+  // Latest check-in data, read inside toggle without adding it to the callback deps
   // (keeps `toggle` stable so memo'd rows don't re-render on every check-in).
-  const allHabitsRef        = useRef([]);
-  allHabitsRef.current      = allHabits;
-  // Latest check-in data, so toggle can compute votes/month reliably (not inside the
-  // setData updater, which React only runs synchronously by its eager-state luck).
   const dataRef             = useRef({});
   dataRef.current           = data;
   const dtTimer             = useRef(null);
@@ -1372,7 +1350,6 @@ export default function App() {
 
   // Cleanup all timers on unmount
   useEffect(() => () => {
-    clearTimeout(celebrationTimerRef.current);
     clearTimeout(justCheckedTimerRef.current);
     clearTimeout(undoTimerRef.current);
   }, []);
@@ -1851,92 +1828,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ── Check-in celebration — every check-in gets a streak + votes card; ── */}
-      {/* ── richer on milestone days (stat chips + quote), green tone for bad habits. ── */}
-      {celebration && (() => {
-        const c = celebration;
-        const accent      = c.isBad ? "#0F6E56" : T.gold;
-        const statColor   = c.isBad ? "#0F6E56" : T.primary;
-        const bigEmoji    = c.milestone ? c.milestone.emoji : (c.isBad ? "🛡️" : "🔥");
-        const headline    = c.milestone
-          ? `${c.milestone.label}!`
-          : (c.isBad ? "Well held." : (c.streak === 1 ? "You've started! 🎉" : `${c.streak}-day streak!`));
-        // Sub names the habit so the card says exactly what was completed.
-        const sub = c.milestone
-          ? `${c.streak} ${c.isBad ? "days clean" : "day streak"} 🎉`
-          : c.cheer;
-        const next        = getNextMilestone(c.streak);
-        const pct         = next ? Math.min(100, Math.round(c.streak / next.days * 100)) : 100;
-        const voteBg      = c.isBad ? "#EAF7F1" : "#FFF7E6";
-        const voteBorder  = c.isBad ? "#BCE9D6" : "#F3DBA0";
-        const voteColor   = c.isBad ? "#0B6B4F" : "#854F0B";
-        const chips       = [
-          [c.streak, "STREAK"],
-          [c.votes, c.isBad ? "DAYS CLEAN" : "VOTES"],
-          [c.monthPct + "%", "THIS MO."],
-        ];
-        const dismiss     = () => { clearTimeout(celebrationTimerRef.current); setCelebration(null); };
-        return (
-          <div onClick={dismiss} style={{ position:"fixed", top:0, bottom:0, left:"50%", transform:"translateX(-50%)",
-            width:"100%", maxWidth:430, zIndex:999, background:"#00283d2e",
-            display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
-            <div className="celebrate-in" role="alert" aria-live="assertive" onClick={e=>e.stopPropagation()}
-              style={{ position:"relative", width:"calc(100% - 40px)", maxWidth:330, background:T.surface, border:`2px solid ${accent}`,
-                borderRadius:20, boxShadow:"0 16px 44px #00283d38", padding:"20px 18px 16px", textAlign:"center" }}>
-              <button onClick={dismiss} aria-label="Close"
-                style={{ position:"absolute", top:10, right:10, width:30, height:30, borderRadius:"50%", border:"none",
-                  background:T.surf2, color:T.muted, fontSize:16, lineHeight:1, cursor:"pointer",
-                  display:"flex", alignItems:"center", justifyContent:"center", WebkitTapHighlightColor:"transparent" }}>
-                <Ic name="x" size={14} color={T.muted} />
-              </button>
-              <div style={{ fontSize:34, lineHeight:1 }} aria-hidden="true">{bigEmoji}</div>
-              <div style={{ fontWeight:800, fontSize:17, color:T.text, letterSpacing:"-0.01em", marginTop:6 }}>{headline}</div>
-              {c.habitLabel && (
-                <div style={{ fontSize:13, fontWeight:700, color:statColor, marginTop:3 }}>
-                  {c.isBad ? "🛡️ " : "✓ "}{c.habitLabel}
-                </div>
-              )}
-              <div style={{ fontSize:12.5, color:T.text2, marginTop:2 }}>{sub}</div>
-
-              {/* Live stats every time — streak, lifetime votes, this month's completion */}
-              <div style={{ display:"flex", gap:8, margin:"13px 0 0" }}>
-                {chips.map(([v,l])=>(
-                  <div key={l} style={{ flex:1, background:T.surf2, borderRadius:12, padding:"9px 4px" }}>
-                    <div style={{ fontSize:19, fontWeight:800, color:statColor, lineHeight:1 }}>{v}</div>
-                    <div style={{ fontSize:9.5, fontWeight:700, color:T.muted, marginTop:3, letterSpacing:"0.03em" }}>{l}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Progress toward the next badge */}
-              {next && (
-                <div style={{ marginTop:13 }}>
-                  <div style={{ height:7, borderRadius:99, background:T.surf2, overflow:"hidden" }}>
-                    <div style={{ height:"100%", width:`${pct}%`, borderRadius:99, background:accent }} />
-                  </div>
-                  <div style={{ display:"flex", justifyContent:"space-between", marginTop:6, fontSize:11, fontWeight:700, color:T.muted }}>
-                    <span>{bigEmoji} {c.streak} {c.streak===1?"day":"days"}</span>
-                    <span style={{ color:accent }}>{next.emoji} {next.label} · {next.days-c.streak} to go</span>
-                  </div>
-                </div>
-              )}
-
-              {c.identityLabel && (
-                <div style={{ background:voteBg, border:`1px solid ${voteBorder}`, borderRadius:12, padding:"9px 11px",
-                  fontSize:12.5, fontWeight:600, color:voteColor, marginTop:13 }}>
-                  {c.isBad ? "🛡️ Protecting " : "🗳️ Another vote for "}<b style={{ fontWeight:800 }}>“I am {c.identityLabel}.”</b>
-                </div>
-              )}
-
-              {c.milestone && (
-                <div style={{ fontSize:12, color:T.muted, fontStyle:"italic", lineHeight:1.45, marginTop:12, padding:"0 2px" }}>
-                  “{c.quote.text}”{c.quote.author ? ` — ${c.quote.author}` : ""}
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
 
       {/* ── Modals ── */}
       {reviewOpen && (manualReview || reviewTarget) && (
@@ -4680,7 +4571,6 @@ html, body, #root { height: 100%; }
 .toast-in { animation: fadeSlideDown 0.3s cubic-bezier(0.32,0.72,0,1) both; }
 .toast-in-up { animation: fadeSlideUp 0.3s cubic-bezier(0.32,0.72,0,1) both; }
 .toast-in-center { animation: fadeScaleIn 0.25s cubic-bezier(0.34,1.56,0.64,1) both; }
-.celebrate-in { animation: celebPop 0.25s cubic-bezier(0.34,1.56,0.64,1) both; }
 .pop { animation: pop 0.35s cubic-bezier(0.34,1.56,0.64,1) both; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pop { 0%,100% { transform: scale(1); } 50% { transform: scale(1.18); } }
@@ -4689,5 +4579,4 @@ html, body, #root { height: 100%; }
 @keyframes fadeSlideDown { from { transform: translateX(-50%) translateY(-10px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
 @keyframes fadeSlideUp { from { transform: translateX(-50%) translateY(10px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
 @keyframes fadeScaleIn { from { transform: translate(-50%, -50%) scale(0.9); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
-@keyframes celebPop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 `;
