@@ -1912,7 +1912,7 @@ export default function App() {
             {view==="today"
               ? (selectedDate === todayKey ? "Today" : formatNavDate(selectedDate))
               : view==="focus" ? "Focus"
-              : view==="week" ? "This Week"
+              : view==="week" ? "This Month"
               : view==="streaks" ? "Streaks"
               : "Manage"}
           </h1>
@@ -2069,7 +2069,7 @@ export default function App() {
         {[
           {id:"today",    icon:"☀️",  label:"Today"},
           {id:"focus",    icon:"🎯",  label:"Focus"},
-          {id:"week",     icon:"📅",  label:"Week"},
+          {id:"week",     icon:"📅",  label:"Month"},
           {id:"streaks",  icon:"🔥",  label:"Streaks"},
           {id:"manage",   icon:"⚙️",  label:"Manage"},
         ].map(t=>(
@@ -4216,106 +4216,123 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
 
 // ─── WEEK VIEW ────────────────────────────────────────────────────────────────
 const WeekView = memo(function WeekView({ data, todayKey, identities }) {
-  const [weekOffset, setWeekOffset] = useState(0);
+  const [monthOffset, setMonthOffset] = useState(0);
 
-  // Compute the 7 dates for the currently displayed week (Mon–Sun)
-  const weekDates = useMemo(() => {
-    const today = new Date();
-    today.setDate(today.getDate() - weekOffset * 7);
-    const mon = new Date(today);
-    mon.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(mon);
-      d.setDate(mon.getDate() + i);
-      return dateToKey(d);
-    });
-  }, [weekOffset]);
+  // All day-keys of the displayed month (offset months back from the current one).
+  const monthDates = useMemo(() => {
+    const now = new Date();
+    const base = new Date(now.getFullYear(), now.getMonth() - monthOffset, 1);
+    const y = base.getFullYear(), m = base.getMonth();
+    const days = new Date(y, m + 1, 0).getDate();
+    return Array.from({ length: days }, (_, i) => dateToKey(new Date(y, m, i + 1)));
+  }, [monthOffset]);
 
-  const weekLabel = weekOffset === 0 ? "This Week" : weekOffset === 1 ? "Last Week" : `${weekOffset} weeks ago`;
+  const monthLabel = useMemo(() => {
+    const now = new Date();
+    const base = new Date(now.getFullYear(), now.getMonth() - monthOffset, 1);
+    return base.toLocaleDateString(navigator.language || undefined, { month: "long", year: "numeric" });
+  }, [monthOffset]);
+
+  const [selDay, setSelDay] = useState(null);
+
+  // Flat habit list (with identity ref) for per-day rollups.
+  const allHabits = useMemo(() => identities.flatMap(i => i.habits.map(h => ({ h, i }))), [identities]);
+
+  // Scheduled vs done counts for one day (past/today only).
+  const dayStat = (d) => {
+    let sched = 0, done = 0;
+    for (const { h } of allHabits) {
+      const sKey = habitStartKey(h, data);
+      if (sKey && d < sKey) continue;
+      if (!isScheduledOn(h.frequency, d)) continue;
+      sched++;
+      if (data[d]?.[h.id] === true) done++;
+    }
+    return { sched, done };
+  };
+  const LEVELS = ["#EDF2F6", "#BFE0F5", "#7FC0EB", "#3B9BDE", "#0284C7"];
+  const firstDow = monthDates.length ? (new Date(monthDates[0] + "T00:00").getDay() + 6) % 7 : 0; // Mon=0
+  const selStat = selDay ? dayStat(selDay) : null;
 
   return (
     <div style={S.content}>
-      {/* Week navigation + dot legend */}
+      {/* Month navigation */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:T.surface, borderRadius:14, border:`1px solid ${T.border}`, padding:"8px 12px" }}>
-        <button onClick={() => setWeekOffset(o => o + 1)} aria-label="Previous week"
+        <button onClick={() => { setMonthOffset(o => o + 1); setSelDay(null); }} aria-label="Previous month"
           style={{ ...S.crudBtn, width:36, height:36, fontSize:20 }}>
-          <span aria-hidden="true">‹</span>
+          <span aria-hidden="true">&#8249;</span>
         </button>
-        <span style={{ fontSize:14, fontWeight:700, color:T.text, fontFamily:FONT_DISPLAY }}>{weekLabel}</span>
-        <button onClick={() => setWeekOffset(o => Math.max(0, o - 1))} aria-label="Next week"
-          disabled={weekOffset === 0}
-          style={{ ...S.crudBtn, width:36, height:36, fontSize:20, opacity: weekOffset === 0 ? 0.3 : 1 }}>
-          <span aria-hidden="true">›</span>
+        <span style={{ fontSize:14, fontWeight:700, color:T.text, fontFamily:FONT_DISPLAY }}>{monthLabel}</span>
+        <button onClick={() => { setMonthOffset(o => Math.max(0, o - 1)); setSelDay(null); }} aria-label="Next month"
+          disabled={monthOffset === 0}
+          style={{ ...S.crudBtn, width:36, height:36, fontSize:20, opacity: monthOffset === 0 ? 0.3 : 1 }}>
+          <span aria-hidden="true">&#8250;</span>
         </button>
       </div>
 
-      {/* Dot legend */}
-      <div style={{ display:"flex", gap:14, fontSize:12, color:T.muted, paddingLeft:4, flexWrap:"wrap" }} aria-hidden="true">
-        <span style={{ display:"flex", alignItems:"center", gap:4 }}>
-          <span style={{ display:"inline-block", width:10, height:10, borderRadius:3, background:T.primary }}/>Done
-        </span>
-        <span style={{ display:"flex", alignItems:"center", gap:4 }}>
-          <span style={{ display:"inline-block", width:10, height:10, borderRadius:3, border:`1px solid ${T.border}`, background:T.surf2 }}/>Missed
-        </span>
-        <span style={{ display:"flex", alignItems:"center", gap:4 }}>
-          <span style={{ display:"inline-block", width:10, height:10, borderRadius:3, border:`1px dashed ${T.border}` }}/>Not scheduled
-        </span>
-      </div>
-
-      {identities.map(identity=>(
-        <div key={identity.id} style={S.card}>
-          <div style={{...S.cardLabel,color:identity.color,marginBottom:12}}>
-            <span aria-hidden="true">{identity.icon}</span> {identity.label}
-          </div>
-          {identity.habits.length===0
-            ? <div style={{fontSize:13,color:T.muted,textAlign:"center",padding:"8px 0"}}>No habits yet</div>
-            : (
-              <div style={S.weekGrid}>
-                <div/>
-                {weekDates.map((d,i)=>(
-                  <div key={d} style={{...S.weekDayH,color:d===todayKey?identity.color:T.muted,fontWeight:d===todayKey?700:500}}>{DAY_LABELS[i]}</div>
-                ))}
-                {[...identity.habits].sort(byHabitTime).map(habit=>{
-                  const startKey = habitStartKey(habit, data);
-                  return (
-                  <Fragment key={habit.id}>
-                    <div style={S.weekHabitLabel}>{habit.label}</div>
-                    {weekDates.map(d=>{
-                      const val       = data[d] && data[d][habit.id];
-                      const done      = val === true;
-                      const missed    = val === "miss";
-                      const pre       = startKey && d < startKey;
-                      const scheduled = !pre && isScheduledOn(habit.frequency, d);
-                      const future    = d > todayKey;
-                      const dotLabel  = pre ? "Before start" : done ? "Done" : missed ? "Missed" : future ? "Future" : scheduled ? "Not done" : "Not scheduled";
-                      return (
-                        <div key={d} aria-label={dotLabel} style={{
-                          ...S.weekDot,
-                          background: done ? identity.color : missed ? T.red+"1c" : (scheduled && !pre) ? T.surf2 : "transparent",
-                          border: pre ? "1px solid transparent" : done ? `1px solid ${identity.color}` : missed ? `1px solid ${T.red}66` : scheduled ? `1px solid ${T.border}` : `1px dashed ${T.border}`,
-                          opacity: pre ? 0.25 : future ? 0.35 : scheduled ? 1 : 0.4,
-                          display:"flex", alignItems:"center", justifyContent:"center",
-                        }}>
-                          {pre && <span style={{width:3,height:3,borderRadius:"50%",background:T.border2}} aria-hidden="true" />}
-                          {done && <span style={{fontSize:12,color:"#fff",fontWeight:900,lineHeight:1}} aria-hidden="true">✓</span>}
-                          {missed && <span style={{fontSize:12,color:T.red,fontWeight:900,lineHeight:1}} aria-hidden="true">✕</span>}
-                        </div>
-                      );
-                    })}
-                  </Fragment>
-                  );
-                })}
-              </div>
-            )
-          }
+      {/* Calendar heat-map — each day shaded by completion; tap a day for detail */}
+      <div style={{ ...S.card, padding:"13px 13px 14px" }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:5, marginBottom:5 }} aria-hidden="true">
+          {["M","T","W","T","F","S","S"].map((w,i)=>(<div key={i} style={{ textAlign:"center", fontSize:9.5, fontWeight:800, color:T.muted }}>{w}</div>))}
         </div>
-      ))}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:5 }}>
+          {Array.from({ length: firstDow }).map((_,i)=>(<div key={"e"+i} />))}
+          {monthDates.map(d=>{
+            const { sched, done } = dayStat(d);
+            const future  = d > todayKey;
+            const isToday = d === todayKey;
+            const isSel   = d === selDay;
+            const pct = sched ? done/sched : -1;
+            const lvl = pct < 0 ? -1 : pct === 0 ? 0 : pct <= 0.34 ? 1 : pct <= 0.66 ? 2 : pct < 1 ? 3 : 4;
+            const bg  = future ? "transparent" : (lvl < 0 ? "transparent" : LEVELS[lvl]);
+            return (
+              <button key={d} onClick={()=> setSelDay(s => s === d ? null : d)}
+                aria-label={`${d}: ${sched ? `${done} of ${sched} done` : "nothing scheduled"}`}
+                style={{ aspectRatio:"1", borderRadius:7, padding:0, display:"flex", alignItems:"center", justifyContent:"center",
+                  background:bg, cursor:"pointer", fontFamily:"inherit", fontSize:11.5, fontWeight:800, WebkitTapHighlightColor:"transparent",
+                  border: isSel ? `2px solid ${T.text}` : isToday ? `2px solid ${T.gold}` : (lvl < 0 && !future ? `1px dashed ${T.border}` : "1px solid transparent"),
+                  color: lvl >= 3 && !future ? "#fff" : (future ? T.border2 : T.text2), opacity: future ? 0.5 : 1 }}>
+                {+d.slice(8,10)}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:5, justifyContent:"flex-end", marginTop:12, fontSize:10, color:T.muted, fontWeight:700 }} aria-hidden="true">
+          Less {LEVELS.map(c=>(<span key={c} style={{ width:12, height:12, borderRadius:3, background:c }} />))} More
+        </div>
+      </div>
+
+      {/* Tapped-day detail — that day's habits and their status */}
+      {selDay && (
+        <div style={S.card}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+            <span style={{ fontSize:13.5, fontWeight:800, color:T.text }}>{new Date(selDay+"T00:00").toLocaleDateString(navigator.language||undefined,{ weekday:"long", day:"numeric", month:"short" })}</span>
+            <span style={{ fontSize:12, fontWeight:800, color:T.primary }}>{selStat.sched ? `${selStat.done}/${selStat.sched} done` : "Nothing scheduled"}</span>
+          </div>
+          {(() => {
+            const rows = allHabits.filter(({ h }) => { const sKey = habitStartKey(h, data); return isScheduledOn(h.frequency, selDay) && (!sKey || selDay >= sKey); });
+            if (rows.length === 0) return <div style={{ fontSize:13, color:T.muted, textAlign:"center", padding:"4px 0" }}>No habits scheduled this day.</div>;
+            return rows.map(({ h, i }) => {
+              const v = data[selDay]?.[h.id]; const done = v === true, miss = v === "miss";
+              return (
+                <div key={h.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 0", borderTop:`1px solid ${T.surf2}` }}>
+                  <span aria-hidden="true" style={{ width:17, height:17, borderRadius:"50%", flexShrink:0, background: done ? i.color : "transparent", border: done ? "none" : miss ? `2px solid ${T.red}66` : `2px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    {done && <Ic name="check" size={9} color="#fff" />}{miss && <Ic name="x" size={9} color={T.red} />}
+                  </span>
+                  <span style={{ flex:1, minWidth:0, fontSize:13.5, color: done ? T.muted : T.text, textDecoration: done ? "line-through" : "none", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{h.label}</span>
+                  <span style={{ fontSize:11, fontWeight:800, color: done ? "#0F6E56" : miss ? T.red : T.muted, flexShrink:0 }}>{done ? "done" : miss ? "missed" : "\u2014"}</span>
+                </div>
+              );
+            });
+          })()}
+        </div>
+      )}
       <div style={S.card}>
-        <div style={{...S.cardLabel,color:T.gold,marginBottom:14}}><span aria-hidden="true">📊</span> Weekly Score</div>
+        <div style={{...S.cardLabel,color:T.gold,marginBottom:14}}><span aria-hidden="true">📊</span> Monthly Score</div>
         {identities.map(identity=>{
-          const done = weekDates.reduce((a,d) =>
+          const done = monthDates.reduce((a,d) =>
             a + identity.habits.filter(h => isScheduledOn(h.frequency, d) && data[d]?.[h.id] === true).length, 0);
-          const possible = weekDates
+          const possible = monthDates
             .filter(d => d <= todayKey)
             .reduce((a,d) => a + identity.habits.filter(h => {
               const sKey = habitStartKey(h, data);
