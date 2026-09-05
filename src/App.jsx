@@ -1910,10 +1910,7 @@ export default function App() {
       {/* ── Header ── */}
       <header style={S.header}>
         <div style={{ minHeight:90, display:"flex", flexDirection:"column", justifyContent:"center" }}>
-          <div style={S.eyebrow}>
-            Atomic Habits
-            {syncing && <span style={{opacity:0.6}} aria-hidden="true">{" "}· saving…</span>}
-          </div>
+          {syncing && <div style={S.eyebrow} aria-hidden="true">Saving…</div>}
           {syncing && (
             <div role="status" aria-live="polite" style={{ position:"absolute", width:1, height:1, overflow:"hidden", clip:"rect(0,0,0,0)", whiteSpace:"nowrap" }}>
               Saving your habits
