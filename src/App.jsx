@@ -4052,14 +4052,13 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
               aria-expanded={doneOpen}
               style={{
                 display:"flex", alignItems:"center", gap:8, width:"100%",
-                margin:"4px 0 10px", padding:"9px 12px",
-                background:T.primary+"0e", border:"none", borderRadius:14,
+                margin:"4px 0 10px", padding:"8px 12px",
+                background:T.primary+"0e", border:"none", borderRadius:11,
                 cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
               }}
             >
-              <span style={{ fontSize:16 }} aria-hidden="true">✅</span>
-              <span style={{ fontSize:14, fontWeight:700, color:T.primary, fontFamily:FONT_DISPLAY }}>Completed</span>
-              <span style={{ fontSize:12, color:T.primary, marginLeft:"auto", fontWeight:700, background:T.primary+"18", borderRadius:20, padding:"2px 9px" }} aria-label={`${resolved.length} resolved`}>{resolved.length}</span>
+              <span aria-hidden="true" style={{ width:17, height:17, borderRadius:"50%", background:T.primary, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}><Ic name="check" size={10} color="#fff" /></span>
+              <span style={{ flex:1, textAlign:"left", fontSize:13, fontWeight:700, color:T.primary }} aria-label={`${resolved.length} completed`}>{resolved.length} completed</span>
               <span aria-hidden="true" style={{ fontSize:11, color:T.primary, transition:"transform 0.2s", display:"inline-block", transform: doneOpen ? "rotate(180deg)" : "none" }}>▼</span>
             </button>
             {doneOpen && (
