@@ -1331,6 +1331,17 @@ export default function App() {
     // the inline row reward (justChecked), no full-screen popup message.
   }, [selectedDate]);
 
+  // Toggle a habit done for an ARBITRARY day — used by the Month calendar so you
+  // can fill in / undo check-ins for any past day, across all weeks.
+  const toggleForDate = useCallback((dateKey, habitId) => {
+    setData(prev => {
+      const day = prev[dateKey] || {};
+      const next = { ...day };
+      if (day[habitId] === true) delete next[habitId]; else next[habitId] = true;
+      return { ...prev, [dateKey]: next };
+    });
+  }, []);
+
   // ── Mark a habit as missed (tap again to clear) — "miss" breaks the streak
   // and feeds the never-miss-twice warning the next day ──
   const markMiss = useCallback((habitId) => {
@@ -2013,7 +2024,7 @@ export default function App() {
             onDelete={deleteTask}
           />
         )}
-        {view==="week"    && <WeekView data={data} todayKey={todayKey} identities={liveIdentities}/>}
+        {view==="week"    && <WeekView data={data} todayKey={todayKey} identities={liveIdentities} onToggleDay={toggleForDate}/>}
         {view==="streaks" && <StreaksView data={data} getStreak={getStreakForHabit} identities={liveIdentities}/>}
         {view==="manage"  && (
           <ManageView
@@ -4215,7 +4226,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
 });
 
 // ─── WEEK VIEW ────────────────────────────────────────────────────────────────
-const WeekView = memo(function WeekView({ data, todayKey, identities }) {
+const WeekView = memo(function WeekView({ data, todayKey, identities, onToggleDay }) {
   const [monthOffset, setMonthOffset] = useState(0);
 
   // All day-keys of the displayed month (offset months back from the current one).
@@ -4302,31 +4313,40 @@ const WeekView = memo(function WeekView({ data, todayKey, identities }) {
         </div>
       </div>
 
-      {/* Tapped-day detail — that day's habits and their status */}
-      {selDay && (
+      {/* Tapped-day detail — that day's habits; tap a row to check in (past days) */}
+      {selDay && (() => { const canEdit = selDay <= todayKey; return (
         <div style={S.card}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: canEdit ? 3 : 8 }}>
             <span style={{ fontSize:13.5, fontWeight:800, color:T.text }}>{new Date(selDay+"T00:00").toLocaleDateString(navigator.language||undefined,{ weekday:"long", day:"numeric", month:"short" })}</span>
             <span style={{ fontSize:12, fontWeight:800, color:T.primary }}>{selStat.sched ? `${selStat.done}/${selStat.sched} done` : "Nothing scheduled"}</span>
           </div>
+          {canEdit && selStat.sched > 0 && <div style={{ fontSize:11, color:T.muted, marginBottom:6 }}>Tap a habit to check it off for this day.</div>}
           {(() => {
             const rows = allHabits.filter(({ h }) => { const sKey = habitStartKey(h, data); return isScheduledOn(h.frequency, selDay) && (!sKey || selDay >= sKey); });
             if (rows.length === 0) return <div style={{ fontSize:13, color:T.muted, textAlign:"center", padding:"4px 0" }}>No habits scheduled this day.</div>;
             return rows.map(({ h, i }) => {
               const v = data[selDay]?.[h.id]; const done = v === true, miss = v === "miss";
-              return (
-                <div key={h.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 0", borderTop:`1px solid ${T.surf2}` }}>
-                  <span aria-hidden="true" style={{ width:17, height:17, borderRadius:"50%", flexShrink:0, background: done ? i.color : "transparent", border: done ? "none" : miss ? `2px solid ${T.red}66` : `2px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                    {done && <Ic name="check" size={9} color="#fff" />}{miss && <Ic name="x" size={9} color={T.red} />}
-                  </span>
-                  <span style={{ flex:1, minWidth:0, fontSize:13.5, color: done ? T.muted : T.text, textDecoration: done ? "line-through" : "none", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{h.label}</span>
-                  <span style={{ fontSize:11, fontWeight:800, color: done ? "#0F6E56" : miss ? T.red : T.muted, flexShrink:0 }}>{done ? "done" : miss ? "missed" : "\u2014"}</span>
+              const dot = (
+                <span aria-hidden="true" style={{ width:19, height:19, borderRadius:"50%", flexShrink:0, boxSizing:"border-box", background: done ? i.color : "transparent", border: done ? "none" : miss ? `2px solid ${T.red}66` : `2px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  {done && <Ic name="check" size={10} color="#fff" />}{miss && <Ic name="x" size={9} color={T.red} />}
+                </span>
+              );
+              const label = <span style={{ flex:1, minWidth:0, textAlign:"left", fontSize:13.5, fontWeight:600, color: done ? T.muted : T.text, textDecoration: done ? "line-through" : "none", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{h.label}</span>;
+              const status = <span style={{ fontSize:11, fontWeight:800, color: done ? "#0F6E56" : miss ? T.red : T.muted, flexShrink:0 }}>{done ? "done" : miss ? "missed" : "—"}</span>;
+              return canEdit ? (
+                <button key={h.id} onClick={() => onToggleDay(selDay, h.id)} aria-label={`${done ? "Uncheck" : "Check"} ${h.label}`}
+                  style={{ display:"flex", alignItems:"center", gap:10, width:"100%", background:"transparent", border:"none", borderTop:`1px solid ${T.surf2}`, padding:"8px 0", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
+                  {dot}{label}{status}
+                </button>
+              ) : (
+                <div key={h.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 0", borderTop:`1px solid ${T.surf2}` }}>
+                  {dot}{label}{status}
                 </div>
               );
             });
           })()}
         </div>
-      )}
+      ); })()}
       <div style={S.card}>
         <div style={{...S.cardLabel,color:T.gold,marginBottom:14}}><span aria-hidden="true">📊</span> Monthly Score</div>
         {identities.map(identity=>{
