@@ -32,6 +32,7 @@ function identitiesRef(uid) { return doc(_db, "users", uid, "atomicHabits", "ide
 function checkInsRef(uid)    { return doc(_db, "users", uid, "atomicHabits", "checkIns"); }
 function dailyTasksRef(uid)  { return doc(_db, "users", uid, "atomicHabits", "dailyTasks"); }
 function habitNotesRef(uid)  { return doc(_db, "users", uid, "atomicHabits", "habitNotes"); }
+function reviewsRef(uid)     { return doc(_db, "users", uid, "atomicHabits", "reviews"); }
 function pushTokensRef(uid)  { return doc(_db, "pushTokens", uid); }
 
 // Turn on per-habit reminders: ask permission, register the FCM service worker,
@@ -117,6 +118,16 @@ function dateToKey(d) {
     String(d.getDate()).padStart(2, "0");
 }
 function getTodayKey() { return dateToKey(new Date()); }
+// Monday-start of the week containing dateKey; and the 7 day-keys Mon..Sun.
+function weekStartKey(dateKey) {
+  const d = new Date(dateKey + "T00:00");
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return dateToKey(d);
+}
+function weekDaysFrom(weekKey) {
+  const d = new Date(weekKey + "T00:00");
+  return Array.from({ length: 7 }, (_, i) => { const x = new Date(d); x.setDate(d.getDate() + i); return dateToKey(x); });
+}
 // Use crypto.randomUUID when available (more collision-safe than Math.random)
 function uid() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -1007,6 +1018,8 @@ export default function App() {
   const [undoDelete,   setUndoDelete]  = useState(null);
   const [dailyTasks,   setDailyTasks]  = useState({});       // { [dateKey]: [{id, text, done}] }
   const [habitNotes,   setHabitNotes]  = useState({});       // { [dateKey]: { [habitId]: "note" } } — daily reflection per habit
+  const [reviews,      setReviews]     = useState({});       // { [weekStartKey]: { at, pct, done, flagged:[habitId], focus, note } } — weekly reviews
+  const [reviewOpenWk, setReviewOpenWk]= useState(null);     // week-start key of the open Weekly Review, or null
 
   // Modal states
   const [modal,    setModal]    = useState(null);
@@ -1082,6 +1095,9 @@ export default function App() {
   const ciDirty   = useRef(false);
   const dtDirty   = useRef(false);
   const hnDirty   = useRef(false);
+  const rvDirty   = useRef(false);
+  const rvTimer   = useRef(null);
+  const isFirstRv = useRef(true);
   const latestRef = useRef({});   // most recent state, for the unload-flush closure
 
   // ── Streak cache — avoids 400-iteration loop per habit on every render ──
@@ -1108,6 +1124,7 @@ export default function App() {
       isFirstCi.current = true;
       isFirstDt.current = true;
       isFirstHn.current = true;
+      isFirstRv.current = true;
       hasLoadedRef.current = false;
       didBackfillRef.current = false;
       streakCacheRef.current = {};
@@ -1115,11 +1132,12 @@ export default function App() {
       if (u) {
         setDataLoading(true);
         try {
-          const [idSnap, ciSnap, dtSnap, hnSnap] = await Promise.all([
+          const [idSnap, ciSnap, dtSnap, hnSnap, rvSnap] = await Promise.all([
             getDoc(identitiesRef(u.uid)),
             getDoc(checkInsRef(u.uid)),
             getDoc(dailyTasksRef(u.uid)),
             getDoc(habitNotesRef(u.uid)),
+            getDoc(reviewsRef(u.uid)),
           ]);
           // Re-arm each first-run guard when applying fetched data, so the load
           // itself doesn't echo straight back to Firestore as a spurious save
@@ -1145,6 +1163,12 @@ export default function App() {
             const pruned = Object.fromEntries(Object.entries(raw).filter(([k]) => k >= cutoffKey));
             isFirstHn.current = true;
             setHabitNotes(pruned);
+          }
+          if (rvSnap.exists()) {
+            const raw = rvSnap.data().data || {};
+            const pruned = Object.fromEntries(Object.entries(raw).filter(([k]) => k >= cutoffKey));
+            isFirstRv.current = true;
+            setReviews(pruned);
           }
           hasLoadedRef.current = true;
         } catch (err) {
@@ -1217,20 +1241,36 @@ export default function App() {
     }, 500);
   }, [habitNotes, user]);
 
+  useEffect(() => {
+    if (!user || isFirstRv.current) { isFirstRv.current = false; return; }
+    if (!hasLoadedRef.current) return;
+    rvDirty.current = true;
+    clearTimeout(rvTimer.current);
+    rvTimer.current = setTimeout(() => {
+      setSyncing(true);
+      setSaveError(false);
+      setDoc(reviewsRef(user.uid), { data: reviews })
+        .then(() => { rvDirty.current = false; })
+        .catch(err => { console.error("Reviews save failed:", err); setSaveError(true); })
+        .finally(() => setSyncing(false));
+    }, 500);
+  }, [reviews, user]);
+
   // Keep the latest state handy for the unload-flush closure (which is created once).
-  latestRef.current = { user, identities, data, dailyTasks, habitNotes };
+  latestRef.current = { user, identities, data, dailyTasks, habitNotes, reviews };
 
   // Flush any pending debounced save the instant the tab is hidden or the page is
   // being unloaded (refresh, close, app backgrounded), so a quick refresh can't
   // roll a recent change back. Fire-and-forget — we can't await during unload.
   useEffect(() => {
     const flush = () => {
-      const { user, identities, data, dailyTasks, habitNotes } = latestRef.current;
+      const { user, identities, data, dailyTasks, habitNotes, reviews } = latestRef.current;
       if (!user || !hasLoadedRef.current) return;
       if (idDirty.current) { clearTimeout(idTimer.current); idDirty.current = false; setDoc(identitiesRef(user.uid), { data: identities }).catch(() => {}); }
       if (ciDirty.current) { clearTimeout(ciTimer.current); ciDirty.current = false; setDoc(checkInsRef(user.uid), { data }).catch(() => {}); }
       if (dtDirty.current) { clearTimeout(dtTimer.current); dtDirty.current = false; setDoc(dailyTasksRef(user.uid), { data: dailyTasks }).catch(() => {}); }
       if (hnDirty.current) { clearTimeout(hnTimer.current); hnDirty.current = false; setDoc(habitNotesRef(user.uid), { data: habitNotes }).catch(() => {}); }
+      if (rvDirty.current) { clearTimeout(rvTimer.current); rvDirty.current = false; setDoc(reviewsRef(user.uid), { data: reviews }).catch(() => {}); }
     };
     const onVisibility = () => { if (document.visibilityState === "hidden") flush(); };
     document.addEventListener("visibilitychange", onVisibility);
@@ -1874,6 +1914,18 @@ export default function App() {
           onClose={() => { setReviewOpen(false); setManualReview(null); }}
         />
       )}
+      {reviewOpenWk && (
+        <WeeklyReview
+          weekKey={reviewOpenWk}
+          identities={liveIdentities}
+          data={data}
+          todayKey={todayKey}
+          existing={reviews[reviewOpenWk]}
+          onAdjust={(habit, identity) => { setReviewOpenWk(null); openEditHabit(identity.id, habit); }}
+          onSave={(record) => setReviews(prev => ({ ...prev, [reviewOpenWk]: { ...record, at: Date.now() } }))}
+          onClose={() => setReviewOpenWk(null)}
+        />
+      )}
       {modal==="addHabit" && (
         <Modal title="Add New Habit" onClose={()=>setModal(null)}>
           <HabitForm
@@ -1979,6 +2031,8 @@ export default function App() {
             allData={data}
             toggle={toggle}
             onOpenFocus={() => setView("focus")}
+            reviews={reviews}
+            onOpenWeeklyReview={() => setReviewOpenWk(weekStartKey(todayKey))}
             markMiss={markMiss}
             habitNotes={habitNotes}
             setHabitNote={setHabitNote}
@@ -3798,6 +3852,125 @@ const HabitReview = memo(function HabitReview({ target, onApply, onSnooze, onFol
   );
 });
 
+// ─── WEEKLY REVIEW — reflect on the week, slips first, then adjust or affirm ───
+function WeeklyReview({ weekKey, identities, data, todayKey, onAdjust, onSave, onClose, existing }) {
+  const days = useMemo(() => weekDaysFrom(weekKey), [weekKey]);
+  const rows = useMemo(() => identities.flatMap(i => i.habits.map(h => {
+    const sKey = habitStartKey(h, data);
+    let sched = 0, kept = 0, missed = 0;
+    const pattern = days.map(d => {
+      const pre = sKey && d < sKey;
+      const past = d < todayKey;                 // only completed days count toward the review
+      const scheduled = !pre && past && isScheduledOn(h.frequency, d);
+      const v = data[d]?.[h.id];
+      if (scheduled) { sched++; if (v === true) kept++; else if (v === "miss") missed++; }
+      return { d, done: v === true, miss: v === "miss", scheduled, muted: pre || !past };
+    });
+    return { h, i, sched, kept, missed, pattern };
+  })).filter(r => r.sched > 0), [identities, data, days, todayKey]);
+
+  const slips   = useMemo(() => rows.filter(r => r.kept < r.sched).sort((a, b) => (a.kept / a.sched) - (b.kept / b.sched)), [rows]);
+  const onTrack = useMemo(() => rows.filter(r => r.kept >= r.sched), [rows]);
+  const totalSched = rows.reduce((a, r) => a + r.sched, 0);
+  const totalKept  = rows.reduce((a, r) => a + r.kept, 0);
+  const pct = totalSched ? Math.round(totalKept / totalSched * 100) : 0;
+
+  const [focus, setFocus] = useState(existing?.focus || (slips[0]?.h.id || ""));
+  const [note, setNote]   = useState(existing?.note || "");
+  const [showOk, setShowOk] = useState(false);
+
+  const range = `${new Date(days[0]+"T00:00").toLocaleDateString(navigator.language||undefined,{month:"short",day:"numeric"})} – ${new Date(days[6]+"T00:00").toLocaleDateString(navigator.language||undefined,{day:"numeric"})}`;
+  const DOW = ["M","T","W","T","F","S","S"];
+
+  const patternRow = (r) => (
+    <div style={{ display:"flex", gap:4, marginBottom:9 }} aria-hidden="true">
+      {r.pattern.map((p, k) => (
+        <div key={k} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
+          <span style={{ fontSize:9, fontWeight:800, color:T.muted }}>{DOW[k]}</span>
+          <span style={{ width:"100%", maxWidth:26, aspectRatio:"1", borderRadius:5, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:900,
+            background: p.done ? r.i.color : p.miss ? "#FCEBEB" : p.scheduled ? T.surf2 : "transparent",
+            border: p.miss ? "1px solid #E24B4A55" : "1px solid transparent",
+            color: p.done ? "#fff" : "#A32D2D", opacity: p.muted ? 0.35 : 1 }}>
+            {p.done ? "✓" : p.miss ? "✕" : ""}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+
+  const habitCard = (r, slip) => (
+    <div key={r.h.id} style={{ ...S.card, padding:"12px 14px" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:9 }}>
+        <span aria-hidden="true">{r.i.icon}</span>
+        <span style={{ flex:1, minWidth:0, fontSize:15, fontWeight:800, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.h.label}</span>
+        <span style={{ fontSize:11, fontWeight:800, color:r.i.colorDim||r.i.color, background:r.i.color+"1a", borderRadius:20, padding:"2px 9px" }}>{shortLabel(r.i.label)}</span>
+      </div>
+      {patternRow(r)}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:11 }}>
+        <span style={{ fontSize:12, fontWeight:800, color:T.text2 }}><b style={{ color: slip ? "#B26B12" : "#0F6E56" }}>{r.kept}</b> of {r.sched} kept{r.missed ? ` · ${r.missed} missed` : ""}</span>
+      </div>
+      <div style={{ display:"flex", gap:8 }}>
+        <button onClick={() => setFocus(r.h.id)} style={{ flex:1, fontSize:12, fontWeight:800, borderRadius:10, padding:"9px 8px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
+          border: focus===r.h.id ? "none" : `1px solid ${T.border}`, background: focus===r.h.id ? T.primary : "#fff", color: focus===r.h.id ? "#fff" : T.text2 }}>
+          {focus===r.h.id ? "★ Next-week focus" : "Set as focus"}
+        </button>
+        <button onClick={() => onAdjust(r.h, r.i)} style={{ flex:1, fontSize:12, fontWeight:800, borderRadius:10, padding:"9px 8px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
+          border: `1px solid ${slip ? T.primary : "#BFE0F5"}`, background: slip ? T.primary : "#fff", color: slip ? "#fff" : T.primary }}>
+          ✎ Make it easier
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <Modal title="Weekly review" onClose={onClose}>
+      <div style={{ padding:"4px 16px 20px", display:"flex", flexDirection:"column", gap:12 }}>
+        {/* Overview — consistency, not amounts */}
+        <div style={{ ...S.card, padding:"15px 16px", textAlign:"center" }}>
+          <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.primary }}>Week of {range}</div>
+          <div style={{ fontSize:20, fontWeight:900, color:T.text, letterSpacing:"-0.02em", margin:"3px 0 7px" }}>{pct === 100 ? "Perfect week! 🎉" : pct >= 70 ? "You showed up 🎉" : "A fresh week ahead"}</div>
+          <div style={{ fontSize:15, fontWeight:700, color:T.text2 }}>You showed up <b style={{ color:"#0F6E56" }}>{totalKept}</b> of {totalSched} times · {pct}%</div>
+          <div style={{ height:8, borderRadius:99, background:T.surf2, overflow:"hidden", marginTop:11 }}>
+            <div style={{ height:"100%", width:`${pct}%`, background:"#0F6E56", borderRadius:99 }} />
+          </div>
+        </div>
+
+        {/* Slips first — what to adjust */}
+        {slips.length > 0 && (
+          <>
+            <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:"#B26B12", padding:"2px 2px 0" }}>Needs a tweak · {slips.length}</div>
+            {slips.map(r => habitCard(r, true))}
+          </>
+        )}
+
+        {/* On track — collapsed summary */}
+        {onTrack.length > 0 && (
+          <div style={{ ...S.card, padding:"4px 6px" }}>
+            <button onClick={() => setShowOk(o => !o)} aria-expanded={showOk} style={{ display:"flex", alignItems:"center", gap:8, width:"100%", background:"transparent", border:"none", padding:"10px 8px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
+              <span aria-hidden="true" style={{ width:18, height:18, borderRadius:"50%", background:"#0F6E56", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}><Ic name="check" size={11} color="#fff" /></span>
+              <span style={{ flex:1, textAlign:"left", fontSize:13, fontWeight:800, color:"#0F6E56" }}>{onTrack.length} on track</span>
+              <span style={{ color:T.muted }}>{showOk ? "▴" : "▾"}</span>
+            </button>
+            {showOk && <div style={{ padding:"0 8px 8px", display:"flex", flexDirection:"column", gap:10 }}>{onTrack.map(r => habitCard(r, false))}</div>}
+          </div>
+        )}
+
+        {/* Wrap-up — one focus + optional note */}
+        <div style={{ ...S.card, padding:"14px 16px" }}>
+          <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.muted, marginBottom:8 }}>One line for next week (optional)</div>
+          <input value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. Prep my walking shoes the night before" maxLength={120}
+            style={{ ...S.input, marginTop:0, fontSize:14 }} />
+        </div>
+
+        <div style={{ display:"flex", gap:9 }}>
+          <button onClick={onClose} style={{ ...S.btnSecondary }}>Later</button>
+          <button onClick={() => { onSave({ pct, flagged: slips.map(r => r.h.id), focus, note: note.trim() }); onClose(); }} style={{ ...S.btnPrimary }}>Finish review</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ─── STREAK BADGE — flame + streak; hover/tap shows a month-by-month breakdown ─
 function StreakBadge({ habit, allData, streak, isBad }) {
   const [open, setOpen] = useState(false);
@@ -3873,7 +4046,7 @@ const FocusView = memo(function FocusView({ dailyTasks, selectedDate, setSelecte
 });
 
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
-const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, markMiss, habitNotes, setHabitNote, justChecked, getStreakForHabit, openEditHabit, openDeleteHabit, openReviewFor, setModal, openAddHabit, openAddIdentity, onOpenFocus, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, addFocusTask, toggleTask, deleteTask, editTask, toggleStar, toggleFocus, deferTask, reviewTarget, onOpenReview, onDismissReview }) {
+const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, markMiss, habitNotes, setHabitNote, justChecked, getStreakForHabit, openEditHabit, openDeleteHabit, openReviewFor, setModal, openAddHabit, openAddIdentity, onOpenFocus, reviews, onOpenWeeklyReview, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, addFocusTask, toggleTask, deleteTask, editTask, toggleStar, toggleFocus, deferTask, reviewTarget, onOpenReview, onDismissReview }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
   const [matrixExpanded, setMatrixExpanded] = useState(false);
@@ -3968,6 +4141,25 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
       {/* Day Navigator */}
       <DayNavigator selectedDate={selectedDate} setSelectedDate={setSelectedDate} todayKey={todayKey} />
 
+      {/* Weekend nudge — review this week (only if not reviewed yet) */}
+      {(() => {
+        if (selectedDate !== todayKey) return null;
+        const dow = new Date(todayKey + "T00:00").getDay();      // 0=Sun … 6=Sat
+        const wk = weekStartKey(todayKey);
+        if (!(dow === 0 || dow === 6) || (reviews && reviews[wk])) return null;
+        return (
+          <button onClick={onOpenWeeklyReview}
+            style={{ display:"flex", alignItems:"center", gap:11, width:"100%", textAlign:"left", cursor:"pointer", fontFamily:"inherit",
+              background:"#F4EFE3", border:`1px solid ${T.gold}66`, borderRadius:14, padding:"11px 14px", WebkitTapHighlightColor:"transparent" }}>
+            <span aria-hidden="true" style={{ fontSize:20 }}>🗓️</span>
+            <span style={{ flex:1, minWidth:0 }}>
+              <span style={{ display:"block", fontSize:14, fontWeight:800, color:"#7A5A12" }}>Weekly review</span>
+              <span style={{ display:"block", fontSize:12, color:T.text2, marginTop:1 }}>See how your week went &amp; tune next week.</span>
+            </span>
+            <span style={{ flexShrink:0, fontSize:13, fontWeight:800, color:"#fff", background:T.gold, borderRadius:20, padding:"6px 13px" }}>Review →</span>
+          </button>
+        );
+      })()}
 
       {/* Never-miss-twice alert — habits missed yesterday and still pending today */}
       {missedWarnCount > 0 && (
