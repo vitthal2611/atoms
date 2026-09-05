@@ -1332,11 +1332,14 @@ export default function App() {
       const key = dateToKey(d);
       const scheduled = isScheduledOn(frequency, key);
       if (scheduled) {
-        if (data[key] && data[key][habitId] === true) {
-          streak++;
-        } else {
-          if (i > 0) break;
-        }
+        const v = data[key] ? data[key][habitId] : undefined;
+        if (v === true) {
+          streak++;                    // completed on a scheduled day → continues the run
+        } else if (v === "miss") {
+          break;                       // an explicit miss breaks the streak — even today
+        } else if (i > 0) {
+          break;                       // an un-actioned past scheduled day also breaks it
+        }                              // (today un-actioned is grace: you can still do it)
       }
       d.setDate(d.getDate() - 1);
     }
