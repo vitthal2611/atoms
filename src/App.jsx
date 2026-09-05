@@ -67,7 +67,7 @@ const T = {
   border2: "#7DD3FC",
   text:    "#26333B",   // warm charcoal — calmer than the old ocean blue #0C4A6E
   text2:   "#4A6572",   // muted slate for secondary text
-  muted:   "#7C8A94",   // neutral gray for tertiary/meta text
+  muted:   "#5F6E7A",   // neutral gray for tertiary/meta text (darkened to clear 4.5:1 on white)
   accent:  "#0EA5E9",
   primary: "#0284C7",   // was called "green" — renamed for semantic clarity
   green:   "#0284C7",   // alias kept for any legacy references
@@ -3030,7 +3030,7 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onSetPriority,
                       const P = PRIORITIES[pk]; const on = gk === pk;
                       return (
                         <button key={pk} type="button" onClick={()=>{ if(editable && !on) onSetPriority(dateKey, t.id, pk); }} aria-pressed={on} aria-label={`${P.label} priority`}
-                          style={{ fontSize:9.5, fontWeight:900, padding:"3px 8px", border:"none", borderLeft: i ? `1px solid ${T.border}` : "none", lineHeight:1.3,
+                          style={{ fontSize:10, fontWeight:900, padding:"7px 10px", border:"none", borderLeft: i ? `1px solid ${T.border}` : "none", lineHeight:1,
                             cursor: editable ? "pointer" : "default", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
                             background: on ? P.tagBg : "#fff", color: on ? P.tagText : T.muted }}>
                           {P.label.charAt(0)}
