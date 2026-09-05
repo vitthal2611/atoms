@@ -3973,18 +3973,18 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                 {/* Header — full-width cue BANNER (trigger) · ⋯ menu. Time & place sit by the ring. */}
                 {habit.trigger ? (
                   <div style={{ display:"flex", alignItems:"center", gap:9, padding:"10px 8px 10px 13px",
-                    background: habit.kind === "bad" ? "#FBEAF0" : "#F1F5F8",
-                    borderBottom: `1px solid ${habit.kind === "bad" ? "#F4C0D1" : "#E3E9EF"}` }}>
+                    background: habit.kind === "bad" ? "#FBEAF0" : identity.color + "16",
+                    borderBottom: `1px solid ${habit.kind === "bad" ? "#F4C0D1" : identity.color + "30"}` }}>
                     {(() => {
                       const em = habit.icon || cueEmoji(habit.trigger || "");
                       const bad = habit.kind === "bad";
                       return (
-                        <span aria-hidden="true" style={{ width:24, height:24, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, fontSize: em ? 14 : undefined, background: em ? (bad ? "#FBDCE7" : "#E5EAEF") : (bad ? "#C85C88" : "#8A96A2") }}>
+                        <span aria-hidden="true" style={{ width:24, height:24, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, fontSize: em ? 14 : undefined, background: em ? (bad ? "#FBDCE7" : identity.color + "24") : (bad ? "#C85C88" : identity.color) }}>
                           {em || <Ic name={bad ? "warn" : "bolt"} size={14} color="#fff" />}
                         </span>
                       );
                     })()}
-                    <span style={{ flex:1, minWidth:0, fontSize:14, fontWeight:800, letterSpacing:"-0.005em", color: habit.kind === "bad" ? "#8A2F52" : "#3C4A57", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    <span style={{ flex:1, minWidth:0, fontSize:14, fontWeight:800, letterSpacing:"-0.005em", color: habit.kind === "bad" ? "#8A2F52" : (identity.colorDim || identity.color), overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                       {habit.kind === "bad" && <span style={{ fontSize:9.5, fontWeight:900, letterSpacing:"0.09em", color:"#B23A6B", marginRight:6 }}>BREAKING</span>}
                       {capFirst(habit.trigger) || (habit.kind === "bad" ? "When tempted" : "Reminder")}
                     </span>
