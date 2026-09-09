@@ -2533,7 +2533,7 @@ function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHab
 
 // ─── HABIT ROW ────────────────────────────────────────────────────────────────
 // One habit on the timeline: cue → action → coaching (identity header is above).
-function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit }) {
+function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, active = false }) {
   const next = getNextMilestone(streak);
 
   // One cue line above the label: trigger · time · location · frequency.
@@ -2541,8 +2541,14 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
   const freq = habit.frequency;
   const isEveryDay = freq && freq.cadence === "weekly" && (freq.days || []).length === 7;
   // Action-led card: the action (habit.label) is the hero; the trigger, plan and
-  // proof unfold below as the Four Laws worksheet behind the Details toggle.
+  // proof unfold below as the Four Laws worksheet. The active (next-pending) habit
+  // shows the worksheet always; the rest keep it behind a Details toggle.
   const [showDetails, setShowDetails] = useState(false);
+  const detailsOpen = active || showDetails;
+  // When the worksheet is open, the Cue row owns the schedule and the proof chain
+  // owns the streak — so the rail time/place and the top-right streak badge (which
+  // would otherwise repeat those facts) only show while it's closed.
+  const showRail = !detailsOpen && (habit.time || habit.location);
 
   // Daily reflection note — the footer link opens the scrollable journal.
   const [journalOpen, setJournalOpen] = useState(false);
@@ -2561,24 +2567,26 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
       <div style={{ padding: "10px 12px 9px" }}>
         {/* ⏱ time · ✓ ring · intention sentence (place lives in the header banner) */}
         <div style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
-          {/* Left part — check-in on top, then time · place · streak, divided from the action */}
+          {/* Left part — the check-in ring. Time/place ride below it only while the
+              worksheet is closed; when it's open, Law 1 (Cue) owns the schedule. */}
           <span style={{ flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", gap:3,
-            ...((habit.time || habit.location) ? { minWidth:46, paddingRight:11, borderRight:`1.5px solid ${T.surf2}` } : {}) }}>
+            ...(showRail ? { minWidth:46, paddingRight:11, borderRight:`1.5px solid ${T.surf2}` } : {}) }}>
             <HabitRing
               checked={checked}
               missed={missed}
               color={identity.color}
               streak={streak}
               next={next}
+              size={34}
               onClick={() => toggle(habit.id, habit.frequency, identity)}
               label={checked ? `Uncheck: ${habit.label}` : (breaking ? `Mark clean: ${habit.label}` : `Check: ${habit.label}`)}
             />
-            {habit.time && (
+            {showRail && habit.time && (
               <span style={{ fontSize:13, fontWeight:900, lineHeight:1.05, color: checked ? T.muted : breaking ? "#B23A6B" : "#55606B", fontVariantNumeric:"tabular-nums" }}>
                 {to24h(habit.time)}
               </span>
             )}
-            {habit.location && (
+            {showRail && habit.location && (
               <span style={{ fontSize:9.5, fontWeight:700, lineHeight:1.1, color:T.muted, textAlign:"center", maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                 {habit.location}
               </span>
@@ -2612,11 +2620,12 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               }}>I am {shortLabel(identity.label)}</span>
             </span>
           </span>
-          {/* Streak + ⋯ menu ride the top-right of the action (missed → a red tag instead) */}
+          {/* Streak + ⋯ menu ride the top-right of the action. The streak only shows
+              when the worksheet is closed (open → it lives in the proof chain). */}
           <span style={{ flexShrink:0, display:"flex", alignItems:"center", gap:4, marginTop:-1 }}>
             {missed
               ? <span style={{ fontSize:12, fontWeight:800, color:T.red, whiteSpace:"nowrap", background:T.red + "14", padding:"2px 8px", borderRadius:20 }}>Missed</span>
-              : streakBadge}
+              : (!detailsOpen && streakBadge)}
             {menu}
           </span>
         </div>
@@ -2663,7 +2672,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         ))}
 
         {/* Details toggle — a quiet, centered pill (not a heavy full-width bar) */}
-        {!checked && !missed && (
+        {!active && !checked && !missed && (
           <div style={{ display:"flex", justifyContent:"center", marginTop:2 }}>
             <button type="button" onClick={() => setShowDetails(p => !p)} aria-expanded={showDetails}
               aria-label={showDetails ? "Hide details" : "Show plan and proof"}
@@ -2675,13 +2684,17 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
       </div>
 
       {/* ── Details panel — the Four Laws worksheet (proof lives under Law 4) ── */}
-      {showDetails && !checked && !missed && (() => {
+      {detailsOpen && !checked && !missed && (() => {
         const heroColor = breaking ? "#12694E" : identity.color;
         const total = Math.max(voteTotal, votes);          // never show "53 of 50"
         const pct   = total > 0 ? Math.min(100, Math.round((votes / total) * 100)) : 0;
         const LAWC  = [T.primary, "#534AB7", "#0F6E56", "#854F0B"];   // Cue · Craving · Response · Reward
         const em    = habit.icon || cueEmoji(habit.trigger || "");
         const cueParts = [capFirst(habit.trigger), habit.time && to24h(habit.time), habit.location].filter(Boolean).join(" · ");
+        // Only surface the two-minute starter when it actually differs from the action
+        // (for already-tiny habits it just repeats the hero, so it adds nothing).
+        const norm = s => (s || "").trim().toLowerCase().replace(/[.!]+$/, "");
+        const showStarter = habit.starter && norm(habit.starter) !== norm(habit.label);
 
         // One numbered law row: badge + (name · make it …) + body.
         const LawRow = ({ n, name, make, children }) => (
@@ -2718,7 +2731,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
           {/* 3 · Response — make it easy (the two-minute rule) */}
           <LawRow n={3} name="Response" make={breaking ? "make it difficult" : "make it easy"}>
-            {habit.starter && (breaking ? (
+            {showStarter && (breaking ? (
               <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, fontWeight:700, color:"#712B13", background:"#FAECE7", border:"1px solid #F5C4B3", borderRadius:20, padding:"5px 12px", maxWidth:"100%" }}>
                 <Ic name="warn" size={13} color="#712B13" />
                 <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>If tempted: {habit.starter}</span>
@@ -2731,8 +2744,8 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
                 <Ic name="check" size={12} color="#085041" />
               </button>
             ))}
-            {habit.easy && <div style={{ marginTop: habit.starter ? 6 : 0 }}>{habit.easy}</div>}
-            {!habit.starter && !habit.easy && <AddHint label={breaking ? "Add friction" : "Add an easy start"} />}
+            {habit.easy && <div style={{ marginTop: showStarter ? 6 : 0 }}>{habit.easy}</div>}
+            {!showStarter && !habit.easy && <AddHint label={breaking ? "Add friction" : "Add an easy start"} />}
           </LawRow>
 
           {/* 4 · Reward — make it satisfying (track the chain with a checkmark) */}
@@ -4231,6 +4244,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                 {/* Action-led: the action is the hero inside HabitRow; the trigger
                     becomes Law 1 in the details. Streak badge + ⋯ menu ride top-right. */}
                 <HabitRow
+                  active={habit.id === firstPendingId}
                   streakBadge={streakBadge}
                   onEdit={() => openEditHabit(identity.id, habit)}
                   menu={<RowMenu habit={habit} identity={identity} missed={todayData[habit.id] === "miss"} onMiss={markMiss} openEditHabit={openEditHabit} openDeleteHabit={openDeleteHabit} onReview={openReviewFor} habitNotes={habitNotes} allData={allData} setHabitNote={setHabitNote} />}
