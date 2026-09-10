@@ -2760,7 +2760,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
         {/* Step 2: the check-in ring + the action (the hero) */}
         <div style={{ display:"flex", alignItems:"center", gap:11, marginTop: (!checked && !missed && cueText) ? 2 : 0 }}>
-          <span style={{ flexShrink:0, width:36, display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
+          <span style={{ flexShrink:0, width:36, display:"flex", alignItems:"center", justifyContent:"center" }}>
             <HabitRing
               checked={checked}
               missed={missed}
@@ -2771,16 +2771,6 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               onClick={() => toggle(habit.id, habit.frequency, identity)}
               label={checked ? `Uncheck: ${habit.label}` : (breaking ? `Mark clean: ${habit.label}` : `Check: ${habit.label}`)}
             />
-            {habit.time && (
-              <span aria-label={cueText ? `Reminder at ${to24h(habit.time)}` : `At ${to24h(habit.time)}`}
-                style={{ display:"inline-flex", alignItems:"center", gap:2, fontSize:11, fontWeight: cueText ? 700 : 800, lineHeight:1.05, color: cueText ? T.muted : "#55606B", fontVariantNumeric:"tabular-nums" }}>
-                {cueText && <span aria-hidden="true" style={{ fontSize:9, opacity:0.85 }}>🔔</span>}
-                {to24h(habit.time)}
-              </span>
-            )}
-            {habit.location && (
-              <span style={{ fontSize:9, fontWeight:700, lineHeight:1.1, color:T.muted, textAlign:"center", maxWidth:40, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.location}</span>
-            )}
           </span>
           <span
             onClick={() => toggle(habit.id, habit.frequency, identity)}
@@ -2801,6 +2791,18 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             }}>
               {habit.label}
             </span>
+            {/* Time (a reminder when a trigger exists) + place, as a quiet caption */}
+            {!checked && (habit.time || habit.location) && (
+              <span style={{ display:"flex", alignItems:"center", gap:5, marginTop:4, fontSize:11, fontWeight:700, color:T.muted, lineHeight:1.2 }}>
+                {habit.time && (
+                  <span style={{ display:"inline-flex", alignItems:"center", gap:2, fontVariantNumeric:"tabular-nums" }} aria-label={cueText ? `Reminder at ${to24h(habit.time)}` : `At ${to24h(habit.time)}`}>
+                    {cueText && <span aria-hidden="true" style={{ fontSize:9, opacity:0.85 }}>🔔</span>}{to24h(habit.time)}
+                  </span>
+                )}
+                {habit.time && habit.location && <span aria-hidden="true" style={{ color:T.border2 }}>·</span>}
+                {habit.location && <span style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.location}</span>}
+              </span>
+            )}
           </span>
           {missed && (
             <span style={{ flexShrink:0 }}>
