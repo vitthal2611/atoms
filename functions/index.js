@@ -100,11 +100,26 @@ exports.sendHabitReminders = onSchedule(
           }
 
           try {
-            // Data-only message — the service worker builds the notification (no duplicates).
+            // Send a real webpush notification payload so the browser/OS displays it
+            // directly when the app is closed (data-only relied on onBackgroundMessage,
+            // which is unreliable backgrounded and unsupported on iOS). FCM auto-displays
+            // a notification payload, so the SW's onBackgroundMessage won't double it.
             await admin.messaging().send({
               token,
-              data: { title, body, habitId: String(habit.id), link: "https://budgetbuddy-9d7da.web.app/" },
-              webpush: { headers: { Urgency: "high", TTL: "300" } },
+              data: { habitId: String(habit.id) },
+              webpush: {
+                headers: { Urgency: "high", TTL: "300" },
+                notification: {
+                  title,
+                  body,
+                  icon: "https://budgetbuddy-9d7da.web.app/icon-512.png",
+                  badge: "https://budgetbuddy-9d7da.web.app/icon-192.png",
+                  tag: String(habit.id),
+                  renotify: true,
+                  vibrate: [180, 80, 180],
+                },
+                fcmOptions: { link: "https://budgetbuddy-9d7da.web.app/" },
+              },
             });
             console.log(`reminder sent to ${uid} for "${habit.label}" at ${hhmm}`);
           } catch (err) {
