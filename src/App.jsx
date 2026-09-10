@@ -33,7 +33,22 @@ function checkInsRef(uid)    { return doc(_db, "users", uid, "atomicHabits", "ch
 function dailyTasksRef(uid)  { return doc(_db, "users", uid, "atomicHabits", "dailyTasks"); }
 function habitNotesRef(uid)  { return doc(_db, "users", uid, "atomicHabits", "habitNotes"); }
 function reviewsRef(uid)     { return doc(_db, "users", uid, "atomicHabits", "reviews"); }
-function pushTokensRef(uid)  { return doc(_db, "pushTokens", uid); }
+// A stable per-device id so re-enabling on the same device updates one doc
+// (rather than piling up dead tokens). Tokens live in a per-user subcollection
+// so EVERY device the user enables receives reminders, not just the last one.
+function getDeviceId() {
+  try {
+    let id = localStorage.getItem("atoms-device-id");
+    if (!id) {
+      id = (typeof crypto !== "undefined" && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      localStorage.setItem("atoms-device-id", id);
+    }
+    return id;
+  } catch { return "device"; }
+}
+function pushDeviceRef(uid) { return doc(_db, "pushTokens", uid, "devices", getDeviceId()); }
 
 // Turn on per-habit reminders: ask permission, register the FCM service worker,
 // fetch the device token, and store it (+ timezone) so the Cloud Function can push.
@@ -51,7 +66,7 @@ async function enableHabitReminders(uid) {
   const token = await getToken(getMessaging(_fbApp), { vapidKey: _vapidKey, serviceWorkerRegistration: reg });
   if (!token) throw new Error("no-token");
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  await setDoc(pushTokensRef(uid), { uid, token, timezone, updatedAt: Date.now() });
+  await setDoc(pushDeviceRef(uid), { uid, token, timezone, updatedAt: Date.now() });
   return token;
 }
 

@@ -42,7 +42,8 @@ exports.sendHabitReminders = onSchedule(
   { schedule: "every 1 minutes", region: "us-central1", timeoutSeconds: 120, maxInstances: 1 },
   async () => {
     const db = admin.firestore();
-    const snap = await db.collection("pushTokens").get();
+    // Every registered device across all users (pushTokens/{uid}/devices/{deviceId}).
+    const snap = await db.collectionGroup("devices").get();
     if (snap.empty) return;
     const now = new Date();
 
