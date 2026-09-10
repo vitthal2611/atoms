@@ -2377,11 +2377,8 @@ function HabitRing({ checked, missed, color, streak, next, onClick, label, size 
                 strokeDasharray={`${pct * c} ${c}`} strokeLinecap="round"
                 transform={`rotate(-90 ${mid} ${mid})`} style={{ transition: "stroke-dasharray 0.4s ease" }} />
             )}
-            {missed ? (
+            {missed && (
               <path d={`M${mid-4} ${mid-4}l8 8M${mid+4} ${mid-4}l-8 8`} stroke={T.red} strokeWidth="2.2" strokeLinecap="round" />
-            ) : (
-              /* Ghosted check hints the tap-to-complete action */
-              <path d={`M${size*0.3} ${size*0.52}l${size*0.13} ${size*0.13} ${size*0.27} -${size*0.27}`} fill="none" stroke={color} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" opacity="0.3" />
             )}
           </>
         )}
