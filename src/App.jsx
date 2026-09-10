@@ -2800,16 +2800,21 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             }}>
               {habit.label}
             </span>
-            {/* Time (a reminder when a trigger exists) + place, as a quiet caption */}
+            {/* Time (a reminder when a trigger exists) + place, as clear chips */}
             {!checked && (habit.time || habit.location) && (
-              <span style={{ display:"flex", alignItems:"center", gap:5, marginTop:4, fontSize:11, fontWeight:700, color:T.muted, lineHeight:1.2 }}>
+              <span style={{ display:"flex", alignItems:"center", gap:6, marginTop:6, flexWrap:"wrap" }}>
                 {habit.time && (
-                  <span style={{ display:"inline-flex", alignItems:"center", gap:2, fontVariantNumeric:"tabular-nums" }} aria-label={cueText ? `Reminder at ${to24h(habit.time)}` : `At ${to24h(habit.time)}`}>
-                    {cueText && <span aria-hidden="true" style={{ fontSize:9, opacity:0.85 }}>🔔</span>}{to24h(habit.time)}
+                  <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:800, color:Cd, background:C + "12", border:`1px solid ${C}22`, borderRadius:20, padding:"3px 9px", fontVariantNumeric:"tabular-nums" }}
+                    aria-label={cueText ? `Reminder at ${to24h(habit.time)}` : `At ${to24h(habit.time)}`}>
+                    {cueText ? <span aria-hidden="true" style={{ fontSize:10 }}>🔔</span> : <Ic name="clock" size={11} color={Cd} />}{to24h(habit.time)}
                   </span>
                 )}
-                {habit.time && habit.location && <span aria-hidden="true" style={{ color:T.border2 }}>·</span>}
-                {habit.location && <span style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.location}</span>}
+                {habit.location && (
+                  <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:800, color:T.text2, background:T.surf2, borderRadius:20, padding:"3px 9px", maxWidth:170 }}>
+                    <span aria-hidden="true" style={{ fontSize:10 }}>📍</span>
+                    <span style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.location}</span>
+                  </span>
+                )}
               </span>
             )}
           </span>

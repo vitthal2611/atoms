@@ -86,17 +86,21 @@ exports.sendHabitReminders = onSchedule(
           const breaking = habit.kind === "bad";
           const label = String(habit.label || "your habit").trim();
           const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
-          const title = breaking ? `Resist — don't ${lower(label)}` : `Time to ${lower(label)}`;
-          // Lead with the smallest step (2-min rule) so it's easy to start right from the notification.
+          // Title = the action itself, so the notification says exactly what to do.
+          const title = breaking ? `Don't ${lower(label)}` : cap(label);
+          // Body = how/why: the 2-min step, the cue+time, or the identity vote.
+          const when = [habit.time, habit.location].filter(Boolean).join(" · ");
           let body;
           if (breaking) {
             body = habit.starter ? `If tempted: ${habit.starter}` : "Notice the urge and let it pass — you're in control.";
           } else if (habit.starter) {
-            body = `Just start — ${habit.starter}`;
-          } else if (habit.trigger || habit.location) {
-            body = [habit.trigger, habit.location].filter(Boolean).join(" · ");
+            body = `2-min start: ${habit.starter}`;
+          } else if (habit.trigger) {
+            body = `After ${lower(habit.trigger)}${when ? " · " + when : ""}`;
+          } else if (when) {
+            body = `${when} · a vote for ${cap(identity.label || "who you're becoming")}`;
           } else {
-            body = `One small vote for ${cap(identity.label || "who you're becoming")}.`;
+            body = `A vote for ${cap(identity.label || "who you're becoming")}`;
           }
 
           try {
