@@ -2572,6 +2572,33 @@ function LawChip({ icon, name, make, color, emphasis = false, compact = false, c
   );
 }
 
+// ─── IDENTITY NAME — one-line, truncates; hover / tap reveals the full statement ─
+function IdentityName({ text, color }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+  const ref = useRef(null);
+  const W = 248;
+  const show = () => {
+    const r = ref.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 6, left: Math.max(8, Math.min(r.left, window.innerWidth - W - 8)) });
+    setOpen(true);
+  };
+  const hide = () => setOpen(false);
+  return (
+    <span ref={ref} style={{ flex:1, minWidth:0, position:"relative", display:"block", cursor:"default" }}
+      onMouseEnter={show} onMouseLeave={hide}
+      onClick={(e) => { e.stopPropagation(); open ? hide() : show(); }}>
+      <span style={{ display:"block", fontSize:13.5, fontWeight:900, letterSpacing:"-0.01em", lineHeight:1.2, color, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{text}</span>
+      {open && pos && (
+        <div role="tooltip" onClick={e => e.stopPropagation()} style={{ position:"fixed", top:pos.top, left:pos.left, zIndex:200, width:W, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 10px 28px rgba(9,45,75,0.2)", padding:"10px 12px" }}>
+          <div style={{ fontSize:9.5, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color, marginBottom:4 }}>I am</div>
+          <div style={{ fontSize:13.5, fontWeight:800, color:T.text, lineHeight:1.4 }}>{text}</div>
+        </div>
+      )}
+    </span>
+  );
+}
+
 // ─── HABIT ROW ────────────────────────────────────────────────────────────────
 // One habit on the timeline: cue → action → coaching (identity header is above).
 function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, active = false }) {
@@ -2618,10 +2645,11 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         {identity.icon && (
           <span aria-hidden="true" style={{ width:25, height:25, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, background: C + "24" }}>{identity.icon}</span>
         )}
-        {/* "I am" inline with the identity name — one row (wraps only if very long) */}
-        <div style={{ flex:1, minWidth:0, display:"flex", alignItems:"baseline", gap:6, flexWrap:"wrap", rowGap:1 }}>
+        {/* "I am" inline with the identity name on one row; the name truncates and
+            reveals the full statement on hover / tap */}
+        <div style={{ flex:1, minWidth:0, display:"flex", alignItems:"baseline", gap:6 }}>
           <span style={{ flexShrink:0, fontSize:9.5, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking" : "I am"}</span>
-          <span style={{ fontSize:13.5, fontWeight:900, letterSpacing:"-0.01em", lineHeight:1.2, color: Cd, wordBreak:"break-word" }}>{idDisplay}</span>
+          <IdentityName text={idDisplay} color={Cd} />
         </div>
         <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:6 }}>
           <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:11.5, fontWeight:900, color: Cd }} aria-label={`${votes} ${breaking ? "resisted" : "votes cast"}`}>
