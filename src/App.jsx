@@ -2752,7 +2752,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               <span aria-hidden="true" style={{ width:2, flex:1, minHeight:13, background:`linear-gradient(${C}40, ${C})`, borderRadius:2 }} />
             </div>
             <div style={{ flex:1, minWidth:0, paddingTop:1 }}>
-              <div style={{ fontSize:8.5, fontWeight:900, letterSpacing:"0.08em", textTransform:"uppercase", color:T.muted }}>After</div>
+              <div style={{ fontSize:8.5, fontWeight:900, letterSpacing:"0.09em", textTransform:"uppercase", color:T.muted, marginBottom:2 }}>After</div>
               <div style={{ fontSize:13, fontWeight:800, color:T.text2, lineHeight:1.25, wordBreak:"break-word" }}>{cueAnchor}</div>
             </div>
           </div>
@@ -2781,7 +2781,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
           >
             {!checked && !missed && cueText && (
-              <div style={{ fontSize:8.5, fontWeight:900, letterSpacing:"0.08em", textTransform:"uppercase", color:C }}>I will</div>
+              <div style={{ fontSize:8.5, fontWeight:900, letterSpacing:"0.09em", textTransform:"uppercase", color:C, marginBottom:2 }}>I will</div>
             )}
             <span style={{
               display:"block", wordBreak:"break-word", fontSize:18, fontWeight:800, letterSpacing:"-0.01em", lineHeight:1.28,
