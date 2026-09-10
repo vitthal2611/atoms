@@ -2782,11 +2782,12 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             {/* Action is the hero */}
             <span style={{
               display:"block", wordBreak:"break-word", fontSize:16, fontWeight:800, letterSpacing:"-0.01em", lineHeight: 1.3,
+              textTransform:"lowercase",
               color: checked ? T.text2 : missed ? T.muted : T.text,
               textDecoration: checked ? "line-through" : "none",
               textDecorationColor: C + "88",
             }}>
-              {capFirst(habit.label)}
+              {habit.label}
             </span>
             {/* Cue on the next line, plain and muted (hidden once done — the payoff takes over) */}
             {!checked && cueText && (
