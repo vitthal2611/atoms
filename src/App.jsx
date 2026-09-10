@@ -2597,7 +2597,32 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
       transition: "background 0.2s ease",
     }}>
 
-      {/* ── Card body — cue, action, coaching (same layout as the Up Next hero) ── */}
+      {/* ── Identity header — who this vote is for · votes/streak · ⋯ menu.
+          The identity name wraps in full (never trimmed). ── */}
+      <div style={{ display:"flex", alignItems:"flex-start", gap:9, padding:"8px 8px 8px 12px",
+        background: breaking ? "#FBEAF0" : identity.color + "14",
+        borderBottom:`1px solid ${breaking ? "#F4C0D1" : identity.color + "2a"}` }}>
+        {identity.icon && (
+          <span aria-hidden="true" style={{ width:25, height:25, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, marginTop:1, background: breaking ? "#FBDCE7" : identity.color + "24" }}>{identity.icon}</span>
+        )}
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:9, fontWeight:900, letterSpacing:"0.07em", textTransform:"uppercase", color: breaking ? "#B23A6B" : identity.color }}>{breaking ? "Breaking" : "Becoming"}</div>
+          <div style={{ fontSize:13.5, fontWeight:900, letterSpacing:"-0.01em", lineHeight:1.2, color: breaking ? "#8A2F52" : (identity.colorDim || identity.color), wordBreak:"break-word" }}>{capFirst(shortLabel(identity.label))}</div>
+        </div>
+        <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:8, marginTop:2 }}>
+          <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:11.5, fontWeight:900, color: identity.colorDim || identity.color }} aria-label={`${votes} ${breaking ? "resisted" : "votes"}`}>
+            <Ic name="vote" size={12} color={identity.colorDim || identity.color} />{votes}
+          </span>
+          {streak > 0 && (
+            <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:11.5, fontWeight:900, color: breaking ? "#3B6D11" : "#C2751A" }} aria-label={`${streak} ${breaking ? "days clean" : "day"} streak`}>
+              <Ic name={breaking ? "check" : "flame"} size={12} color={breaking ? "#3B6D11" : "#C2751A"} />{streak}
+            </span>
+          )}
+        </span>
+        {menu}
+      </div>
+
+      {/* ── Card body — ring · action · cue ── */}
       <div style={{ padding: "10px 12px 9px" }}>
         {/* ⏱ time · ✓ ring · intention sentence (place lives in the header banner) */}
         <div style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
@@ -2650,34 +2675,13 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
                 <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{cueText}</span>
               </span>
             )}
-            {/* Identity — set apart from the action/trigger with a dashed rule and a
-                small "Becoming" label, so it reads as the "who", not a third text line.
-                When checked, the payoff shows the identity as the hero instead. */}
-            {!checked && (
-              <div style={{ marginTop:9, paddingTop:9, borderTop:`1px dashed ${identity.color}3a` }}>
-                <div style={{ fontSize:9, fontWeight:900, letterSpacing:"0.07em", textTransform:"uppercase", color: identity.color }}>Becoming</div>
-                <div style={{ marginTop:2, fontSize:13.5, fontWeight:900, letterSpacing:"-0.01em", lineHeight:1.2, color: identity.colorDim || identity.color }}>
-                  {capFirst(shortLabel(identity.label))}
-                </div>
-                {/* Votes + streak — the evidence this identity is being built */}
-                <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:8, flexWrap:"wrap" }}>
-                  <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:11, fontWeight:900, color: identity.colorDim || identity.color, background: identity.color + "16", border:`1px solid ${identity.color}33`, borderRadius:20, padding:"3px 9px" }}>
-                    <Ic name="vote" size={11} color={identity.colorDim || identity.color} /> {votes} {breaking ? "resisted" : (votes === 1 ? "vote" : "votes")}
-                  </span>
-                  {streak > 0 && (
-                    <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:11, fontWeight:900, color: breaking ? "#3B6D11" : "#C2751A", background: breaking ? "#EAF3DE" : "#FBF0DA", borderRadius:20, padding:"3px 9px" }}>
-                      <Ic name={breaking ? "check" : "flame"} size={11} color={breaking ? "#3B6D11" : "#C2751A"} /> {streak}{breaking ? " days clean" : `-day streak`}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
           </span>
-          {/* ⋯ menu at top-right (missed → a red tag). Streak lives in the chain row below. */}
-          <span style={{ flexShrink:0, display:"flex", alignItems:"center", gap:4, marginTop:-1 }}>
-            {missed && <span style={{ fontSize:12, fontWeight:800, color:T.red, whiteSpace:"nowrap", background:T.red + "14", padding:"2px 8px", borderRadius:20 }}>Missed</span>}
-            {menu}
-          </span>
+          {/* Missed tag (the ⋯ menu now lives in the identity header) */}
+          {missed && (
+            <span style={{ flexShrink:0, marginTop:1 }}>
+              <span style={{ fontSize:12, fontWeight:800, color:T.red, whiteSpace:"nowrap", background:T.red + "14", padding:"2px 8px", borderRadius:20 }}>Missed</span>
+            </span>
+          )}
         </div>
 
         {/* Never-miss-twice nudge — this habit was missed yesterday */}
