@@ -4444,14 +4444,15 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                   showIdentity={false}
                   hideTime={true}
                   history={(() => {
+                    // The current week, Monday → Sunday (not a rolling last-7-days).
                     const startKey = habitStartKey(habit, allData);
-                    return [...Array(7)].map((_, i) => {
-                      const k = addDaysKey(todayKey, i - 6);
+                    return weekDaysFrom(weekStartKey(todayKey)).map((k) => {
                       const v = (allData[k] || {})[habit.id];
                       const d = new Date(k + "T00:00");
-                      const pre = startKey && k < startKey;
-                      const off = !isScheduledOn(habit.frequency, k); // not due this day
-                      return { status: v === true ? "done" : v === "miss" ? "miss" : "none", letter: "SMTWTFS"[d.getDay()], today: i === 6, pre, off };
+                      const pre = startKey && k < startKey;                 // before the habit existed
+                      const future = k > todayKey;                          // hasn't happened yet
+                      const off = !isScheduledOn(habit.frequency, k) || future; // not due / upcoming → faint
+                      return { status: v === true ? "done" : v === "miss" ? "miss" : "none", letter: "SMTWTFS"[d.getDay()], today: k === todayKey, pre, off };
                     });
                   })()}
                   votes={Object.entries(allData).reduce((n, [k, day]) => n + (day && day[habit.id] === true && isScheduledOn(habit.frequency, k) ? 1 : 0), 0)}
