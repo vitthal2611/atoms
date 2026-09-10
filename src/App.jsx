@@ -2607,17 +2607,18 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
       {/* ── Identity header — who this vote is for · votes/streak · ⋯ menu.
           The identity name wraps in full (never trimmed). ── */}
-      <div style={{ display:"flex", alignItems:"flex-start", gap:9, padding:"8px 8px 8px 12px",
+      <div style={{ display:"flex", alignItems:"center", gap:9, padding:"8px 8px 8px 12px",
         background: C + "14",
         borderBottom:`1px solid ${C}2a` }}>
         {identity.icon && (
-          <span aria-hidden="true" style={{ width:25, height:25, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, marginTop:1, background: C + "24" }}>{identity.icon}</span>
+          <span aria-hidden="true" style={{ width:25, height:25, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, background: C + "24" }}>{identity.icon}</span>
         )}
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontSize:9, fontWeight:900, letterSpacing:"0.07em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking" : "I am"}</div>
-          <div style={{ fontSize:13.5, fontWeight:900, letterSpacing:"-0.01em", lineHeight:1.2, color: Cd, wordBreak:"break-word" }}>{capFirst(shortLabel(identity.label))}</div>
+        {/* "I am" inline with the identity name — one row (wraps only if very long) */}
+        <div style={{ flex:1, minWidth:0, display:"flex", alignItems:"baseline", gap:6, flexWrap:"wrap", rowGap:1 }}>
+          <span style={{ flexShrink:0, fontSize:9.5, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking" : "I am"}</span>
+          <span style={{ fontSize:13.5, fontWeight:900, letterSpacing:"-0.01em", lineHeight:1.2, color: Cd, wordBreak:"break-word" }}>{capFirst(shortLabel(identity.label))}</span>
         </div>
-        <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:8, marginTop:2 }}>
+        <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:8 }}>
           <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:11.5, fontWeight:900, color: Cd }} aria-label={`${votes} ${breaking ? "resisted" : "votes"}`}>
             <Ic name="vote" size={12} color={Cd} />{votes}
           </span>
