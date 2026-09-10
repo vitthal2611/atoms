@@ -2615,7 +2615,7 @@ function IdentityName({ text, color }) {
     <span ref={ref} style={{ flex:1, minWidth:0, position:"relative", display:"block", cursor:"default" }}
       onMouseEnter={show} onMouseLeave={hide}
       onClick={(e) => { e.stopPropagation(); open ? hide() : show(); }}>
-      <span style={{ display:"block", fontSize:13.5, fontWeight:900, letterSpacing:"-0.01em", lineHeight:1.2, color, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{text}</span>
+      <span style={{ display:"block", fontSize:15, fontWeight:900, letterSpacing:"-0.01em", lineHeight:1.2, color, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{text}</span>
       {open && pos && (
         <div role="tooltip" onClick={e => e.stopPropagation()} style={{ position:"fixed", top:pos.top, left:pos.left, zIndex:200, width:W, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 10px 28px rgba(9,45,75,0.2)", padding:"10px 12px" }}>
           <div style={{ fontSize:9.5, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color, marginBottom:4 }}>I am</div>
@@ -2736,7 +2736,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         {/* "I am" inline with the identity name on one row; the name truncates and
             reveals the full statement on hover / tap */}
         <div style={{ flex:1, minWidth:0, display:"flex", alignItems:"baseline", gap:6 }}>
-          <span style={{ flexShrink:0, fontSize:9.5, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking" : "I am"}</span>
+          <span style={{ flexShrink:0, fontSize:10, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking" : "I am"}</span>
           <IdentityName text={idDisplay} color={Cd} />
         </div>
         {/* Metric tray — votes · streak · consistency grouped with hairline dividers */}
@@ -2801,13 +2801,12 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           >
             {/* Action is the hero */}
             <span style={{
-              display:"block", wordBreak:"break-word", fontSize:16, fontWeight:800, letterSpacing:"-0.01em", lineHeight: 1.3,
-              textTransform:"lowercase",
+              display:"block", wordBreak:"break-word", fontSize:18, fontWeight:800, letterSpacing:"-0.01em", lineHeight: 1.28,
               color: checked ? T.text2 : missed ? T.muted : T.text,
               textDecoration: checked ? "line-through" : "none",
               textDecorationColor: C + "88",
             }}>
-              {habit.label}
+              {capFirst(habit.label)}
             </span>
             {/* Cue on the next line, plain and muted (hidden once done — the payoff takes over) */}
             {!checked && cueText && (
