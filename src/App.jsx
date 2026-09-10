@@ -2725,39 +2725,17 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
       transition: "background 0.2s ease",
     }}>
 
-      {/* ── Identity header — identity statement on row 1, metrics on row 2 ── */}
-      <div style={{ padding:"8px 8px 9px 12px", background: C + "14", borderBottom:`1px solid ${C}2a` }}>
-        {/* Row 1 — identity statement + ⋯ menu */}
-        <div style={{ display:"flex", alignItems:"center", gap:9 }}>
-          {identity.icon && (
-            <span aria-hidden="true" style={{ width:25, height:25, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, background: C + "24" }}>{identity.icon}</span>
-          )}
-          <div style={{ flex:1, minWidth:0, display:"flex", alignItems:"baseline", gap:6 }}>
-            <span style={{ flexShrink:0, fontSize:10, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking" : "I am"}</span>
-            <IdentityName text={idDisplay} color={Cd} />
-          </div>
-          {menu}
+      {/* ── Identity header — a single clean identity line (metrics live in the
+          bottom proof row with the chain). ── */}
+      <div style={{ display:"flex", alignItems:"center", gap:9, padding:"9px 8px 9px 12px", background: C + "14", borderBottom:`1px solid ${C}2a` }}>
+        {identity.icon && (
+          <span aria-hidden="true" style={{ width:25, height:25, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, background: C + "24" }}>{identity.icon}</span>
+        )}
+        <div style={{ flex:1, minWidth:0, display:"flex", alignItems:"baseline", gap:6 }}>
+          <span style={{ flexShrink:0, fontSize:10, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking" : "I am"}</span>
+          <IdentityName text={idDisplay} color={Cd} />
         </div>
-        {/* Row 2 — metric tray (votes · streak · consistency), aligned under the identity */}
-        <div style={{ display:"flex", marginTop:8, paddingLeft: identity.icon ? 34 : 0 }}>
-          <span style={{ display:"inline-flex", alignItems:"center", background:"#fff", border:`1px solid ${C}22`, borderRadius:20, padding:"3px 11px" }}>
-            <VotesBadge habit={habit} allData={allData} votes={votes} total={voteMax} color={Cd} isBad={breaking} />
-            {/* Streak only when it adds info (differs from total votes); tap for the breakdown */}
-            {streak > 0 && streak !== votes && (
-              <>
-                <span aria-hidden="true" style={{ width:1, height:12, background:`${C}22`, margin:"0 9px" }} />
-                <StreakBadge habit={habit} allData={allData} streak={streak} isBad={breaking} bare />
-              </>
-            )}
-            {/* Overall 30-day consistency */}
-            {rs.due > 0 && (
-              <>
-                <span aria-hidden="true" style={{ width:1, height:12, background:`${C}22`, margin:"0 9px" }} />
-                <span style={{ fontSize:11.5, fontWeight:900, letterSpacing:"-0.01em", color: rateColor }} aria-label={`${rate} percent consistency over the last 30 scheduled days`}>{rate}%</span>
-              </>
-            )}
-          </span>
-        </div>
+        {menu}
       </div>
 
       {/* ── Card body — ring · action · cue ── */}
@@ -2915,9 +2893,11 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
         const doneColor = breaking ? "#639922" : C;
         return (
-        <div style={{ background:T.bg, borderTop:`1px solid ${T.surf2}`, padding:"9px 14px 10px", display:"flex", alignItems:"center", gap:14 }}
+        <div style={{ background:T.bg, borderTop:`1px solid ${T.surf2}`, padding:"9px 14px 11px" }}
           aria-label={`${votes} of ${total} ${breaking ? "days clean" : "days kept"} toward ${shortLabel(identity.label)}, ${pct} percent${streak > 0 ? `, ${streak} ${breaking ? "days clean streak" : "day streak"}` : ""}`}>
 
+          {/* Laws (icon chips) + the 7-day chain */}
+          <div style={{ display:"flex", alignItems:"center", gap:14 }}>
           {/* Left — the three laws as icon chips (tap/hover for detail) + a note icon */}
           <div style={{ display:"flex", alignItems:"center", gap:7, flexShrink:0 }}>
             <LawChip compact icon="spark" name="Craving" make={breaking ? "make it unattractive" : "make it attractive"} color="#534AB7" emphasis={!habit.attractive}>
@@ -2971,6 +2951,27 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               })}
             </div>
           )}
+          </div>
+
+          {/* Proof row — votes · streak · consistency, all the "how am I doing" signals */}
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginTop:10, paddingTop:9, borderTop:`1px solid ${T.surf2}` }}>
+            <span style={{ display:"inline-flex", alignItems:"center", background:"#fff", border:`1px solid ${C}22`, borderRadius:20, padding:"3px 11px" }}>
+              <VotesBadge habit={habit} allData={allData} votes={votes} total={voteMax} color={Cd} isBad={breaking} />
+              {streak > 0 && streak !== votes && (
+                <>
+                  <span aria-hidden="true" style={{ width:1, height:12, background:`${C}22`, margin:"0 9px" }} />
+                  <StreakBadge habit={habit} allData={allData} streak={streak} isBad={breaking} bare />
+                </>
+              )}
+              {rs.due > 0 && (
+                <>
+                  <span aria-hidden="true" style={{ width:1, height:12, background:`${C}22`, margin:"0 9px" }} />
+                  <span style={{ fontSize:11.5, fontWeight:900, letterSpacing:"-0.01em", color: rateColor }} aria-label={`${rate} percent consistency over the last 30 scheduled days`}>{rate}%</span>
+                </>
+              )}
+            </span>
+            <span aria-hidden="true" style={{ fontSize:9, fontWeight:800, letterSpacing:"0.05em", textTransform:"uppercase", color:"#9AA8B2" }}>Progress</span>
+          </div>
         </div>
         );
       })()}
