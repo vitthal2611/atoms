@@ -2369,14 +2369,19 @@ function HabitRing({ checked, missed, color, streak, next, onClick, label, size 
           </>
         ) : (
           <>
+            {/* Faint fill so the ring reads as a tappable button, not just an outline */}
+            <circle cx={mid} cy={mid} r={r} fill={missed ? "transparent" : color + "12"} />
             <circle cx={mid} cy={mid} r={r} fill="none" stroke={missed ? T.red + "44" : T.surf2} strokeWidth="3" />
             {!missed && pct > 0 && (
               <circle cx={mid} cy={mid} r={r} fill="none" stroke={color} strokeWidth="3"
                 strokeDasharray={`${pct * c} ${c}`} strokeLinecap="round"
                 transform={`rotate(-90 ${mid} ${mid})`} style={{ transition: "stroke-dasharray 0.4s ease" }} />
             )}
-            {missed && (
+            {missed ? (
               <path d={`M${mid-4} ${mid-4}l8 8M${mid+4} ${mid-4}l-8 8`} stroke={T.red} strokeWidth="2.2" strokeLinecap="round" />
+            ) : (
+              /* Ghosted check hints the tap-to-complete action */
+              <path d={`M${size*0.3} ${size*0.52}l${size*0.13} ${size*0.13} ${size*0.27} -${size*0.27}`} fill="none" stroke={color} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" opacity="0.3" />
             )}
           </>
         )}
@@ -2748,7 +2753,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               color={C}
               streak={streak}
               next={next}
-              size={34}
+              size={37}
               onClick={() => toggle(habit.id, habit.frequency, identity)}
               label={checked ? `Uncheck: ${habit.label}` : (breaking ? `Mark clean: ${habit.label}` : `Check: ${habit.label}`)}
             />
