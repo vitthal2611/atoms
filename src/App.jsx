@@ -2777,25 +2777,23 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             aria-label={checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
             style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
           >
-            {/* Cue → action as an inline pair (the habit stack): the cue is quiet
-                muted text, a thin arrow leads into the action hero. The cue hides
-                once checked (the payoff takes over) and for time-only habits. */}
-            <span style={{ display:"flex", alignItems:"baseline", flexWrap:"wrap", columnGap:7, rowGap:2, wordBreak:"break-word" }}>
-              {!checked && cueText && (
-                <span style={{ display:"inline-flex", alignItems:"baseline", gap:5, fontSize:12, fontWeight:800, color:T.muted, lineHeight:1.3 }}>
-                  {cueEm && <span aria-hidden="true">{cueEm}</span>}
-                  <span>{cueText}</span>
-                  <span aria-hidden="true" style={{ color:"#B9CEDE", fontWeight:900, fontSize:14 }}>→</span>
-                </span>
-              )}
-              <span style={{
-                fontSize:18, fontWeight:800, letterSpacing:"-0.01em", lineHeight:1.28,
-                color: checked ? T.text2 : missed ? T.muted : T.text,
-                textDecoration: checked ? "line-through" : "none",
-                textDecorationColor: C + "88",
-              }}>
-                {capFirst(habit.label)}
+            {/* Cue → action (the habit stack): the cue is quiet muted text with a
+                thin arrow; the action is the hero, always on its own line below.
+                Cue hides once checked (the payoff takes over) and for time-only habits. */}
+            {!checked && cueText && (
+              <span style={{ display:"flex", alignItems:"center", gap:5, marginBottom:3, fontSize:12, fontWeight:800, color:T.muted, lineHeight:1.25 }}>
+                {cueEm && <span aria-hidden="true" style={{ flexShrink:0 }}>{cueEm}</span>}
+                <span style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{cueText}</span>
+                <span aria-hidden="true" style={{ color:"#B9CEDE", fontWeight:900, fontSize:14, flexShrink:0 }}>→</span>
               </span>
+            )}
+            <span style={{
+              display:"block", wordBreak:"break-word", fontSize:18, fontWeight:800, letterSpacing:"-0.01em", lineHeight:1.28,
+              color: checked ? T.text2 : missed ? T.muted : T.text,
+              textDecoration: checked ? "line-through" : "none",
+              textDecorationColor: C + "88",
+            }}>
+              {habit.label}
             </span>
           </span>
           {/* Missed tag (the ⋯ menu now lives in the identity header) */}
