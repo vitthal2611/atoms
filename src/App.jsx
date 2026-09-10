@@ -2219,25 +2219,33 @@ const ManageView = memo(function ManageView({ identities, onAddHabit, onEditHabi
       <div style={{ ...S.card, marginTop:18 }}>
         <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.08em", textTransform:"uppercase", color:T.muted, marginBottom:12 }}>Account &amp; settings</div>
 
-        {notifStatus !== "unsupported" && (
-          <div style={{ display:"flex", alignItems:"center", gap:10, paddingBottom:12, marginBottom:12, borderBottom:`1px solid ${T.surf2}` }}>
-            <span style={{ fontSize:18 }} aria-hidden="true">🔔</span>
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:14, fontWeight:700, color:T.text }}>Habit reminders</div>
-              <div style={{ fontSize:12, color:T.muted, marginTop:1 }}>A push at each habit's time.</div>
+        {/* Habit reminders — always shown. On devices where web push isn't available
+            in a browser tab (notably iPhone), guide the user to install the app first. */}
+        <div style={{ display:"flex", alignItems:"center", gap:10, paddingBottom:12, marginBottom:12, borderBottom:`1px solid ${T.surf2}` }}>
+          <span style={{ fontSize:18 }} aria-hidden="true">🔔</span>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:14, fontWeight:700, color:T.text }}>Habit reminders</div>
+            <div style={{ fontSize:12, color:T.muted, marginTop:1, lineHeight:1.4 }}>
+              {notifStatus === "unsupported"
+                ? "Not available in this browser tab. On iPhone: Share → Add to Home Screen, then open the app from that icon and turn this on."
+                : notifStatus === "denied"
+                ? "Blocked. Enable notifications for this site in your browser settings, then reload."
+                : "A push at each habit's time."}
             </div>
-            {notifStatus === "granted" ? (
-              <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:12, fontWeight:700, color:T.primary, flexShrink:0 }}>
-                <Ic name="check" size={13} color={T.primary} /> On
-              </span>
-            ) : (
-              <button onClick={onEnableReminders} disabled={notifBusy}
-                style={{ background:T.primary, border:"none", borderRadius:20, fontSize:13, fontWeight:700, color:"#fff", padding:"7px 15px", cursor: notifBusy ? "default" : "pointer", fontFamily:"inherit", opacity: notifBusy ? 0.6 : 1, flexShrink:0, WebkitTapHighlightColor:"transparent" }}>
-                {notifBusy ? "Enabling…" : "Turn on"}
-              </button>
-            )}
           </div>
-        )}
+          {notifStatus === "unsupported" ? (
+            <span style={{ fontSize:12, fontWeight:700, color:T.muted, flexShrink:0, whiteSpace:"nowrap" }}>Install first</span>
+          ) : notifStatus === "granted" ? (
+            <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:12, fontWeight:700, color:T.primary, flexShrink:0 }}>
+              <Ic name="check" size={13} color={T.primary} /> On
+            </span>
+          ) : (
+            <button onClick={onEnableReminders} disabled={notifBusy}
+              style={{ background:T.primary, border:"none", borderRadius:20, fontSize:13, fontWeight:700, color:"#fff", padding:"7px 15px", cursor: notifBusy ? "default" : "pointer", fontFamily:"inherit", opacity: notifBusy ? 0.6 : 1, flexShrink:0, WebkitTapHighlightColor:"transparent" }}>
+              {notifBusy ? "Enabling…" : "Turn on"}
+            </button>
+          )}
+        </div>
 
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           <span style={{ width:34, height:34, borderRadius:"50%", background:T.surf2, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, fontWeight:800, color:T.primary, flexShrink:0 }} aria-hidden="true">
