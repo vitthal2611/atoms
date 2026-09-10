@@ -2492,9 +2492,11 @@ function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHab
         onClick={e => { e.stopPropagation(); setOpen(true); }}
         aria-label={`Options for ${habit.label}`}
         aria-haspopup="menu"
-        style={{ background: "transparent", border: "none", cursor: "pointer", padding: "3px 4px", lineHeight: 1, WebkitTapHighlightColor: "transparent" }}
+        style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.55)", border: "none", cursor: "pointer", lineHeight: 1, WebkitTapHighlightColor: "transparent" }}
       >
-        <Ic name="dots" size={17} color={missed ? T.red : T.muted} />
+        <span style={{ display: "flex", transform: "rotate(90deg)" }}>
+          <Ic name="dots" size={16} color={missed ? T.red : T.muted} />
+        </span>
       </button>
       {open && (
         <Modal title={habit.label} onClose={() => setOpen(false)}>
@@ -2712,22 +2714,21 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           <span style={{ flexShrink:0, fontSize:9.5, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking" : "I am"}</span>
           <IdentityName text={idDisplay} color={Cd} />
         </div>
-        <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:6 }}>
+        {/* Metric tray — votes · streak · consistency grouped with hairline dividers */}
+        <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", background:"#fff", border:`1px solid ${C}22`, borderRadius:20, padding:"3px 10px" }}>
           <VotesBadge habit={habit} allData={allData} votes={votes} total={voteMax} color={Cd} isBad={breaking} />
           {/* Streak only when it adds info (differs from total votes); tap for the breakdown */}
           {streak > 0 && streak !== votes && (
             <>
-              <span aria-hidden="true" style={{ color: C + "66", fontWeight:900 }}>·</span>
-              <StreakBadge habit={habit} allData={allData} streak={streak} isBad={breaking} />
+              <span aria-hidden="true" style={{ width:1, height:12, background:`${C}22`, margin:"0 8px" }} />
+              <StreakBadge habit={habit} allData={allData} streak={streak} isBad={breaking} bare />
             </>
           )}
           {/* Overall 30-day consistency */}
           {rs.due > 0 && (
             <>
-              <span aria-hidden="true" style={{ color: C + "66", fontWeight:900 }}>·</span>
-              <span style={{ display:"inline-flex", alignItems:"baseline", gap:2 }} aria-label={`${rate} percent consistency over the last 30 scheduled days`}>
-                <span style={{ fontSize:11.5, fontWeight:900, letterSpacing:"-0.01em", color: rateColor }}>{rate}%</span>
-              </span>
+              <span aria-hidden="true" style={{ width:1, height:12, background:`${C}22`, margin:"0 8px" }} />
+              <span style={{ fontSize:11.5, fontWeight:900, letterSpacing:"-0.01em", color: rateColor }} aria-label={`${rate} percent consistency over the last 30 scheduled days`}>{rate}%</span>
             </>
           )}
         </span>
@@ -4131,7 +4132,7 @@ function WeeklyReview({ weekKey, identities, data, todayKey, onAdjust, onSave, o
 }
 
 // ─── STREAK BADGE — flame + streak; hover/tap shows a month-by-month breakdown ─
-function StreakBadge({ habit, allData, streak, isBad }) {
+function StreakBadge({ habit, allData, streak, isBad, bare = false }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState(null);
   const ref = useRef(null);
@@ -4154,7 +4155,9 @@ function StreakBadge({ habit, allData, streak, isBad }) {
     <span ref={ref} style={{ position:"relative", flexShrink:0, display:"inline-flex" }}
       onMouseEnter={show} onMouseLeave={hide}
       onClick={(e) => { e.stopPropagation(); open ? hide() : show(); }}>
-      <span aria-label={`${streak} ${isBad ? "days clean" : "day"} streak, monthly breakdown`} style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:900, lineHeight:1, color:fg, background:bg, borderRadius:20, padding:"3px 9px", cursor:"pointer" }}>
+      <span aria-label={`${streak} ${isBad ? "days clean" : "day"} streak, monthly breakdown`} style={bare
+        ? { display:"inline-flex", alignItems:"center", gap:3, fontSize:11.5, fontWeight:900, lineHeight:1, color:fg, cursor:"pointer" }
+        : { display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:900, lineHeight:1, color:fg, background:bg, borderRadius:20, padding:"3px 9px", cursor:"pointer" }}>
         <Ic name={isBad ? "check" : "flame"} size={12} color={fg} />{streak}
       </span>
       {open && pos && (
