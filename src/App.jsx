@@ -2531,6 +2531,38 @@ function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHab
   );
 }
 
+// ─── LAW CHIP — a small law icon that reveals its coaching on hover / tap ──────
+// Craving / Response / Reward aren't shown in full on the card; the user taps (or
+// hovers) the chip to read that law's detail in a popover — same pattern as the
+// streak badge. `emphasis` gives an unfilled law a faint "add it" look.
+function LawChip({ icon, name, make, color, emphasis = false, children }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+  const ref = useRef(null);
+  const W = 236;
+  const show = () => {
+    const r = ref.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 6, left: Math.max(8, Math.min(r.left, window.innerWidth - W - 8)) });
+    setOpen(true);
+  };
+  const hide = () => setOpen(false);
+  return (
+    <span ref={ref} style={{ position:"relative", display:"inline-flex" }}
+      onMouseEnter={show} onMouseLeave={hide}
+      onClick={(e) => { e.stopPropagation(); open ? hide() : show(); }}>
+      <span aria-label={`${name}: ${make}`} style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11, fontWeight:800, color, background: emphasis ? "transparent" : color + "14", border:`1px ${emphasis ? "dashed" : "solid"} ${color}${emphasis ? "66" : "30"}`, borderRadius:20, padding:"4px 10px", cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
+        <Ic name={icon} size={12} color={color} /> {name}
+      </span>
+      {open && pos && (
+        <div role="tooltip" onClick={e => e.stopPropagation()} style={{ position:"fixed", top:pos.top, left:pos.left, zIndex:200, width:W, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 10px 28px rgba(9,45,75,0.2)", padding:"10px 12px" }}>
+          <div style={{ fontSize:9.5, fontWeight:900, letterSpacing:"0.04em", textTransform:"uppercase", color, marginBottom:5 }}>{name} · <span style={{ color:T.muted }}>{make}</span></div>
+          <div style={{ fontSize:12.5, color:T.text2, lineHeight:1.42 }}>{children}</div>
+        </div>
+      )}
+    </span>
+  );
+}
+
 // ─── HABIT ROW ────────────────────────────────────────────────────────────────
 // One habit on the timeline: cue → action → coaching (identity header is above).
 function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, active = false }) {
@@ -2540,15 +2572,11 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
   // The milestone countdown lives in the micro-bar, not as text.
   const freq = habit.frequency;
   const isEveryDay = freq && freq.cadence === "weekly" && (freq.days || []).length === 7;
-  // Action-led card: the action (habit.label) is the hero; the trigger, plan and
-  // proof unfold below as the Four Laws worksheet. The active (next-pending) habit
-  // shows the worksheet always; the rest keep it behind a Details toggle.
-  const [showDetails, setShowDetails] = useState(false);
-  const detailsOpen = active || showDetails;
-  // When the worksheet is open, the Cue row owns the schedule and the proof chain
-  // owns the streak — so the rail time/place and the top-right streak badge (which
-  // would otherwise repeat those facts) only show while it's closed.
-  const showRail = !detailsOpen && (habit.time || habit.location);
+  // Action-led card: the action (habit.label) is the hero. The cue is an eyebrow-style
+  // line below it; the coaching (Craving/Response/Reward chips) and the chain indicator
+  // sit below and are always visible on every card — no Details toggle.
+  const cueEm = habit.icon || cueEmoji(habit.trigger || "");
+  const cueText = capFirst(habit.trigger) || "";   // just the trigger; time/place ride under the ring
 
   // Daily reflection note — the footer link opens the scrollable journal.
   const [journalOpen, setJournalOpen] = useState(false);
@@ -2567,10 +2595,9 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
       <div style={{ padding: "10px 12px 9px" }}>
         {/* ⏱ time · ✓ ring · intention sentence (place lives in the header banner) */}
         <div style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
-          {/* Left part — the check-in ring. Time/place ride below it only while the
-              worksheet is closed; when it's open, Law 1 (Cue) owns the schedule. */}
+          {/* Left part — check-in ring with the time · place beneath it */}
           <span style={{ flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", gap:3,
-            ...(showRail ? { minWidth:46, paddingRight:11, borderRight:`1.5px solid ${T.surf2}` } : {}) }}>
+            ...((habit.time || habit.location) ? { minWidth:46, paddingRight:11, borderRight:`1.5px solid ${T.surf2}` } : {}) }}>
             <HabitRing
               checked={checked}
               missed={missed}
@@ -2581,18 +2608,18 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               onClick={() => toggle(habit.id, habit.frequency, identity)}
               label={checked ? `Uncheck: ${habit.label}` : (breaking ? `Mark clean: ${habit.label}` : `Check: ${habit.label}`)}
             />
-            {showRail && habit.time && (
+            {habit.time && (
               <span style={{ fontSize:13, fontWeight:900, lineHeight:1.05, color: checked ? T.muted : breaking ? "#B23A6B" : "#55606B", fontVariantNumeric:"tabular-nums" }}>
                 {to24h(habit.time)}
               </span>
             )}
-            {showRail && habit.location && (
+            {habit.location && (
               <span style={{ fontSize:9.5, fontWeight:700, lineHeight:1.1, color:T.muted, textAlign:"center", maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                 {habit.location}
               </span>
             )}
           </span>
-          {/* Action-led: the action is the hero; identity vote sits under it */}
+          {/* Action-led: cue eyebrow (always visible) → action hero → identity vote */}
           <span
             onClick={() => toggle(habit.id, habit.frequency, identity)}
             role="button"
@@ -2601,6 +2628,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             aria-label={checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
             style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
           >
+            {/* Action is the hero */}
             <span style={{
               display:"block", wordBreak:"break-word", fontSize:16, fontWeight:800, letterSpacing:"-0.01em", lineHeight: 1.3,
               color: checked ? T.text2 : missed ? T.muted : T.text,
@@ -2609,23 +2637,24 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             }}>
               {capFirst(habit.label)}
             </span>
-            <span style={{ display:"block", marginTop:4, fontSize:12.5, color:T.text2, lineHeight:1.35 }}>
-              {breaking
-                ? <>{votes > 0 ? <><b style={{ color: identity.colorDim || identity.color, fontWeight:900 }}>{votes}</b> days clean</> : "Staying clean"} · </>
-                : <>{votes > 0 ? <><b style={{ color: identity.colorDim || identity.color, fontWeight:900 }}>{votes}</b> votes</> : "A vote"} for </>}
-              <span style={{
-                fontWeight:900, letterSpacing:"-0.01em",
-                color: identity.colorDim || identity.color,
-                borderBottom: `2px solid ${identity.color}55`,
-              }}>I am {shortLabel(identity.label)}</span>
+            {/* Cue on the next line, plain and muted */}
+            {cueText && (
+              <span style={{ display:"flex", alignItems:"center", gap:5, marginTop:4, fontSize:11.5, fontWeight:700, color:T.muted, lineHeight:1.2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                {cueEm && <span aria-hidden="true" style={{ flexShrink:0 }}>{cueEm}</span>}
+                <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{cueText}</span>
+              </span>
+            )}
+            {/* Identity — clean, no vote count */}
+            <span style={{
+              display:"block", marginTop:4, fontSize:12.5, fontWeight:900, letterSpacing:"-0.01em", lineHeight:1.3,
+              color: identity.colorDim || identity.color,
+            }}>
+              <span style={{ borderBottom: `2px solid ${identity.color}55` }}>I am {shortLabel(identity.label)}</span>
             </span>
           </span>
-          {/* Streak + ⋯ menu ride the top-right of the action. The streak only shows
-              when the worksheet is closed (open → it lives in the proof chain). */}
+          {/* ⋯ menu at top-right (missed → a red tag). Streak lives in the chain row below. */}
           <span style={{ flexShrink:0, display:"flex", alignItems:"center", gap:4, marginTop:-1 }}>
-            {missed
-              ? <span style={{ fontSize:12, fontWeight:800, color:T.red, whiteSpace:"nowrap", background:T.red + "14", padding:"2px 8px", borderRadius:20 }}>Missed</span>
-              : (!detailsOpen && streakBadge)}
+            {missed && <span style={{ fontSize:12, fontWeight:800, color:T.red, whiteSpace:"nowrap", background:T.red + "14", padding:"2px 8px", borderRadius:20 }}>Missed</span>}
             {menu}
           </span>
         </div>
@@ -2671,41 +2700,18 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           </div>
         ))}
 
-        {/* Details toggle — a quiet, centered pill (not a heavy full-width bar) */}
-        {!active && !checked && !missed && (
-          <div style={{ display:"flex", justifyContent:"center", marginTop:2 }}>
-            <button type="button" onClick={() => setShowDetails(p => !p)} aria-expanded={showDetails}
-              aria-label={showDetails ? "Hide details" : "Show plan and proof"}
-              style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 13px", borderRadius:20, border:`1px solid ${showDetails ? T.border2 : T.border}`, background: showDetails ? T.surf2 : "transparent", cursor:"pointer", fontFamily:"inherit", fontSize:12, fontWeight:700, letterSpacing:"0.02em", color:T.muted, WebkitTapHighlightColor:"transparent" }}>
-              {showDetails ? "Hide details" : "Details"} <span aria-hidden="true">{showDetails ? "▴" : "▾"}</span>
-            </button>
-          </div>
-        )}
       </div>
 
-      {/* ── Details panel — the Four Laws worksheet (proof lives under Law 4) ── */}
-      {detailsOpen && !checked && !missed && (() => {
+      {/* ── Coaching panel — Craving/Response/Reward chips + chain, always shown ── */}
+      {!checked && !missed && (() => {
         const heroColor = breaking ? "#12694E" : identity.color;
         const total = Math.max(voteTotal, votes);          // never show "53 of 50"
         const pct   = total > 0 ? Math.min(100, Math.round((votes / total) * 100)) : 0;
-        const LAWC  = [T.primary, "#534AB7", "#0F6E56", "#854F0B"];   // Cue · Craving · Response · Reward
-        const em    = habit.icon || cueEmoji(habit.trigger || "");
-        const cueParts = [capFirst(habit.trigger), habit.time && to24h(habit.time), habit.location].filter(Boolean).join(" · ");
         // Only surface the two-minute starter when it actually differs from the action
         // (for already-tiny habits it just repeats the hero, so it adds nothing).
         const norm = s => (s || "").trim().toLowerCase().replace(/[.!]+$/, "");
         const showStarter = habit.starter && norm(habit.starter) !== norm(habit.label);
 
-        // One numbered law row: badge + (name · make it …) + body.
-        const LawRow = ({ n, name, make, children }) => (
-          <div style={{ display:"grid", gridTemplateColumns:"24px 1fr", gap:10, padding:"10px 0", borderTop: n === 1 ? "none" : `1px solid ${T.surf2}` }}>
-            <span aria-hidden="true" style={{ width:24, height:24, borderRadius:8, background:LAWC[n-1], color:"#fff", fontSize:12, fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center" }}>{n}</span>
-            <div style={{ minWidth:0 }}>
-              <div style={{ fontSize:10, fontWeight:900, letterSpacing:"0.03em", textTransform:"uppercase", color:LAWC[n-1] }}>{name} · <span style={{ color:T.muted, fontWeight:800 }}>{make}</span></div>
-              <div style={{ marginTop:3, fontSize:12.5, color:T.text2, lineHeight:1.4, minWidth:0 }}>{children}</div>
-            </div>
-          </div>
-        );
         // Faint "add" prompt for a law that isn't filled in yet.
         const AddHint = ({ label }) => onEdit ? (
           <button type="button" onClick={onEdit} style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:12, fontWeight:700, color:T.muted, background:"none", border:"none", padding:0, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
@@ -2717,94 +2723,73 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         <div style={{ background:T.bg, borderTop:`1px solid ${T.surf2}`, padding:"4px 13px 13px" }}
           aria-label={`${votes} of ${total} ${breaking ? "days clean" : "days kept"} toward ${shortLabel(identity.label)}, ${pct} percent${streak > 0 ? `, ${streak} ${breaking ? "days clean streak" : "day streak"}` : ""}`}>
 
-          {/* 1 · Cue — make it obvious */}
-          <LawRow n={1} name="Cue" make={breaking ? "make it invisible" : "make it obvious"}>
-            {cueParts
-              ? <span style={{ display:"inline-flex", alignItems:"center", gap:6 }}>{em && <span aria-hidden="true" style={{ fontSize:13 }}>{em}</span>}<span>{cueParts}</span></span>
-              : <AddHint label="Add a cue" />}
-          </LawRow>
+          {/* Laws 2–4 as tap/hover chips — Cue is the eyebrow above the action.
+              Details stay hidden until the user taps the chip they care about. */}
+          <div style={{ display:"flex", flexWrap:"wrap", gap:7, marginBottom:13 }}>
+            <LawChip icon="spark" name="Craving" make={breaking ? "make it unattractive" : "make it attractive"} color="#534AB7" emphasis={!habit.attractive}>
+              {habit.attractive || <AddHint label={breaking ? "Add the real cost" : "Add why it's attractive"} />}
+            </LawChip>
+            <LawChip icon="clock" name="Response" make={breaking ? "make it difficult" : "make it easy"} color="#0F6E56" emphasis={!showStarter && !habit.easy}>
+              {showStarter && (breaking ? (
+                <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, fontWeight:700, color:"#712B13", background:"#FAECE7", border:"1px solid #F5C4B3", borderRadius:20, padding:"5px 12px", maxWidth:"100%" }}>
+                  <Ic name="warn" size={13} color="#712B13" />
+                  <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>If tempted: {habit.starter}</span>
+                </span>
+              ) : (
+                <button onClick={() => toggle(habit.id, habit.frequency, identity)} aria-label={`Do the two-minute version: ${habit.starter}`}
+                  style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, fontWeight:700, color:"#085041", background:"#E1F5EE", border:"1px solid #9FE1CB", borderRadius:20, padding:"5px 12px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", maxWidth:"100%" }}>
+                  <Ic name="clock" size={13} color="#085041" />
+                  <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>2-min: {habit.starter}</span>
+                  <Ic name="check" size={12} color="#085041" />
+                </button>
+              ))}
+              {habit.easy && <div style={{ marginTop: showStarter ? 6 : 0 }}>{habit.easy}</div>}
+              {!showStarter && !habit.easy && <AddHint label={breaking ? "Add friction" : "Add an easy start"} />}
+            </LawChip>
+            <LawChip icon="gift" name="Reward" make={breaking ? "make it unsatisfying" : "make it satisfying"} color="#854F0B" emphasis={!habit.satisfying}>
+              {habit.satisfying
+                ? <span>{breaking ? "If you slip: " : ""}{habit.satisfying}</span>
+                : <AddHint label={breaking ? "Add an accountability cost" : "Add a reward"} />}
+            </LawChip>
+          </div>
 
-          {/* 2 · Craving — make it attractive */}
-          <LawRow n={2} name="Craving" make={breaking ? "make it unattractive" : "make it attractive"}>
-            {habit.attractive || <AddHint label={breaking ? "Add the real cost" : "Add why it's attractive"} />}
-          </LawRow>
-
-          {/* 3 · Response — make it easy (the two-minute rule) */}
-          <LawRow n={3} name="Response" make={breaking ? "make it difficult" : "make it easy"}>
-            {showStarter && (breaking ? (
-              <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, fontWeight:700, color:"#712B13", background:"#FAECE7", border:"1px solid #F5C4B3", borderRadius:20, padding:"5px 12px", maxWidth:"100%" }}>
-                <Ic name="warn" size={13} color="#712B13" />
-                <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>If tempted: {habit.starter}</span>
-              </span>
-            ) : (
-              <button onClick={() => toggle(habit.id, habit.frequency, identity)} aria-label={`Do the two-minute version: ${habit.starter}`}
-                style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, fontWeight:700, color:"#085041", background:"#E1F5EE", border:"1px solid #9FE1CB", borderRadius:20, padding:"5px 12px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", maxWidth:"100%" }}>
-                <Ic name="clock" size={13} color="#085041" />
-                <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>2-min: {habit.starter}</span>
-                <Ic name="check" size={12} color="#085041" />
-              </button>
-            ))}
-            {habit.easy && <div style={{ marginTop: showStarter ? 6 : 0 }}>{habit.easy}</div>}
-            {!showStarter && !habit.easy && <AddHint label={breaking ? "Add friction" : "Add an easy start"} />}
-          </LawRow>
-
-          {/* 4 · Reward — make it satisfying (track the chain with a checkmark) */}
-          <LawRow n={4} name="Reward" make={breaking ? "make it unsatisfying" : "make it satisfying"}>
-            {habit.satisfying
-              ? <span>{breaking ? "If you slip: " : ""}{habit.satisfying}</span>
-              : <AddHint label={breaking ? "Add an accountability cost" : "Add a reward"} />}
-
-            {/* Proof strip — the checkmark record that makes it satisfying */}
-            {Array.isArray(history) && history.length > 0 && (
-              <div style={{ marginTop:10 }}>
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:7 }}>
-                  <span aria-hidden="true" style={{ fontSize:9.5, fontWeight:800, letterSpacing:"0.05em", textTransform:"uppercase", color:T.muted }}>{breaking ? "Clean record · last 7 days" : "Track the chain · last 7 days"}</span>
-                  <span aria-hidden="true" style={{ flexShrink:0, display:"inline-flex", alignItems:"baseline", gap:5, fontSize:12, color:T.text2 }}>
-                    <span><b style={{ color:heroColor, fontWeight:800 }}>{votes}</b>/<b style={{ color:heroColor, fontWeight:800 }}>{total}</b>{breaking ? " clean" : ""}</span>
-                    {streak > 0 && (
-                      <span style={{ display:"inline-flex", alignItems:"center", gap:2, color: breaking ? "#3B6D11" : "#A9741E" }}>
-                        <span style={{ color:T.border2 }}>·</span>
-                        <Ic name={breaking ? "check" : "flame"} size={11} color={breaking ? "#3B6D11" : "#C2751A"} />{streak}
-                      </span>
-                    )}
-                  </span>
-                </div>
-                <div style={{ display:"flex", gap:5 }} aria-hidden="true">
+          {/* Proof strip — the checkmark record that makes it satisfying (always shown) */}
+          {/* Chain indicator — a single compact row of dots: how the last 7 days went */}
+          {Array.isArray(history) && history.length > 0 && (() => {
+            const doneColor = breaking ? "#639922" : identity.color;
+            return (
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}
+                aria-label={`Last 7 days: ${votes} of ${total} kept${streak > 0 ? `, ${streak} streak` : ""}`}>
+                <span aria-hidden="true" style={{ fontSize:9, fontWeight:800, letterSpacing:"0.04em", textTransform:"uppercase", color:T.muted, flexShrink:0 }}>7d</span>
+                <div style={{ display:"flex", gap:4, alignItems:"center" }} aria-hidden="true">
                   {history.map((d, i) => {
-                    const doneColor = breaking ? "#639922" : identity.color;
                     const done = d.status === "done";
                     const miss = d.status === "miss";
-                    if (d.pre || (d.off && d.status === "none")) {
-                      return (
-                        <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
-                          <span style={{ fontSize:9, fontWeight:700, color:T.border2 }}>{d.letter}</span>
-                          <span style={{ width:20, height:20, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                            {d.pre
-                              ? <span style={{ width:4, height:4, borderRadius:"50%", background:T.border2 }} />
-                              : <span style={{ width:10, height:10, borderRadius:"50%", border:`1px dashed ${T.border2}`, boxSizing:"border-box" }} />}
-                          </span>
-                        </div>
-                      );
-                    }
-                    const bg     = done ? doneColor : miss ? "#FCE9F0" : (d.today ? "#fff" : T.surf2);
-                    const border = done ? "none" : miss ? "1.5px solid #F0997B" : d.today ? `2px solid ${doneColor}` : "1px solid transparent";
+                    let dot;
+                    if (d.pre) dot = { width:4, height:4, background:T.border2 };
+                    else if (d.off && d.status === "none") dot = { width:9, height:9, border:`1px dashed ${T.border2}` };
+                    else if (done) dot = { width:9, height:9, background:doneColor };
+                    else if (miss) dot = { width:9, height:9, background:"#EFA48A" };
+                    else if (d.today) dot = { width:9, height:9, border:`2px solid ${doneColor}` };
+                    else dot = { width:9, height:9, background:T.surf2 };
                     return (
-                      <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
-                        <span style={{ fontSize:9, fontWeight:700, color: d.today ? T.text2 : T.muted }}>{d.letter}</span>
-                        <span style={{ width:20, height:20, borderRadius:"50%", background:bg, boxSizing:"border-box", border, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                          {done && <Ic name="check" size={12} color="#fff" />}
-                          {miss && <Ic name="x" size={11} color="#D85A30" />}
-                        </span>
-                      </div>
+                      <span key={i} style={{ width:9, height:9, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                        <span style={{ borderRadius:"50%", boxSizing:"border-box", ...dot }} />
+                      </span>
                     );
                   })}
                 </div>
-                <div aria-hidden="true" style={{ height:6, borderRadius:5, background:T.surf2, overflow:"hidden", marginTop:8 }}>
-                  <div style={{ height:"100%", width:`${pct}%`, borderRadius:5, background:heroColor, transition:"width 0.35s ease" }} />
-                </div>
+                <span aria-hidden="true" style={{ marginLeft:"auto", flexShrink:0, display:"inline-flex", alignItems:"baseline", gap:5, fontSize:11, color:T.text2 }}>
+                  <span><b style={{ color:heroColor, fontWeight:800 }}>{votes}</b>/{total}</span>
+                  {streak > 0 && (
+                    <span style={{ display:"inline-flex", alignItems:"center", gap:2, color: breaking ? "#3B6D11" : "#A9741E" }}>
+                      <Ic name={breaking ? "check" : "flame"} size={10} color={breaking ? "#3B6D11" : "#C2751A"} />{streak}
+                    </span>
+                  )}
+                </span>
               </div>
-            )}
-          </LawRow>
+            );
+          })()}
 
           {/* Daily note — just the link; opens the journal. Note content isn't shown here. */}
           {setHabitNote && (
