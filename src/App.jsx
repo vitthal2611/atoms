@@ -2600,7 +2600,7 @@ function IdentityName({ text, color }) {
 }
 
 // ─── VOTES BADGE — tappable votes total; popover shows check-ins month by month ─
-function VotesBadge({ habit, allData, votes, color, isBad }) {
+function VotesBadge({ habit, allData, votes, total, color, isBad }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState(null);
   const ref = useRef(null);
@@ -2622,13 +2622,13 @@ function VotesBadge({ habit, allData, votes, color, isBad }) {
     <span ref={ref} style={{ position:"relative", display:"inline-flex" }}
       onMouseEnter={show} onMouseLeave={hide}
       onClick={(e) => { e.stopPropagation(); open ? hide() : show(); }}>
-      <span aria-label={`${votes} ${isBad ? "resisted" : "votes cast"}, monthly breakdown`} style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:11.5, fontWeight:900, color, cursor:"pointer" }}>
-        <Ic name="vote" size={12} color={color} />{votes}
+      <span aria-label={`${votes} of ${total} ${isBad ? "resisted" : "votes cast"}, monthly breakdown`} style={{ display:"inline-flex", alignItems:"baseline", gap:3, fontSize:11.5, fontWeight:900, color, cursor:"pointer" }}>
+        <Ic name="vote" size={12} color={color} style={{ alignSelf:"center" }} />{votes}<span style={{ fontWeight:800, color: color + "b0" }}>/{total}</span>
       </span>
       {open && pos && (
         <div role="tooltip" onClick={e => e.stopPropagation()} style={{ position:"fixed", top:pos.top, right:pos.right, zIndex:200, width:W, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 10px 28px rgba(9,45,75,0.2)", padding:"11px 13px" }}>
           <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:12, fontWeight:800, color:T.text, marginBottom:8 }}>
-            <Ic name="vote" size={13} color={color} /> {votes} {isBad ? "resisted" : "votes cast"}
+            <Ic name="vote" size={13} color={color} /> {votes} of {total} {isBad ? "resisted" : "votes cast"}
           </div>
           <div style={{ fontSize:10, fontWeight:800, letterSpacing:"0.05em", textTransform:"uppercase", color:T.muted, marginBottom:5 }}>{isBad ? "Resisted / month" : "Votes / month"}</div>
           {months.length === 0 ? (
@@ -2682,6 +2682,9 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
   const idName = shortLabel(identity.label);
   const idDisplay = /^[A-Z][A-Z]/.test(idName) ? idName : idName.charAt(0).toLowerCase() + idName.slice(1);
 
+  // Votes shown as a ratio: votes cast / opportunities (scheduled days since start).
+  const voteMax = Math.max(voteTotal, votes);   // never show "74/72"
+
   // Rolling 30-day consistency (kept ÷ due) — the "is this sticking?" health signal,
   // shown in the header alongside votes/streak. Colour signals health.
   const rs = habitReviewStats(habit, allData, getTodayKey(), 30);
@@ -2710,7 +2713,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           <IdentityName text={idDisplay} color={Cd} />
         </div>
         <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:6 }}>
-          <VotesBadge habit={habit} allData={allData} votes={votes} color={Cd} isBad={breaking} />
+          <VotesBadge habit={habit} allData={allData} votes={votes} total={voteMax} color={Cd} isBad={breaking} />
           {/* Streak only when it adds info (differs from total votes); tap for the breakdown */}
           {streak > 0 && streak !== votes && (
             <>
