@@ -2599,6 +2599,58 @@ function IdentityName({ text, color }) {
   );
 }
 
+// ─── VOTES BADGE — tappable votes total; popover shows check-ins month by month ─
+function VotesBadge({ habit, allData, votes, color, isBad }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+  const ref = useRef(null);
+  const W = 200;
+  const months = useMemo(() => {
+    const m = {};
+    for (const k in allData) {
+      if (allData[k] && allData[k][habit.id] === true && isScheduledOn(habit.frequency, k)) {
+        const ym = k.slice(0, 7);
+        m[ym] = (m[ym] || 0) + 1;
+      }
+    }
+    return Object.entries(m).sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 6);
+  }, [allData, habit.id, habit.frequency]);
+  const max = months.reduce((a, [, c]) => Math.max(a, c), 1);
+  const show = () => { const r = ref.current?.getBoundingClientRect(); if (r) setPos({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) }); setOpen(true); };
+  const hide = () => setOpen(false);
+  return (
+    <span ref={ref} style={{ position:"relative", display:"inline-flex" }}
+      onMouseEnter={show} onMouseLeave={hide}
+      onClick={(e) => { e.stopPropagation(); open ? hide() : show(); }}>
+      <span aria-label={`${votes} ${isBad ? "resisted" : "votes cast"}, monthly breakdown`} style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:11.5, fontWeight:900, color, cursor:"pointer" }}>
+        <Ic name="vote" size={12} color={color} />{votes}
+      </span>
+      {open && pos && (
+        <div role="tooltip" onClick={e => e.stopPropagation()} style={{ position:"fixed", top:pos.top, right:pos.right, zIndex:200, width:W, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 10px 28px rgba(9,45,75,0.2)", padding:"11px 13px" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:12, fontWeight:800, color:T.text, marginBottom:8 }}>
+            <Ic name="vote" size={13} color={color} /> {votes} {isBad ? "resisted" : "votes cast"}
+          </div>
+          <div style={{ fontSize:10, fontWeight:800, letterSpacing:"0.05em", textTransform:"uppercase", color:T.muted, marginBottom:5 }}>{isBad ? "Resisted / month" : "Votes / month"}</div>
+          {months.length === 0 ? (
+            <div style={{ fontSize:12, color:T.muted }}>No check-ins yet.</div>
+          ) : months.map(([ym, cnt]) => {
+            const lbl = new Date(ym + "-01T00:00").toLocaleDateString(navigator.language || undefined, { month:"short" });
+            return (
+              <div key={ym} style={{ display:"flex", alignItems:"center", gap:8, marginTop:6 }}>
+                <span style={{ width:30, fontSize:11, fontWeight:700, color:T.text2 }}>{lbl}</span>
+                <span style={{ flex:1, height:6, borderRadius:99, background:T.surf2, overflow:"hidden" }}>
+                  <span style={{ display:"block", height:"100%", width:`${Math.round((cnt / max) * 100)}%`, background:color, borderRadius:99 }} />
+                </span>
+                <span style={{ width:18, textAlign:"right", fontSize:11, fontWeight:800, color, fontVariantNumeric:"tabular-nums" }}>{cnt}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </span>
+  );
+}
+
 // ─── HABIT ROW ────────────────────────────────────────────────────────────────
 // One habit on the timeline: cue → action → coaching (identity header is above).
 function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, active = false }) {
@@ -2652,9 +2704,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           <IdentityName text={idDisplay} color={Cd} />
         </div>
         <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:6 }}>
-          <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:11.5, fontWeight:900, color: Cd }} aria-label={`${votes} ${breaking ? "resisted" : "votes cast"}`}>
-            <Ic name="vote" size={12} color={Cd} />{votes}
-          </span>
+          <VotesBadge habit={habit} allData={allData} votes={votes} color={Cd} isBad={breaking} />
           {/* Streak only when it adds info (differs from total votes); tap for the breakdown */}
           {streak > 0 && streak !== votes && (
             <>
