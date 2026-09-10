@@ -941,7 +941,10 @@ function IdentityForm({ initial={}, onSave, onCancel, mode="add" }) {
   return (
     <div style={{ padding:"0 20px 20px" }}>
       <label htmlFor={labelId} style={S.fieldLabel}>Identity Statement *</label>
-      <input id={labelId} style={S.input} value={form.label} onChange={e=>set("label",e.target.value)} placeholder="e.g. I am a Creative Person" autoFocus maxLength={60} />
+      <input id={labelId} style={S.input} value={form.label} onChange={e=>set("label",e.target.value)} placeholder="e.g. the type of person who shows up daily" autoFocus maxLength={60} />
+      <div style={{ fontSize:11, color:T.muted, marginTop:5, lineHeight:1.5 }}>
+        Atomic Habits: name <b style={{ color:T.text2 }}>who you're becoming</b>, present tense — it reads as <b style={{ color:T.text2 }}>"I am {form.label.trim() ? shortLabel(form.label.trim()) : "…"}"</b>. Every check-in is a vote for it. Try <i>"a calm and focused person"</i> or <i>"the type of person who never misses a workout."</i>
+      </div>
 
       <label style={S.fieldLabel}>Icon</label>
       <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:16 }} role="group" aria-label="Choose icon">
@@ -2606,7 +2609,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           <span aria-hidden="true" style={{ width:25, height:25, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, marginTop:1, background: breaking ? "#FBDCE7" : identity.color + "24" }}>{identity.icon}</span>
         )}
         <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontSize:9, fontWeight:900, letterSpacing:"0.07em", textTransform:"uppercase", color: breaking ? "#B23A6B" : identity.color }}>{breaking ? "Breaking" : "Becoming"}</div>
+          <div style={{ fontSize:9, fontWeight:900, letterSpacing:"0.07em", textTransform:"uppercase", color: breaking ? "#B23A6B" : identity.color }}>{breaking ? "Breaking" : "I am"}</div>
           <div style={{ fontSize:13.5, fontWeight:900, letterSpacing:"-0.01em", lineHeight:1.2, color: breaking ? "#8A2F52" : (identity.colorDim || identity.color), wordBreak:"break-word" }}>{capFirst(shortLabel(identity.label))}</div>
         </div>
         <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:8, marginTop:2 }}>
