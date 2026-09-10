@@ -2753,7 +2753,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               label={checked ? `Uncheck: ${habit.label}` : (breaking ? `Mark clean: ${habit.label}` : `Check: ${habit.label}`)}
             />
             {habit.time && (
-              <span style={{ fontSize:13, fontWeight:900, lineHeight:1.05, color: checked ? T.muted : breaking ? "#B23A6B" : "#55606B", fontVariantNumeric:"tabular-nums" }}>
+              <span style={{ fontSize:11.5, fontWeight:700, lineHeight:1.05, color: T.muted, fontVariantNumeric:"tabular-nums" }}>
                 {to24h(habit.time)}
               </span>
             )}
