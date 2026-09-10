@@ -2598,6 +2598,11 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
   const C  = breaking ? "#D4537E" : T.primary;
   const Cd = breaking ? "#8A2F52" : "#0A5E86";
 
+  // Identity name reads as a natural sentence after "I am" — lowercase the first
+  // letter unless it's an acronym (starts with two capitals, e.g. "AI Architect").
+  const idName = shortLabel(identity.label);
+  const idDisplay = /^[A-Z][A-Z]/.test(idName) ? idName : idName.charAt(0).toLowerCase() + idName.slice(1);
+
   return (
     <div className="habit-card" style={{
       background: checked ? C + "1f" : missed ? T.red + "10" : "transparent",
@@ -2616,16 +2621,18 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         {/* "I am" inline with the identity name — one row (wraps only if very long) */}
         <div style={{ flex:1, minWidth:0, display:"flex", alignItems:"baseline", gap:6, flexWrap:"wrap", rowGap:1 }}>
           <span style={{ flexShrink:0, fontSize:9.5, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking" : "I am"}</span>
-          <span style={{ fontSize:13.5, fontWeight:900, letterSpacing:"-0.01em", lineHeight:1.2, color: Cd, wordBreak:"break-word" }}>{capFirst(shortLabel(identity.label))}</span>
+          <span style={{ fontSize:13.5, fontWeight:900, letterSpacing:"-0.01em", lineHeight:1.2, color: Cd, wordBreak:"break-word" }}>{idDisplay}</span>
         </div>
-        <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:8 }}>
-          <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:11.5, fontWeight:900, color: Cd }} aria-label={`${votes} ${breaking ? "resisted" : "votes"}`}>
+        <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:6 }}>
+          <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:11.5, fontWeight:900, color: Cd }} aria-label={`${votes} ${breaking ? "resisted" : "votes cast"}`}>
             <Ic name="vote" size={12} color={Cd} />{votes}
           </span>
-          {streak > 0 && (
-            <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:11.5, fontWeight:900, color: breaking ? "#3B6D11" : "#C2751A" }} aria-label={`${streak} ${breaking ? "days clean" : "day"} streak`}>
-              <Ic name={breaking ? "check" : "flame"} size={12} color={breaking ? "#3B6D11" : "#C2751A"} />{streak}
-            </span>
+          {/* Streak only when it adds info (differs from total votes); tap for the breakdown */}
+          {streak > 0 && streak !== votes && (
+            <>
+              <span aria-hidden="true" style={{ color: C + "66", fontWeight:900 }}>·</span>
+              <StreakBadge habit={habit} allData={allData} streak={streak} isBad={breaking} />
+            </>
           )}
         </span>
         {menu}
