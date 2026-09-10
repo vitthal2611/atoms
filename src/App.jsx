@@ -2691,7 +2691,10 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
   // line below it; the coaching (Craving/Response/Reward chips) and the chain indicator
   // sit below and are always visible on every card — no Details toggle.
   const cueEm = habit.icon || cueEmoji(habit.trigger || "");
-  const cueText = capFirst(habit.trigger) || "";   // just the trigger; time/place ride under the ring
+  const cueText = capFirst(habit.trigger) || "";   // full trigger
+  // Anchor = the trigger with a leading "After " stripped, so the flow can label it
+  // "After" once and show just the thing you're stacking onto (e.g. "my morning walk").
+  const cueAnchor = (habit.trigger || "").replace(/^\s*after\s+/i, "").trim() || cueText;
 
   // Daily reflection note — the footer link opens the scrollable journal.
   const [journalOpen, setJournalOpen] = useState(false);
@@ -2740,11 +2743,24 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
       {/* ── Card body — ring · action · cue ── */}
       <div style={{ padding: "10px 12px 9px" }}>
-        {/* ring + time/place · action · cue — columns centered to each other */}
-        <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
-          {/* Left part — check-in ring with the time · place beneath it */}
-          <span style={{ flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", gap:4,
-            ...((habit.time || habit.location) ? { minWidth:46, paddingRight:11, borderRight:`1.5px solid ${T.surf2}` } : {}) }}>
+        {/* ── Trigger → Action flow. Step 1: the cue's emoji is a node with a rail
+              that drops into the check-in ring below. Only when pending + a trigger. ── */}
+        {!checked && !missed && cueText && (
+          <div style={{ display:"flex", gap:11 }}>
+            <div style={{ width:36, flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center" }}>
+              <span aria-hidden="true" style={{ width:26, height:26, borderRadius:"50%", background:C + "14", border:`1.5px solid ${C}33`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, flexShrink:0 }}>{cueEm || "⏱"}</span>
+              <span aria-hidden="true" style={{ width:2, flex:1, minHeight:13, background:`linear-gradient(${C}40, ${C})`, borderRadius:2 }} />
+            </div>
+            <div style={{ flex:1, minWidth:0, paddingTop:1 }}>
+              <div style={{ fontSize:8.5, fontWeight:900, letterSpacing:"0.08em", textTransform:"uppercase", color:T.muted }}>After</div>
+              <div style={{ fontSize:13, fontWeight:800, color:T.text2, lineHeight:1.25, wordBreak:"break-word" }}>{cueAnchor}</div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: the check-in ring + the action (the hero) */}
+        <div style={{ display:"flex", alignItems:"center", gap:11, marginTop: (!checked && !missed && cueText) ? 2 : 0 }}>
+          <span style={{ flexShrink:0, width:36, display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
             <HabitRing
               checked={checked}
               missed={missed}
@@ -2757,18 +2773,15 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             />
             {habit.time && (
               <span aria-label={cueText ? `Reminder at ${to24h(habit.time)}` : `At ${to24h(habit.time)}`}
-                style={{ display:"inline-flex", alignItems:"center", gap:2, fontSize:11.5, fontWeight: cueText ? 700 : 800, lineHeight:1.05, color: cueText ? T.muted : "#55606B", fontVariantNumeric:"tabular-nums" }}>
+                style={{ display:"inline-flex", alignItems:"center", gap:2, fontSize:11, fontWeight: cueText ? 700 : 800, lineHeight:1.05, color: cueText ? T.muted : "#55606B", fontVariantNumeric:"tabular-nums" }}>
                 {cueText && <span aria-hidden="true" style={{ fontSize:9, opacity:0.85 }}>🔔</span>}
                 {to24h(habit.time)}
               </span>
             )}
             {habit.location && (
-              <span style={{ fontSize:9.5, fontWeight:700, lineHeight:1.1, color:T.muted, textAlign:"center", maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                {habit.location}
-              </span>
+              <span style={{ fontSize:9, fontWeight:700, lineHeight:1.1, color:T.muted, textAlign:"center", maxWidth:40, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.location}</span>
             )}
           </span>
-          {/* Action-led: cue eyebrow (always visible) → action hero → identity vote */}
           <span
             onClick={() => toggle(habit.id, habit.frequency, identity)}
             role="button"
@@ -2777,15 +2790,8 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             aria-label={checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
             style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
           >
-            {/* Cue → action (the habit stack): the cue is quiet muted text with a
-                thin arrow; the action is the hero, always on its own line below.
-                Cue hides once checked (the payoff takes over) and for time-only habits. */}
-            {!checked && cueText && (
-              <span style={{ display:"flex", alignItems:"center", gap:5, marginBottom:3, fontSize:12, fontWeight:800, color:T.muted, lineHeight:1.25 }}>
-                {cueEm && <span aria-hidden="true" style={{ flexShrink:0 }}>{cueEm}</span>}
-                <span style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{cueText}</span>
-                <span aria-hidden="true" style={{ color:"#B9CEDE", fontWeight:900, fontSize:14, flexShrink:0 }}>→</span>
-              </span>
+            {!checked && !missed && cueText && (
+              <div style={{ fontSize:8.5, fontWeight:900, letterSpacing:"0.08em", textTransform:"uppercase", color:C }}>I will</div>
             )}
             <span style={{
               display:"block", wordBreak:"break-word", fontSize:18, fontWeight:800, letterSpacing:"-0.01em", lineHeight:1.28,
@@ -2796,9 +2802,8 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               {habit.label}
             </span>
           </span>
-          {/* Missed tag (the ⋯ menu now lives in the identity header) */}
           {missed && (
-            <span style={{ flexShrink:0, marginTop:1 }}>
+            <span style={{ flexShrink:0 }}>
               <span style={{ fontSize:12, fontWeight:800, color:T.red, whiteSpace:"nowrap", background:T.red + "14", padding:"2px 8px", borderRadius:20 }}>Missed</span>
             </span>
           )}
