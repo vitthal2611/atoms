@@ -2637,20 +2637,22 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             }}>
               {capFirst(habit.label)}
             </span>
-            {/* Cue on the next line, plain and muted */}
-            {cueText && (
+            {/* Cue on the next line, plain and muted (hidden once done — the payoff takes over) */}
+            {!checked && cueText && (
               <span style={{ display:"flex", alignItems:"center", gap:5, marginTop:4, fontSize:11.5, fontWeight:700, color:T.muted, lineHeight:1.2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                 {cueEm && <span aria-hidden="true" style={{ flexShrink:0 }}>{cueEm}</span>}
                 <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{cueText}</span>
               </span>
             )}
-            {/* Identity — clean, no vote count */}
-            <span style={{
-              display:"block", marginTop:4, fontSize:12.5, fontWeight:900, letterSpacing:"-0.01em", lineHeight:1.3,
-              color: identity.colorDim || identity.color,
-            }}>
-              <span style={{ borderBottom: `2px solid ${identity.color}55` }}>I am {shortLabel(identity.label)}</span>
-            </span>
+            {/* Identity — clean, no vote count. When checked, the payoff shows it as the hero. */}
+            {!checked && (
+              <span style={{
+                display:"block", marginTop:4, fontSize:12.5, fontWeight:900, letterSpacing:"-0.01em", lineHeight:1.3,
+                color: identity.colorDim || identity.color,
+              }}>
+                <span style={{ borderBottom: `2px solid ${identity.color}55` }}>I am {shortLabel(identity.label)}</span>
+              </span>
+            )}
           </span>
           {/* ⋯ menu at top-right (missed → a red tag). Streak lives in the chain row below. */}
           <span style={{ flexShrink:0, display:"flex", alignItems:"center", gap:4, marginTop:-1 }}>
@@ -2666,39 +2668,69 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           </div>
         )}
 
-        {/* Payoff the moment it's checked — reward (build) or a clean day (break) */}
-        {checked && (breaking ? (
-          <div style={{ marginTop:9, marginLeft:0, minWidth:0 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:11, background:"#EAF3DE", border:"1px solid #97C459", borderRadius:12, padding:"11px 13px" }}>
-              <Ic name="check" size={22} color="#3B6D11" />
-              <span style={{ flex:1, minWidth:0 }}>
-                <span style={{ display:"block", fontSize:10, fontWeight:700, letterSpacing:"0.04em", textTransform:"uppercase", color:"#639922" }}>{streak} {streak === 1 ? "day" : "days"} clean</span>
-                <span style={{ display:"block", fontSize:14, fontWeight:600, color:"#173404" }}>You resisted — well done.</span>
+        {/* Payoff the moment it's checked — message → identity vote → reward → streak */}
+        {checked && (() => {
+          // Warm, rotating messages (deterministic by streak so they change as it grows).
+          const GOOD_MSGS = ["You showed up again. 🎯", "That's who you are.", "Another brick in the wall. 💪", "This is how identities are built.", "You kept the chain alive."];
+          const BAD_MSGS  = ["Well held — you stayed clean.", "You stayed in control.", "Resisted — that's the new you.", "Urge surfed. Nicely done."];
+          const list = breaking ? BAD_MSGS : GOOD_MSGS;
+          const msg  = list[Math.max(0, streak) % list.length];
+          const accent = breaking ? "#12694E" : (identity.colorDim || identity.color);
+          const hue    = breaking ? "#2E9E76" : identity.color;
+          return (
+          <div style={{ position:"relative", marginTop:10, borderRadius:13, overflow:"hidden",
+            background: `linear-gradient(105deg, ${hue}14, ${hue}22)`, border:`1px solid ${hue}3a`, padding:"12px 13px" }}>
+            <span aria-hidden="true" style={{ position:"absolute", top:8, right:11, fontSize:14, opacity:0.85 }}>✨</span>
+
+            {/* Motivational message */}
+            <div style={{ fontSize:14.5, fontWeight:900, letterSpacing:"-0.01em", lineHeight:1.25, color: breaking ? "#12694E" : "#7A4A08", paddingRight:18 }}>{msg}</div>
+
+            {/* +1 vote to become <identity> */}
+            <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:9 }}>
+              <span aria-hidden="true" style={{ flexShrink:0, width:19, height:19, borderRadius:6, background:hue, color:"#fff", fontSize:11, fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center" }}>+1</span>
+              <span style={{ minWidth:0, fontSize:12.5, color:T.text2 }}>
+                a vote to become <span style={{ fontWeight:900, color:accent, borderBottom:`2px solid ${hue}66` }}>I am {shortLabel(identity.label)}</span>
               </span>
             </div>
-            <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:9, paddingLeft:2 }}>
-              <Ic name="check" size={13} color="#3B6D11" />
-              <span style={{ flex:1, minWidth:0, fontSize:12, color:"#3B6D11", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>+1 vote toward <span style={{ fontWeight:700 }}>{shortLabel(identity.label)}</span></span>
-            </div>
-          </div>
-        ) : (
-          <div style={{ marginTop:9, marginLeft:0, minWidth:0 }}>
-            {habit.satisfying && (
-              <div style={{ display:"flex", alignItems:"center", gap:11, background:"#FAEEDA", border:"1px solid #FAC775", borderRadius:12, padding:"11px 13px" }}>
-                <Ic name="gift" size={22} color="#854F0B" />
-                <span style={{ flex:1, minWidth:0 }}>
-                  <span style={{ display:"block", fontSize:10, fontWeight:700, letterSpacing:"0.04em", textTransform:"uppercase", color:"#BA7517" }}>Your reward</span>
-                  <span style={{ display:"block", fontSize:14, fontWeight:600, color:"#633806", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.satisfying}</span>
-                </span>
-              </div>
+
+            {/* Reward — the immediate, satisfying payoff */}
+            {breaking ? (
+              habit.satisfying && (
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginTop:11, background:"#fff", border:`1px solid ${hue}33`, borderRadius:11, padding:"9px 11px" }}>
+                  <span aria-hidden="true" style={{ flexShrink:0, width:34, height:34, borderRadius:10, background:"#EAF3DE", display:"flex", alignItems:"center", justifyContent:"center" }}><Ic name="check" size={17} color="#3B6D11" /></span>
+                  <span style={{ minWidth:0 }}>
+                    <span style={{ display:"block", fontSize:9.5, fontWeight:900, letterSpacing:"0.05em", textTransform:"uppercase", color:"#4E7D1E" }}>Held the line</span>
+                    <span style={{ display:"block", fontSize:13, fontWeight:800, color:"#173404", lineHeight:1.3 }}>{habit.satisfying}</span>
+                  </span>
+                </div>
+              )
+            ) : (
+              habit.satisfying ? (
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginTop:11, background:"#fff", border:`1px solid ${hue}33`, borderRadius:11, padding:"9px 11px" }}>
+                  <span aria-hidden="true" style={{ flexShrink:0, width:34, height:34, borderRadius:10, background:hue + "1a", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>🎁</span>
+                  <span style={{ minWidth:0 }}>
+                    <span style={{ display:"block", fontSize:9.5, fontWeight:900, letterSpacing:"0.05em", textTransform:"uppercase", color:"#C2751A" }}>Your reward — enjoy it now</span>
+                    <span style={{ display:"block", fontSize:13, fontWeight:800, color:"#5E3E08", lineHeight:1.3 }}>{habit.satisfying}</span>
+                  </span>
+                </div>
+              ) : onEdit ? (
+                <button type="button" onClick={onEdit} aria-label="Add a reward for this habit"
+                  style={{ display:"inline-flex", alignItems:"center", gap:6, marginTop:11, fontSize:12, fontWeight:800, color:"#B98A2E", background:"#fff", border:`1px dashed ${hue}66`, borderRadius:20, padding:"6px 12px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
+                  <Ic name="gift" size={13} color="#B98A2E" /> Add a reward to make it satisfying
+                </button>
+              ) : null
             )}
-            <div style={{ display:"flex", alignItems:"center", gap:6, marginTop: habit.satisfying ? 9 : 0, paddingLeft:2 }}>
-              <Ic name="check" size={13} color="#0F6E56" />
-              <span style={{ flex:1, minWidth:0, fontSize:12, color:"#0F6E56", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>+1 vote toward <span style={{ fontWeight:700 }}>{shortLabel(identity.label)}</span></span>
-              <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:700, color:"#854F0B" }}><Ic name="flame" size={12} color="#854F0B" /> {streak}</span>
+
+            {/* Streak + votes — quiet evidence */}
+            <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:11 }}>
+              <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:12, fontWeight:900, color: breaking ? "#3B6D11" : "#C2751A", background: breaking ? "#EAF3DE" : "#FBF0DA", borderRadius:20, padding:"3px 10px" }}>
+                <Ic name={breaking ? "check" : "flame"} size={12} color={breaking ? "#3B6D11" : "#C2751A"} /> {streak}
+              </span>
+              <span style={{ fontSize:11.5, fontWeight:700, color:T.muted }}>{breaking ? "days clean" : "day streak"} · {votes} {breaking ? "resisted" : "votes cast"}</span>
             </div>
           </div>
-        ))}
+          );
+        })()}
 
       </div>
 
