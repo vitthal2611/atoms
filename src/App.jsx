@@ -2535,7 +2535,7 @@ function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHab
 // Craving / Response / Reward aren't shown in full on the card; the user taps (or
 // hovers) the chip to read that law's detail in a popover — same pattern as the
 // streak badge. `emphasis` gives an unfilled law a faint "add it" look.
-function LawChip({ icon, name, make, color, emphasis = false, children }) {
+function LawChip({ icon, name, make, color, emphasis = false, compact = false, children }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState(null);
   const ref = useRef(null);
@@ -2550,9 +2550,15 @@ function LawChip({ icon, name, make, color, emphasis = false, children }) {
     <span ref={ref} style={{ position:"relative", display:"inline-flex" }}
       onMouseEnter={show} onMouseLeave={hide}
       onClick={(e) => { e.stopPropagation(); open ? hide() : show(); }}>
+      {compact ? (
+        <span aria-label={`${name}: ${make}`} style={{ width:28, height:28, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", color, background: emphasis ? "transparent" : color + "14", border:`1px ${emphasis ? "dashed" : "solid"} ${color}${emphasis ? "66" : "33"}`, cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
+          <Ic name={icon} size={14} color={color} />
+        </span>
+      ) : (
       <span aria-label={`${name}: ${make}`} style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11, fontWeight:800, color, background: emphasis ? "transparent" : color + "14", border:`1px ${emphasis ? "dashed" : "solid"} ${color}${emphasis ? "66" : "30"}`, borderRadius:20, padding:"4px 10px", cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
         <Ic name={icon} size={12} color={color} /> {name}
       </span>
+      )}
       {open && pos && (
         <div role="tooltip" onClick={e => e.stopPropagation()} style={{ position:"fixed", top:pos.top, left:pos.left, zIndex:200, width:W, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 10px 28px rgba(9,45,75,0.2)", padding:"10px 12px" }}>
           <div style={{ fontSize:9.5, fontWeight:900, letterSpacing:"0.04em", textTransform:"uppercase", color, marginBottom:5 }}>{name} · <span style={{ color:T.muted }}>{make}</span></div>
@@ -2751,17 +2757,17 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           </button>
         ) : <span style={{ color:T.muted, fontStyle:"italic" }}>Not set yet</span>;
 
+        const doneColor = breaking ? "#639922" : identity.color;
         return (
-        <div style={{ background:T.bg, borderTop:`1px solid ${T.surf2}`, padding:"4px 13px 13px" }}
+        <div style={{ background:T.bg, borderTop:`1px solid ${T.surf2}`, padding:"8px 13px 9px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, flexWrap:"wrap", rowGap:8 }}
           aria-label={`${votes} of ${total} ${breaking ? "days clean" : "days kept"} toward ${shortLabel(identity.label)}, ${pct} percent${streak > 0 ? `, ${streak} ${breaking ? "days clean streak" : "day streak"}` : ""}`}>
 
-          {/* Laws 2–4 as tap/hover chips — Cue is the eyebrow above the action.
-              Details stay hidden until the user taps the chip they care about. */}
-          <div style={{ display:"flex", flexWrap:"wrap", gap:7, marginBottom:13 }}>
-            <LawChip icon="spark" name="Craving" make={breaking ? "make it unattractive" : "make it attractive"} color="#534AB7" emphasis={!habit.attractive}>
+          {/* Left — the three laws as icon chips (tap/hover for detail) + a note icon */}
+          <div style={{ display:"flex", alignItems:"center", gap:7 }}>
+            <LawChip compact icon="spark" name="Craving" make={breaking ? "make it unattractive" : "make it attractive"} color="#534AB7" emphasis={!habit.attractive}>
               {habit.attractive || <AddHint label={breaking ? "Add the real cost" : "Add why it's attractive"} />}
             </LawChip>
-            <LawChip icon="clock" name="Response" make={breaking ? "make it difficult" : "make it easy"} color="#0F6E56" emphasis={!showStarter && !habit.easy}>
+            <LawChip compact icon="clock" name="Response" make={breaking ? "make it difficult" : "make it easy"} color="#0F6E56" emphasis={!showStarter && !habit.easy}>
               {showStarter && (breaking ? (
                 <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, fontWeight:700, color:"#712B13", background:"#FAECE7", border:"1px solid #F5C4B3", borderRadius:20, padding:"5px 12px", maxWidth:"100%" }}>
                   <Ic name="warn" size={13} color="#712B13" />
@@ -2778,59 +2784,49 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               {habit.easy && <div style={{ marginTop: showStarter ? 6 : 0 }}>{habit.easy}</div>}
               {!showStarter && !habit.easy && <AddHint label={breaking ? "Add friction" : "Add an easy start"} />}
             </LawChip>
-            <LawChip icon="gift" name="Reward" make={breaking ? "make it unsatisfying" : "make it satisfying"} color="#854F0B" emphasis={!habit.satisfying}>
+            <LawChip compact icon="gift" name="Reward" make={breaking ? "make it unsatisfying" : "make it satisfying"} color="#854F0B" emphasis={!habit.satisfying}>
               {habit.satisfying
                 ? <span>{breaking ? "If you slip: " : ""}{habit.satisfying}</span>
                 : <AddHint label={breaking ? "Add an accountability cost" : "Add a reward"} />}
             </LawChip>
+            {setHabitNote && (
+              <button type="button" onClick={() => setJournalOpen(true)} aria-label={note ? "Open note" : "Add a note for today"}
+                style={{ width:28, height:28, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", background: note ? "#534AB714" : "transparent", border:`1px ${note ? "solid" : "dashed"} ${note ? "#534AB733" : T.border}`, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
+                <Ic name="pencil" size={13} color={note ? "#534AB7" : T.muted} />
+              </button>
+            )}
           </div>
 
-          {/* Proof strip — the checkmark record that makes it satisfying (always shown) */}
-          {/* Chain indicator — a single compact row of dots: how the last 7 days went */}
-          {Array.isArray(history) && history.length > 0 && (() => {
-            const doneColor = breaking ? "#639922" : identity.color;
-            return (
-              <div style={{ display:"flex", alignItems:"center", gap:8 }}
-                aria-label={`Last 7 days: ${votes} of ${total} kept${streak > 0 ? `, ${streak} streak` : ""}`}>
-                <span aria-hidden="true" style={{ fontSize:9, fontWeight:800, letterSpacing:"0.04em", textTransform:"uppercase", color:T.muted, flexShrink:0 }}>7d</span>
-                <div style={{ display:"flex", gap:4, alignItems:"center" }} aria-hidden="true">
-                  {history.map((d, i) => {
-                    const done = d.status === "done";
-                    const miss = d.status === "miss";
-                    let dot;
-                    if (d.pre) dot = { width:4, height:4, background:T.border2 };
-                    else if (d.off && d.status === "none") dot = { width:9, height:9, border:`1px dashed ${T.border2}` };
-                    else if (done) dot = { width:9, height:9, background:doneColor };
-                    else if (miss) dot = { width:9, height:9, background:"#EFA48A" };
-                    else if (d.today) dot = { width:9, height:9, border:`2px solid ${doneColor}` };
-                    else dot = { width:9, height:9, background:T.surf2 };
-                    return (
-                      <span key={i} style={{ width:9, height:9, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                        <span style={{ borderRadius:"50%", boxSizing:"border-box", ...dot }} />
-                      </span>
-                    );
-                  })}
-                </div>
-                <span aria-hidden="true" style={{ marginLeft:"auto", flexShrink:0, display:"inline-flex", alignItems:"baseline", gap:5, fontSize:11, color:T.text2 }}>
-                  <span><b style={{ color:heroColor, fontWeight:800 }}>{votes}</b>/{total}</span>
-                  {streak > 0 && (
-                    <span style={{ display:"inline-flex", alignItems:"center", gap:2, color: breaking ? "#3B6D11" : "#A9741E" }}>
-                      <Ic name={breaking ? "check" : "flame"} size={10} color={breaking ? "#3B6D11" : "#C2751A"} />{streak}
+          {/* Right — the chain: how the last 7 days went + votes / streak */}
+          {Array.isArray(history) && history.length > 0 && (
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <div style={{ display:"flex", gap:4, alignItems:"center" }} aria-hidden="true">
+                {history.map((d, i) => {
+                  const done = d.status === "done";
+                  const miss = d.status === "miss";
+                  let dot;
+                  if (d.pre) dot = { width:4, height:4, background:T.border2 };
+                  else if (d.off && d.status === "none") dot = { width:9, height:9, border:`1px dashed ${T.border2}` };
+                  else if (done) dot = { width:9, height:9, background:doneColor };
+                  else if (miss) dot = { width:9, height:9, background:"#EFA48A" };
+                  else if (d.today) dot = { width:9, height:9, border:`2px solid ${doneColor}` };
+                  else dot = { width:9, height:9, background:T.surf2 };
+                  return (
+                    <span key={i} style={{ width:9, height:9, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                      <span style={{ borderRadius:"50%", boxSizing:"border-box", ...dot }} />
                     </span>
-                  )}
-                </span>
+                  );
+                })}
               </div>
-            );
-          })()}
-
-          {/* Daily note — just the link; opens the journal. Note content isn't shown here. */}
-          {setHabitNote && (
-          <div style={{ marginTop:12 }}>
-            <button type="button" onClick={() => setJournalOpen(true)} aria-label={note ? "Open note" : "Add a note for today"}
-              style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, fontWeight:700, color: note ? "#534AB7" : T.muted, background: T.surf2, borderRadius:8, border:"none", padding:"6px 11px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
-              <Ic name="pencil" size={12} color="#534AB7" /> {note ? "Note" : "Add note"}
-            </button>
-          </div>
+              <span aria-hidden="true" style={{ flexShrink:0, display:"inline-flex", alignItems:"baseline", gap:4, fontSize:11, color:T.text2 }}>
+                <span><b style={{ color:heroColor, fontWeight:800 }}>{votes}</b>/{total}</span>
+                {streak > 0 && (
+                  <span style={{ display:"inline-flex", alignItems:"center", gap:2, color: breaking ? "#3B6D11" : "#A9741E" }}>
+                    <Ic name={breaking ? "check" : "flame"} size={10} color={breaking ? "#3B6D11" : "#C2751A"} />{streak}
+                  </span>
+                )}
+              </span>
+            </div>
           )}
         </div>
         );
