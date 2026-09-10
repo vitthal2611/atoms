@@ -2659,6 +2659,17 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
                 <div style={{ marginTop:2, fontSize:13.5, fontWeight:900, letterSpacing:"-0.01em", lineHeight:1.2, color: identity.colorDim || identity.color }}>
                   {capFirst(shortLabel(identity.label))}
                 </div>
+                {/* Votes + streak — the evidence this identity is being built */}
+                <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:8, flexWrap:"wrap" }}>
+                  <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:11, fontWeight:900, color: identity.colorDim || identity.color, background: identity.color + "16", border:`1px solid ${identity.color}33`, borderRadius:20, padding:"3px 9px" }}>
+                    <Ic name="vote" size={11} color={identity.colorDim || identity.color} /> {votes} {breaking ? "resisted" : (votes === 1 ? "vote" : "votes")}
+                  </span>
+                  {streak > 0 && (
+                    <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:11, fontWeight:900, color: breaking ? "#3B6D11" : "#C2751A", background: breaking ? "#EAF3DE" : "#FBF0DA", borderRadius:20, padding:"3px 9px" }}>
+                      <Ic name={breaking ? "check" : "flame"} size={11} color={breaking ? "#3B6D11" : "#C2751A"} /> {streak}{breaking ? " days clean" : `-day streak`}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
           </span>
@@ -2744,7 +2755,6 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
       {/* ── Coaching panel — Craving/Response/Reward chips + chain, always shown ── */}
       {!checked && !missed && (() => {
-        const heroColor = breaking ? "#12694E" : identity.color;
         const total = Math.max(voteTotal, votes);          // never show "53 of 50"
         const pct   = total > 0 ? Math.min(100, Math.round((votes / total) * 100)) : 0;
         // Only surface the two-minute starter when it actually differs from the action
@@ -2799,37 +2809,26 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             )}
           </div>
 
-          {/* Right — the chain spreads across the free space as a 7-day timeline,
-              with the votes / streak count anchored at the far right */}
+          {/* Right — the 7-day chain timeline (votes/streak now live with the identity) */}
           {Array.isArray(history) && history.length > 0 && (
-            <>
-              <div style={{ flex:1, minWidth:0, display:"flex", alignItems:"center", justifyContent:"center", gap:9 }} aria-hidden="true">
-                {history.map((d, i) => {
-                  const done = d.status === "done";
-                  const miss = d.status === "miss";
-                  let dot;
-                  if (d.pre) dot = { width:6, height:6, background:T.border2 };
-                  else if (d.off && d.status === "none") dot = { width:12, height:12, border:`1.5px dashed ${T.border2}` };
-                  else if (done) dot = { width:12, height:12, background:doneColor };
-                  else if (miss) dot = { width:12, height:12, background:"#EFA48A" };
-                  else if (d.today) dot = { width:12, height:12, border:`2px solid ${doneColor}` };
-                  else dot = { width:12, height:12, background:T.surf2 };
-                  return (
-                    <span key={i} style={{ width:12, height:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                      <span style={{ borderRadius:"50%", boxSizing:"border-box", ...dot }} />
-                    </span>
-                  );
-                })}
-              </div>
-              <span aria-hidden="true" style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:6, fontSize:12, color:T.text2 }}>
-                <span><b style={{ color:heroColor, fontWeight:900 }}>{votes}</b>/{total}</span>
-                {streak > 0 && (
-                  <span style={{ display:"inline-flex", alignItems:"center", gap:2, fontWeight:800, color: breaking ? "#3B6D11" : "#A9741E" }}>
-                    <Ic name={breaking ? "check" : "flame"} size={11} color={breaking ? "#3B6D11" : "#C2751A"} />{streak}
+            <div style={{ flex:1, minWidth:0, display:"flex", alignItems:"center", justifyContent:"flex-end", gap:9 }} aria-hidden="true">
+              {history.map((d, i) => {
+                const done = d.status === "done";
+                const miss = d.status === "miss";
+                let dot;
+                if (d.pre) dot = { width:6, height:6, background:T.border2 };
+                else if (d.off && d.status === "none") dot = { width:12, height:12, border:`1.5px dashed ${T.border2}` };
+                else if (done) dot = { width:12, height:12, background:doneColor };
+                else if (miss) dot = { width:12, height:12, background:"#EFA48A" };
+                else if (d.today) dot = { width:12, height:12, border:`2px solid ${doneColor}` };
+                else dot = { width:12, height:12, background:T.surf2 };
+                return (
+                  <span key={i} style={{ width:12, height:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    <span style={{ borderRadius:"50%", boxSizing:"border-box", ...dot }} />
                   </span>
-                )}
-              </span>
-            </>
+                );
+              })}
+            </div>
           )}
         </div>
         );
