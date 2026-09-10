@@ -2650,14 +2650,16 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
                 <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{cueText}</span>
               </span>
             )}
-            {/* Identity — clean, no vote count. When checked, the payoff shows it as the hero. */}
+            {/* Identity — set apart from the action/trigger with a dashed rule and a
+                small "Becoming" label, so it reads as the "who", not a third text line.
+                When checked, the payoff shows the identity as the hero instead. */}
             {!checked && (
-              <span style={{
-                display:"block", marginTop:4, fontSize:12.5, fontWeight:900, letterSpacing:"-0.01em", lineHeight:1.3,
-                color: identity.colorDim || identity.color,
-              }}>
-                <span style={{ borderBottom: `2px solid ${identity.color}55` }}>I am {shortLabel(identity.label)}</span>
-              </span>
+              <div style={{ marginTop:9, paddingTop:9, borderTop:`1px dashed ${identity.color}3a` }}>
+                <div style={{ fontSize:9, fontWeight:900, letterSpacing:"0.07em", textTransform:"uppercase", color: identity.color }}>Becoming</div>
+                <div style={{ marginTop:2, fontSize:13.5, fontWeight:900, letterSpacing:"-0.01em", lineHeight:1.2, color: identity.colorDim || identity.color }}>
+                  {capFirst(shortLabel(identity.label))}
+                </div>
+              </div>
             )}
           </span>
           {/* ⋯ menu at top-right (missed → a red tag). Streak lives in the chain row below. */}
