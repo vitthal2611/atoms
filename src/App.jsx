@@ -2742,8 +2742,8 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
       {/* ── Card body — ring · action · cue ── */}
       <div style={{ padding: "10px 12px 9px" }}>
-        {/* ⏱ time · ✓ ring · intention sentence (place lives in the header banner) */}
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
+        {/* ring + time/place · action · cue — columns centered to each other */}
+        <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
           {/* Left part — check-in ring with the time · place beneath it */}
           <span style={{ flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", gap:3,
             ...((habit.time || habit.location) ? { minWidth:46, paddingRight:11, borderRight:`1.5px solid ${T.surf2}` } : {}) }}>
