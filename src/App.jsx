@@ -2761,11 +2761,11 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
         const doneColor = breaking ? "#639922" : identity.color;
         return (
-        <div style={{ background:T.bg, borderTop:`1px solid ${T.surf2}`, padding:"8px 13px 9px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, flexWrap:"wrap", rowGap:8 }}
+        <div style={{ background:T.bg, borderTop:`1px solid ${T.surf2}`, padding:"9px 14px 10px", display:"flex", alignItems:"center", gap:14 }}
           aria-label={`${votes} of ${total} ${breaking ? "days clean" : "days kept"} toward ${shortLabel(identity.label)}, ${pct} percent${streak > 0 ? `, ${streak} ${breaking ? "days clean streak" : "day streak"}` : ""}`}>
 
           {/* Left — the three laws as icon chips (tap/hover for detail) + a note icon */}
-          <div style={{ display:"flex", alignItems:"center", gap:7 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:7, flexShrink:0 }}>
             <LawChip compact icon="spark" name="Craving" make={breaking ? "make it unattractive" : "make it attractive"} color="#534AB7" emphasis={!habit.attractive}>
               {habit.attractive || <AddHint label={breaking ? "Add the real cost" : "Add why it's attractive"} />}
             </LawChip>
@@ -2799,36 +2799,37 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             )}
           </div>
 
-          {/* Right — the chain: how the last 7 days went + votes / streak */}
+          {/* Right — the chain spreads across the free space as a 7-day timeline,
+              with the votes / streak count anchored at the far right */}
           {Array.isArray(history) && history.length > 0 && (
-            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <div style={{ display:"flex", gap:4, alignItems:"center" }} aria-hidden="true">
+            <>
+              <div style={{ flex:1, minWidth:0, display:"flex", alignItems:"center", justifyContent:"space-between", gap:6 }} aria-hidden="true">
                 {history.map((d, i) => {
                   const done = d.status === "done";
                   const miss = d.status === "miss";
                   let dot;
-                  if (d.pre) dot = { width:4, height:4, background:T.border2 };
-                  else if (d.off && d.status === "none") dot = { width:9, height:9, border:`1px dashed ${T.border2}` };
-                  else if (done) dot = { width:9, height:9, background:doneColor };
-                  else if (miss) dot = { width:9, height:9, background:"#EFA48A" };
-                  else if (d.today) dot = { width:9, height:9, border:`2px solid ${doneColor}` };
-                  else dot = { width:9, height:9, background:T.surf2 };
+                  if (d.pre) dot = { width:6, height:6, background:T.border2 };
+                  else if (d.off && d.status === "none") dot = { width:12, height:12, border:`1.5px dashed ${T.border2}` };
+                  else if (done) dot = { width:12, height:12, background:doneColor };
+                  else if (miss) dot = { width:12, height:12, background:"#EFA48A" };
+                  else if (d.today) dot = { width:12, height:12, border:`2px solid ${doneColor}` };
+                  else dot = { width:12, height:12, background:T.surf2 };
                   return (
-                    <span key={i} style={{ width:9, height:9, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    <span key={i} style={{ width:12, height:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                       <span style={{ borderRadius:"50%", boxSizing:"border-box", ...dot }} />
                     </span>
                   );
                 })}
               </div>
-              <span aria-hidden="true" style={{ flexShrink:0, display:"inline-flex", alignItems:"baseline", gap:4, fontSize:11, color:T.text2 }}>
-                <span><b style={{ color:heroColor, fontWeight:800 }}>{votes}</b>/{total}</span>
+              <span aria-hidden="true" style={{ flexShrink:0, display:"inline-flex", alignItems:"baseline", gap:6, fontSize:12, color:T.text2 }}>
+                <span><b style={{ color:heroColor, fontWeight:900 }}>{votes}</b>/{total}</span>
                 {streak > 0 && (
-                  <span style={{ display:"inline-flex", alignItems:"center", gap:2, color: breaking ? "#3B6D11" : "#A9741E" }}>
-                    <Ic name={breaking ? "check" : "flame"} size={10} color={breaking ? "#3B6D11" : "#C2751A"} />{streak}
+                  <span style={{ display:"inline-flex", alignItems:"center", gap:2, fontWeight:800, color: breaking ? "#3B6D11" : "#A9741E" }}>
+                    <Ic name={breaking ? "check" : "flame"} size={11} color={breaking ? "#3B6D11" : "#C2751A"} />{streak}
                   </span>
                 )}
               </span>
-            </div>
+            </>
           )}
         </div>
         );
