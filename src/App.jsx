@@ -2593,28 +2593,33 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
   // Breaking a bad habit inverts the whole loop (resist, clean days, accountability).
   const breaking = habit.kind === "bad";
 
+  // One consistent card colour across the whole app (NOT the per-identity hue).
+  // Good habits share the ocean-blue theme colour; bad habits stay rose.
+  const C  = breaking ? "#D4537E" : T.primary;
+  const Cd = breaking ? "#8A2F52" : "#0A5E86";
+
   return (
     <div className="habit-card" style={{
-      background: checked ? identity.color + "1f" : missed ? T.red + "10" : "transparent",
-      borderTop: first ? "none" : `1px solid ${identity.color}22`,
+      background: checked ? C + "1f" : missed ? T.red + "10" : "transparent",
+      borderTop: first ? "none" : `1px solid ${C}22`,
       transition: "background 0.2s ease",
     }}>
 
       {/* ── Identity header — who this vote is for · votes/streak · ⋯ menu.
           The identity name wraps in full (never trimmed). ── */}
       <div style={{ display:"flex", alignItems:"flex-start", gap:9, padding:"8px 8px 8px 12px",
-        background: breaking ? "#FBEAF0" : identity.color + "14",
-        borderBottom:`1px solid ${breaking ? "#F4C0D1" : identity.color + "2a"}` }}>
+        background: C + "14",
+        borderBottom:`1px solid ${C}2a` }}>
         {identity.icon && (
-          <span aria-hidden="true" style={{ width:25, height:25, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, marginTop:1, background: breaking ? "#FBDCE7" : identity.color + "24" }}>{identity.icon}</span>
+          <span aria-hidden="true" style={{ width:25, height:25, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, marginTop:1, background: C + "24" }}>{identity.icon}</span>
         )}
         <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontSize:9, fontWeight:900, letterSpacing:"0.07em", textTransform:"uppercase", color: breaking ? "#B23A6B" : identity.color }}>{breaking ? "Breaking" : "I am"}</div>
-          <div style={{ fontSize:13.5, fontWeight:900, letterSpacing:"-0.01em", lineHeight:1.2, color: breaking ? "#8A2F52" : (identity.colorDim || identity.color), wordBreak:"break-word" }}>{capFirst(shortLabel(identity.label))}</div>
+          <div style={{ fontSize:9, fontWeight:900, letterSpacing:"0.07em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking" : "I am"}</div>
+          <div style={{ fontSize:13.5, fontWeight:900, letterSpacing:"-0.01em", lineHeight:1.2, color: Cd, wordBreak:"break-word" }}>{capFirst(shortLabel(identity.label))}</div>
         </div>
         <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:8, marginTop:2 }}>
-          <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:11.5, fontWeight:900, color: identity.colorDim || identity.color }} aria-label={`${votes} ${breaking ? "resisted" : "votes"}`}>
-            <Ic name="vote" size={12} color={identity.colorDim || identity.color} />{votes}
+          <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:11.5, fontWeight:900, color: Cd }} aria-label={`${votes} ${breaking ? "resisted" : "votes"}`}>
+            <Ic name="vote" size={12} color={Cd} />{votes}
           </span>
           {streak > 0 && (
             <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:11.5, fontWeight:900, color: breaking ? "#3B6D11" : "#C2751A" }} aria-label={`${streak} ${breaking ? "days clean" : "day"} streak`}>
@@ -2635,7 +2640,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             <HabitRing
               checked={checked}
               missed={missed}
-              color={identity.color}
+              color={C}
               streak={streak}
               next={next}
               size={34}
@@ -2667,7 +2672,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               display:"block", wordBreak:"break-word", fontSize:16, fontWeight:800, letterSpacing:"-0.01em", lineHeight: 1.3,
               color: checked ? T.text2 : missed ? T.muted : T.text,
               textDecoration: checked ? "line-through" : "none",
-              textDecorationColor: identity.color + "88",
+              textDecorationColor: C + "88",
             }}>
               {capFirst(habit.label)}
             </span>
@@ -2701,8 +2706,8 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           const BAD_MSGS  = ["Well held — you stayed clean.", "You stayed in control.", "Resisted — that's the new you.", "Urge surfed. Nicely done."];
           const list = breaking ? BAD_MSGS : GOOD_MSGS;
           const msg  = list[Math.max(0, streak) % list.length];
-          const accent = breaking ? "#12694E" : (identity.colorDim || identity.color);
-          const hue    = breaking ? "#2E9E76" : identity.color;
+          const accent = breaking ? "#12694E" : Cd;
+          const hue    = breaking ? "#2E9E76" : C;
           return (
           <div style={{ position:"relative", marginTop:10, borderRadius:13, overflow:"hidden",
             background: `linear-gradient(105deg, ${hue}14, ${hue}22)`, border:`1px solid ${hue}3a`, padding:"12px 13px" }}>
@@ -2776,7 +2781,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           </button>
         ) : <span style={{ color:T.muted, fontStyle:"italic" }}>Not set yet</span>;
 
-        const doneColor = breaking ? "#639922" : identity.color;
+        const doneColor = breaking ? "#639922" : C;
         return (
         <div style={{ background:T.bg, borderTop:`1px solid ${T.surf2}`, padding:"9px 14px 10px", display:"flex", alignItems:"center", gap:14 }}
           aria-label={`${votes} of ${total} ${breaking ? "days clean" : "days kept"} toward ${shortLabel(identity.label)}, ${pct} percent${streak > 0 ? `, ${streak} ${breaking ? "days clean streak" : "day streak"}` : ""}`}>
@@ -2828,7 +2833,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
                 if (d.pre || (d.off && d.status === "none")) s = { background:"#fff", border:`1px dashed ${T.border2}`, color:T.border2 };
                 else if (done) s = { background:doneColor, color:"#fff" };
                 else if (miss) s = { background:"#FCE9F0", border:"1.5px solid #F3B6CE", color:"#D65A8A" };
-                else if (d.today) s = { background:"#fff", border:`2px solid ${doneColor}`, color: identity.colorDim || identity.color };
+                else if (d.today) s = { background:"#fff", border:`2px solid ${doneColor}`, color: Cd };
                 else s = { background:T.surf2, color:T.muted };
                 return <span key={i} style={{ ...base, ...s }}>{d.letter}</span>;
               })}
@@ -4250,13 +4255,14 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                   ? "1px solid #F0B4B4"
                   : habit.kind === "bad"
                   ? (habit.id === firstPendingId ? "1.5px solid #D4537E" : "1px solid #F4C0D1")
-                  : (habit.id === firstPendingId ? `1.5px solid ${identity.color}` : `1px solid #C7DDEB`),
-                // Left accent — red when missed yesterday, else the identity colour
-                borderLeft: `4px solid ${warnMissed ? "#E24B4A" : (habit.kind === "bad" ? "#D4537E" : identity.color)}`,
+                  : (habit.id === firstPendingId ? `1.5px solid ${T.primary}` : `1px solid #C7DDEB`),
+                // Left accent — red when missed yesterday, rose for bad habits, else the
+                // one consistent app colour (not per-identity).
+                borderLeft: `4px solid ${warnMissed ? "#E24B4A" : (habit.kind === "bad" ? "#D4537E" : T.primary)}`,
                 boxShadow: warnMissed
                   ? "0 6px 20px #E24B4A22"
                   : habit.id === firstPendingId
-                  ? (habit.kind === "bad" ? "0 8px 22px #D4537E2e" : `0 8px 22px ${identity.color}2e`)
+                  ? (habit.kind === "bad" ? "0 8px 22px #D4537E2e" : `0 8px 22px ${T.primary}2e`)
                   : "0 1px 2px rgba(9,45,75,0.06), 0 5px 14px rgba(9,45,75,0.10)",
                 overflow:"hidden",
               }}>
