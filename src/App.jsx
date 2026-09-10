@@ -2746,14 +2746,14 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
           {/* Left part — check-in ring with the time · place beneath it */}
           <span style={{ flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", gap:3,
-            ...((habit.time || habit.location) ? { minWidth:46, paddingRight:11, borderRight:`1.5px solid ${T.surf2}` } : {}) }}>
+            ...((habit.time || habit.location) ? { minWidth:40, paddingRight:9, borderRight:`1.5px solid ${T.surf2}` } : {}) }}>
             <HabitRing
               checked={checked}
               missed={missed}
               color={C}
               streak={streak}
               next={next}
-              size={37}
+              size={27}
               onClick={() => toggle(habit.id, habit.frequency, identity)}
               label={checked ? `Uncheck: ${habit.label}` : (breaking ? `Mark clean: ${habit.label}` : `Check: ${habit.label}`)}
             />
