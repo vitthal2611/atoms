@@ -1087,6 +1087,15 @@ export default function App() {
     } finally { setNotifBusy(false); }
   }, [user]);
 
+  // If notifications are already granted, silently (re)register this device's token on
+  // load. FCM tokens rotate and the storage location changed (multi-device), so the
+  // "On" state alone doesn't guarantee a live token — this keeps it current & self-heals.
+  useEffect(() => {
+    if (!user) return;
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    enableHabitReminders(user.uid).catch(() => {});
+  }, [user]);
+
   // ── Scores — must be before early returns (Rules of Hooks) ──
   const scheduledToday = useMemo(
     () => allHabits.filter(h => {
