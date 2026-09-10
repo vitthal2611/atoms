@@ -1992,7 +1992,9 @@ export default function App() {
       {/* ── Header ── */}
       <header style={S.header}>
         <div style={{ minHeight:90, display:"flex", flexDirection:"column", justifyContent:"center" }}>
-          {syncing && <div style={S.eyebrow} aria-hidden="true">Saving…</div>}
+          {/* Always occupy the eyebrow's space (hidden when idle) so the title/date
+              don't shift up and down as saving toggles — that caused header flicker. */}
+          <div style={{ ...S.eyebrow, visibility: syncing ? "visible" : "hidden" }} aria-hidden="true">Saving…</div>
           {syncing && (
             <div role="status" aria-live="polite" style={{ position:"absolute", width:1, height:1, overflow:"hidden", clip:"rect(0,0,0,0)", whiteSpace:"nowrap" }}>
               Saving your habits
