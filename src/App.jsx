@@ -2753,7 +2753,9 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               label={checked ? `Uncheck: ${habit.label}` : (breaking ? `Mark clean: ${habit.label}` : `Check: ${habit.label}`)}
             />
             {habit.time && (
-              <span style={{ fontSize:11.5, fontWeight:700, lineHeight:1.05, color: T.muted, fontVariantNumeric:"tabular-nums" }}>
+              <span aria-label={cueText ? `Reminder at ${to24h(habit.time)}` : `At ${to24h(habit.time)}`}
+                style={{ display:"inline-flex", alignItems:"center", gap:2, fontSize:11.5, fontWeight: cueText ? 700 : 800, lineHeight:1.05, color: cueText ? T.muted : "#55606B", fontVariantNumeric:"tabular-nums" }}>
+                {cueText && <span aria-hidden="true" style={{ fontSize:9, opacity:0.85 }}>🔔</span>}
                 {to24h(habit.time)}
               </span>
             )}
