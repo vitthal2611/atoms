@@ -2725,39 +2725,39 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
       transition: "background 0.2s ease",
     }}>
 
-      {/* ── Identity header — who this vote is for · votes/streak · ⋯ menu.
-          The identity name wraps in full (never trimmed). ── */}
-      <div style={{ display:"flex", alignItems:"center", gap:9, padding:"8px 8px 8px 12px",
-        background: C + "14",
-        borderBottom:`1px solid ${C}2a` }}>
-        {identity.icon && (
-          <span aria-hidden="true" style={{ width:25, height:25, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, background: C + "24" }}>{identity.icon}</span>
-        )}
-        {/* "I am" inline with the identity name on one row; the name truncates and
-            reveals the full statement on hover / tap */}
-        <div style={{ flex:1, minWidth:0, display:"flex", alignItems:"baseline", gap:6 }}>
-          <span style={{ flexShrink:0, fontSize:10, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking" : "I am"}</span>
-          <IdentityName text={idDisplay} color={Cd} />
+      {/* ── Identity header — identity statement on row 1, metrics on row 2 ── */}
+      <div style={{ padding:"8px 8px 9px 12px", background: C + "14", borderBottom:`1px solid ${C}2a` }}>
+        {/* Row 1 — identity statement + ⋯ menu */}
+        <div style={{ display:"flex", alignItems:"center", gap:9 }}>
+          {identity.icon && (
+            <span aria-hidden="true" style={{ width:25, height:25, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, background: C + "24" }}>{identity.icon}</span>
+          )}
+          <div style={{ flex:1, minWidth:0, display:"flex", alignItems:"baseline", gap:6 }}>
+            <span style={{ flexShrink:0, fontSize:10, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking" : "I am"}</span>
+            <IdentityName text={idDisplay} color={Cd} />
+          </div>
+          {menu}
         </div>
-        {/* Metric tray — votes · streak · consistency grouped with hairline dividers */}
-        <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", background:"#fff", border:`1px solid ${C}22`, borderRadius:20, padding:"3px 10px" }}>
-          <VotesBadge habit={habit} allData={allData} votes={votes} total={voteMax} color={Cd} isBad={breaking} />
-          {/* Streak only when it adds info (differs from total votes); tap for the breakdown */}
-          {streak > 0 && streak !== votes && (
-            <>
-              <span aria-hidden="true" style={{ width:1, height:12, background:`${C}22`, margin:"0 8px" }} />
-              <StreakBadge habit={habit} allData={allData} streak={streak} isBad={breaking} bare />
-            </>
-          )}
-          {/* Overall 30-day consistency */}
-          {rs.due > 0 && (
-            <>
-              <span aria-hidden="true" style={{ width:1, height:12, background:`${C}22`, margin:"0 8px" }} />
-              <span style={{ fontSize:11.5, fontWeight:900, letterSpacing:"-0.01em", color: rateColor }} aria-label={`${rate} percent consistency over the last 30 scheduled days`}>{rate}%</span>
-            </>
-          )}
-        </span>
-        {menu}
+        {/* Row 2 — metric tray (votes · streak · consistency), aligned under the identity */}
+        <div style={{ display:"flex", marginTop:8, paddingLeft: identity.icon ? 34 : 0 }}>
+          <span style={{ display:"inline-flex", alignItems:"center", background:"#fff", border:`1px solid ${C}22`, borderRadius:20, padding:"3px 11px" }}>
+            <VotesBadge habit={habit} allData={allData} votes={votes} total={voteMax} color={Cd} isBad={breaking} />
+            {/* Streak only when it adds info (differs from total votes); tap for the breakdown */}
+            {streak > 0 && streak !== votes && (
+              <>
+                <span aria-hidden="true" style={{ width:1, height:12, background:`${C}22`, margin:"0 9px" }} />
+                <StreakBadge habit={habit} allData={allData} streak={streak} isBad={breaking} bare />
+              </>
+            )}
+            {/* Overall 30-day consistency */}
+            {rs.due > 0 && (
+              <>
+                <span aria-hidden="true" style={{ width:1, height:12, background:`${C}22`, margin:"0 9px" }} />
+                <span style={{ fontSize:11.5, fontWeight:900, letterSpacing:"-0.01em", color: rateColor }} aria-label={`${rate} percent consistency over the last 30 scheduled days`}>{rate}%</span>
+              </>
+            )}
+          </span>
+        </div>
       </div>
 
       {/* ── Card body — ring · action · cue ── */}
