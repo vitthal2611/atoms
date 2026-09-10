@@ -2803,7 +2803,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               with the votes / streak count anchored at the far right */}
           {Array.isArray(history) && history.length > 0 && (
             <>
-              <div style={{ flex:1, minWidth:0, display:"flex", alignItems:"center", justifyContent:"space-between", gap:6 }} aria-hidden="true">
+              <div style={{ flex:1, minWidth:0, display:"flex", alignItems:"center", justifyContent:"center", gap:9 }} aria-hidden="true">
                 {history.map((d, i) => {
                   const done = d.status === "done";
                   const miss = d.status === "miss";
@@ -2821,7 +2821,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
                   );
                 })}
               </div>
-              <span aria-hidden="true" style={{ flexShrink:0, display:"inline-flex", alignItems:"baseline", gap:6, fontSize:12, color:T.text2 }}>
+              <span aria-hidden="true" style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:6, fontSize:12, color:T.text2 }}>
                 <span><b style={{ color:heroColor, fontWeight:900 }}>{votes}</b>/{total}</span>
                 {streak > 0 && (
                   <span style={{ display:"inline-flex", alignItems:"center", gap:2, fontWeight:800, color: breaking ? "#3B6D11" : "#A9741E" }}>
