@@ -2860,6 +2860,12 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         const norm = s => (s || "").trim().toLowerCase().replace(/[.!]+$/, "");
         const showStarter = habit.starter && norm(habit.starter) !== norm(habit.label);
 
+        // Rolling 30-day consistency — the truest "is this sticking?" signal (kept ÷ due).
+        // Reuses habitReviewStats (also used by the weekly review); colour signals health.
+        const rs = habitReviewStats(habit, allData, getTodayKey(), 30);
+        const rate = Math.round(rs.rate * 100);
+        const rateColor = rate >= 80 ? "#0F9D74" : rate >= 50 ? "#C2751A" : "#B4402A";
+
         // Faint "add" prompt for a law that isn't filled in yet.
         const AddHint = ({ label }) => onEdit ? (
           <button type="button" onClick={onEdit} style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:12, fontWeight:700, color:T.muted, background:"none", border:"none", padding:0, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
@@ -2924,6 +2930,14 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
                 return <span key={i} style={{ ...base, ...s }}>{d.letter}</span>;
               })}
             </div>
+          )}
+
+          {/* 30-day consistency rate — the health signal (kept ÷ due) */}
+          {rs.due > 0 && (
+            <span style={{ flexShrink:0, display:"inline-flex", alignItems:"baseline", gap:3 }} aria-label={`${rate} percent kept over the last 30 scheduled days`}>
+              <span style={{ fontSize:13.5, fontWeight:900, letterSpacing:"-0.01em", color: rateColor }}>{rate}%</span>
+              <span style={{ fontSize:8.5, fontWeight:800, letterSpacing:"0.05em", textTransform:"uppercase", color:T.muted }}>30d</span>
+            </span>
           )}
         </div>
         );
