@@ -2809,24 +2809,21 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             )}
           </div>
 
-          {/* Right — the 7-day chain timeline (votes/streak now live with the identity) */}
+          {/* Right — the 7-day chain: the weekday letter is the marker (filled = done,
+              rose = missed, ring = today). Votes/streak now live with the identity. */}
           {Array.isArray(history) && history.length > 0 && (
-            <div style={{ flex:1, minWidth:0, display:"flex", alignItems:"center", justifyContent:"flex-end", gap:9 }} aria-hidden="true">
+            <div style={{ flex:1, minWidth:0, display:"flex", alignItems:"center", justifyContent:"flex-end", gap:5 }} aria-hidden="true">
               {history.map((d, i) => {
                 const done = d.status === "done";
                 const miss = d.status === "miss";
-                let dot;
-                if (d.pre) dot = { width:6, height:6, background:T.border2 };
-                else if (d.off && d.status === "none") dot = { width:12, height:12, border:`1.5px dashed ${T.border2}` };
-                else if (done) dot = { width:12, height:12, background:doneColor };
-                else if (miss) dot = { width:12, height:12, background:"#EFA48A" };
-                else if (d.today) dot = { width:12, height:12, border:`2px solid ${doneColor}` };
-                else dot = { width:12, height:12, background:T.surf2 };
-                return (
-                  <span key={i} style={{ width:12, height:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                    <span style={{ borderRadius:"50%", boxSizing:"border-box", ...dot }} />
-                  </span>
-                );
+                const base = { width:20, height:20, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:900, boxSizing:"border-box", flexShrink:0 };
+                let s;
+                if (d.pre || (d.off && d.status === "none")) s = { background:"#fff", border:`1px dashed ${T.border2}`, color:T.border2 };
+                else if (done) s = { background:doneColor, color:"#fff" };
+                else if (miss) s = { background:"#FCE9F0", border:"1.5px solid #F3B6CE", color:"#D65A8A" };
+                else if (d.today) s = { background:"#fff", border:`2px solid ${doneColor}`, color: identity.colorDim || identity.color };
+                else s = { background:T.surf2, color:T.muted };
+                return <span key={i} style={{ ...base, ...s }}>{d.letter}</span>;
               })}
             </div>
           )}
