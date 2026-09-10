@@ -2699,7 +2699,9 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
   // Action-led card: the action (habit.label) is the hero. The cue is an eyebrow-style
   // line below it; the coaching (Craving/Response/Reward chips) and the chain indicator
   // sit below and are always visible on every card — no Details toggle.
-  const cueEm = habit.icon || cueEmoji(habit.trigger || "");
+  // The trigger node's emoji should reflect the trigger (the thing you stack onto),
+  // not the habit's own icon — so "…my morning walk" shows 🚶, not the habit glyph.
+  const cueEm = cueEmoji(habit.trigger || "") || habit.icon || "";
   const cueText = capFirst(habit.trigger) || "";   // full trigger
   // Anchor = the trigger with a leading "After " stripped, so the flow can label it
   // "After" once and show just the thing you're stacking onto (e.g. "my morning walk").
@@ -2955,30 +2957,12 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               </button>
             )}
           </div>
-
-          {/* Right — the 7-day chain: the weekday letter is the marker (filled = done,
-              rose = missed, ring = today). Votes/streak now live with the identity. */}
-          {Array.isArray(history) && history.length > 0 && (
-            <div style={{ flex:1, minWidth:0, display:"flex", alignItems:"center", justifyContent:"flex-end", gap:5 }} aria-hidden="true">
-              {history.map((d, i) => {
-                const done = d.status === "done";
-                const miss = d.status === "miss";
-                const base = { width:20, height:20, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:900, boxSizing:"border-box", flexShrink:0 };
-                let s;
-                if (d.pre || (d.off && d.status === "none")) s = { background:"#fff", border:`1px dashed ${T.border2}`, color:T.border2 };
-                else if (done) s = { background:doneColor, color:"#fff" };
-                else if (miss) s = { background:"#FCE9F0", border:"1.5px solid #F3B6CE", color:"#D65A8A" };
-                else if (d.today) s = { background:"#fff", border:`2px solid ${doneColor}`, color: Cd };
-                else s = { background:T.surf2, color:T.muted };
-                return <span key={i} style={{ ...base, ...s }}>{d.letter}</span>;
-              })}
-            </div>
-          )}
           </div>
 
-          {/* Proof row — votes · streak · consistency, all the "how am I doing" signals */}
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginTop:10, paddingTop:9, borderTop:`1px solid ${T.surf2}` }}>
-            <span style={{ display:"inline-flex", alignItems:"center", background:"#fff", border:`1px solid ${C}22`, borderRadius:20, padding:"3px 11px" }}>
+          {/* Proof row — metrics (votes · streak · consistency) on the left, the 7-day
+              chain on the right, so all the "how am I doing" signals sit together. */}
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginTop:10, paddingTop:9, borderTop:`1px solid ${T.surf2}` }}>
+            <span style={{ display:"inline-flex", alignItems:"center", background:"#fff", border:`1px solid ${C}22`, borderRadius:20, padding:"3px 11px", flexShrink:0 }}>
               <VotesBadge habit={habit} allData={allData} votes={votes} total={voteMax} color={Cd} isBad={breaking} />
               {streak > 0 && streak !== votes && (
                 <>
@@ -2993,7 +2977,22 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
                 </>
               )}
             </span>
-            <span aria-hidden="true" style={{ fontSize:9, fontWeight:800, letterSpacing:"0.05em", textTransform:"uppercase", color:"#9AA8B2" }}>Progress</span>
+            {Array.isArray(history) && history.length > 0 && (
+              <div style={{ display:"flex", alignItems:"center", gap:5, flexShrink:0 }} aria-hidden="true">
+                {history.map((d, i) => {
+                  const done = d.status === "done";
+                  const miss = d.status === "miss";
+                  const base = { width:20, height:20, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:900, boxSizing:"border-box", flexShrink:0 };
+                  let s;
+                  if (d.pre || (d.off && d.status === "none")) s = { background:"#fff", border:`1px dashed ${T.border2}`, color:T.border2 };
+                  else if (done) s = { background:doneColor, color:"#fff" };
+                  else if (miss) s = { background:"#FCE9F0", border:"1.5px solid #F3B6CE", color:"#D65A8A" };
+                  else if (d.today) s = { background:"#fff", border:`2px solid ${doneColor}`, color: Cd };
+                  else s = { background:T.surf2, color:T.muted };
+                  return <span key={i} style={{ ...base, ...s }}>{d.letter}</span>;
+                })}
+              </div>
+            )}
           </div>
         </div>
         );
