@@ -699,6 +699,10 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
         "After breakfast", "After lunch", "After I get home from work", "After I sit at my desk", "Before bed",
         ...identities.flatMap(i => (i.habits || []).map(h => h.label)).filter(l => l && l !== initial.label).slice(0, 6).map(l => `After ${l}`),
       ];
+  // Trigger picker: a dropdown of common cues + a "type my own" escape hatch.
+  const [trigCustom, setTrigCustom] = useState(false);
+  const trigIsPreset = cueOptions.includes(form.trigger);
+  const showTrigInput = trigCustom || (!!form.trigger && !trigIsPreset);
 
   const fId = useId();
   const ids = {
@@ -861,14 +865,29 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
       {/* Law 1 · obvious (build) / invisible (break) */}
       <div style={lawHead}><span aria-hidden="true" style={lawNum(T.primary)}>1</span><span style={lawTxt(T.primary)}>{breaking ? "Make it invisible" : "Make it obvious"}</span></div>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
-        <label htmlFor={ids.trigger} style={S.fieldLabel}>{breaking ? "When are you tempted? (cue)" : "After what? (cue)"}</label>
+        <label htmlFor={ids.trigger + "-select"} style={S.fieldLabel}>{breaking ? "When are you tempted? (cue)" : "After what? (cue)"}</label>
         {suggestBtn("trigger")}
       </div>
-      <input id={ids.trigger} list={ids.trigger + "-list"} style={S.input} value={form.trigger} onChange={e=>set("trigger",e.target.value)} placeholder={breaking ? "e.g. When I get into bed" : "e.g. After I pour my morning coffee"} maxLength={120} />
+      {/* Dropdown of common cues; "Type my own…" reveals a free-text field */}
+      <select id={ids.trigger + "-select"}
+        value={showTrigInput ? "__custom__" : (form.trigger || "")}
+        onChange={e => {
+          const v = e.target.value;
+          if (v === "__custom__") { setTrigCustom(true); set("trigger", ""); }
+          else { setTrigCustom(false); set("trigger", v); }
+        }}
+        style={{ ...S.input, cursor:"pointer", appearance:"auto" }}>
+        <option value="" disabled>{breaking ? "Choose when it strikes…" : "Choose a cue…"}</option>
+        {cueOptions.map(o => <option key={o} value={o}>{o}</option>)}
+        <option value="__custom__">✍️ Type my own…</option>
+      </select>
+      {showTrigInput && (
+        <input id={ids.trigger} list={ids.trigger + "-list"} style={{ ...S.input, marginTop:8 }} value={form.trigger} onChange={e=>set("trigger",e.target.value)} placeholder={breaking ? "e.g. When I get into bed" : "e.g. After I pour my morning coffee"} maxLength={120} autoFocus />
+      )}
       <datalist id={ids.trigger + "-list"}>
         {cueOptions.map(o => <option key={o} value={o} />)}
       </datalist>
-      <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>Pick a suggestion or type your own.</div>
+      <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>Pick a common cue, or “Type my own”.</div>
 
       {/* Cue icon — auto-picked from the trigger words; tap any to override */}
       <label style={S.fieldLabel}>Cue icon</label>
