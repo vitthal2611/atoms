@@ -1444,20 +1444,26 @@ export default function App() {
     const cacheKey = `${habitId}|${freqKey}|${Object.keys(data).length}`;
     if (streakCacheRef.current[cacheKey] !== undefined) return streakCacheRef.current[cacheKey];
 
+    // "Never miss twice" (Atomic Habits): a single slip doesn't reset the run —
+    // the streak only breaks when you miss two scheduled days in a row. Isolated
+    // misses are tolerated (they just don't add a day), so the number rewards
+    // getting back on track fast rather than a flawless record.
     let streak = 0;
+    let consecutiveMiss = 0;
     const d = new Date();
     for (let i = 0; i < 400; i++) {
       const key = dateToKey(d);
-      const scheduled = isScheduledOn(frequency, key);
-      if (scheduled) {
+      if (isScheduledOn(frequency, key)) {
         const v = data[key] ? data[key][habitId] : undefined;
         if (v === true) {
-          streak++;                    // completed on a scheduled day → continues the run
-        } else if (v === "miss") {
-          break;                       // an explicit miss breaks the streak — even today
-        } else if (i > 0) {
-          break;                       // an un-actioned past scheduled day also breaks it
-        }                              // (today un-actioned is grace: you can still do it)
+          streak++;                    // kept on a scheduled day → extends the run…
+          consecutiveMiss = 0;         // …and forgives an earlier single slip
+        } else if (i === 0 && v !== "miss") {
+          // today, not yet actioned → grace: you can still do it, no penalty
+        } else {
+          consecutiveMiss++;           // a real slip (explicit miss or past day left undone)
+          if (consecutiveMiss >= 2) break;   // missed twice in a row → the run is over
+        }
       }
       d.setDate(d.getDate() - 1);
     }
