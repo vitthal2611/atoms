@@ -125,8 +125,9 @@ function MilestoneProgress({ streak = 0 }) {
   const span = next ? next.days - prevDays : 1;
   const frac = next ? Math.max(0, Math.min(1, (streak - prevDays) / span)) : 1;
   const remain = next ? next.days - streak : 0;
+  const W = 210;
 
-  const show = () => { const r = ref.current?.getBoundingClientRect(); if (r) setPos({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) }); setOpen(true); };
+  const show = () => { const r = ref.current?.getBoundingClientRect(); if (r) setPos({ top: r.bottom + 6, left: Math.min(Math.max(8, r.right - W), window.innerWidth - W - 8) }); setOpen(true); };
   const hide = () => setOpen(false);
 
   return (
@@ -154,7 +155,7 @@ function MilestoneProgress({ streak = 0 }) {
       )}
 
       {open && pos && (
-        <div role="tooltip" onClick={e => e.stopPropagation()} style={{ position:"fixed", top:pos.top, right:pos.right, zIndex:200, width:210, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 10px 28px rgba(9,45,75,0.2)", padding:"11px 13px", textAlign:"left" }}>
+        <div role="tooltip" onClick={e => e.stopPropagation()} style={{ position:"fixed", top:pos.top, left:pos.left, zIndex:200, width:W, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 10px 28px rgba(9,45,75,0.2)", padding:"11px 13px", textAlign:"left" }}>
           <div style={{ fontSize:12, fontWeight:900, color:T.text, marginBottom:2 }}>
             {earned ? `${earned.emoji} ${earned.label}` : "No milestone yet"}
           </div>
@@ -2797,7 +2798,7 @@ function VotesBadge({ habit, allData, votes, total, color, isBad }) {
     return Object.entries(m).sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 6);
   }, [allData, habit.id, habit.frequency]);
   const max = months.reduce((a, [, c]) => Math.max(a, c), 1);
-  const show = () => { const r = ref.current?.getBoundingClientRect(); if (r) setPos({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) }); setOpen(true); };
+  const show = () => { const r = ref.current?.getBoundingClientRect(); if (r) setPos({ top: r.bottom + 6, left: Math.min(Math.max(8, r.right - W), window.innerWidth - W - 8) }); setOpen(true); };
   const hide = () => setOpen(false);
   return (
     <span ref={ref} style={{ position:"relative", display:"inline-flex" }}
@@ -2807,7 +2808,7 @@ function VotesBadge({ habit, allData, votes, total, color, isBad }) {
         <Ic name="vote" size={12} color={color} style={{ alignSelf:"center" }} />{votes}<span style={{ fontWeight:800, color: color + "b0" }}>/{total}</span>
       </span>
       {open && pos && (
-        <div role="tooltip" onClick={e => e.stopPropagation()} style={{ position:"fixed", top:pos.top, right:pos.right, zIndex:200, width:W, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 10px 28px rgba(9,45,75,0.2)", padding:"11px 13px" }}>
+        <div role="tooltip" onClick={e => e.stopPropagation()} style={{ position:"fixed", top:pos.top, left:pos.left, zIndex:200, width:W, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 10px 28px rgba(9,45,75,0.2)", padding:"11px 13px" }}>
           <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:12, fontWeight:800, color:T.text, marginBottom:8 }}>
             <Ic name="vote" size={13} color={color} /> {votes} of {total} {isBad ? "resisted" : "votes cast"}
           </div>
@@ -3108,7 +3109,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
           {/* Proof row — metrics (votes · streak · consistency) on the left, the 7-day
               chain on the right, so all the "how am I doing" signals sit together. */}
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginTop:10, paddingTop:9, borderTop:`1px solid ${T.surf2}` }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, rowGap:8, flexWrap:"wrap", marginTop:10, paddingTop:9, borderTop:`1px solid ${T.surf2}` }}>
             <span style={{ display:"inline-flex", alignItems:"center", background:"#fff", border:`1px solid ${C}22`, borderRadius:20, padding:"3px 11px", flexShrink:0 }}>
               <VotesBadge habit={habit} allData={allData} votes={votes} total={voteMax} color={Cd} isBad={breaking} />
               {streak > 0 && streak !== votes && (
@@ -3125,7 +3126,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               )}
             </span>
             {Array.isArray(history) && history.length > 0 && (
-              <div style={{ display:"flex", alignItems:"center", gap:5, flexShrink:0 }} aria-hidden="true">
+              <div style={{ display:"flex", alignItems:"center", gap:5, flexShrink:0, marginLeft:"auto" }} aria-hidden="true">
                 {history.map((d, i) => {
                   const done = d.status === "done";
                   const miss = d.status === "miss";
@@ -4346,7 +4347,8 @@ function StreakBadge({ habit, allData, streak, isBad, bare = false }) {
   const fg = isBad ? "#3B6D11" : "#C2751A";
   const bg = isBad ? "#EAF3DE" : "#FBF0DA";
   const max = months.reduce((a, [, c]) => Math.max(a, c), 1);
-  const show = () => { const r = ref.current?.getBoundingClientRect(); if (r) setPos({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) }); setOpen(true); };
+  const W = 186;
+  const show = () => { const r = ref.current?.getBoundingClientRect(); if (r) setPos({ top: r.bottom + 6, left: Math.min(Math.max(8, r.right - W), window.innerWidth - W - 8) }); setOpen(true); };
   const hide = () => setOpen(false);
   return (
     <span ref={ref} style={{ position:"relative", flexShrink:0, display:"inline-flex" }}
@@ -4358,7 +4360,7 @@ function StreakBadge({ habit, allData, streak, isBad, bare = false }) {
         <Ic name={isBad ? "check" : "flame"} size={12} color={fg} />{streak}
       </span>
       {open && pos && (
-        <div role="tooltip" onClick={e => e.stopPropagation()} style={{ position:"fixed", top:pos.top, right:pos.right, zIndex:200, width:186, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 10px 28px rgba(9,45,75,0.2)", padding:"11px 13px" }}>
+        <div role="tooltip" onClick={e => e.stopPropagation()} style={{ position:"fixed", top:pos.top, left:pos.left, zIndex:200, width:W, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 10px 28px rgba(9,45,75,0.2)", padding:"11px 13px" }}>
           <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:12, fontWeight:800, color:T.text, marginBottom:8 }}>
             <Ic name={isBad ? "check" : "flame"} size={13} color={fg} /> {streak} {isBad ? "days clean" : "day streak"}
           </div>
