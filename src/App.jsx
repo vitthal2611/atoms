@@ -4330,8 +4330,6 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
     return [scheduled, notToday];
   }, [enrichedHabits, selectedDate, allData]);
 
-  const quote = useMemo(() => getDailyQuote(), []);
-
   // Habits scheduled both today and yesterday that were NOT done yesterday —
   // fuels the "never miss twice" warning (Atomic Habits rule)
   const missedYesterdayIds = useMemo(() => {
@@ -4388,10 +4386,10 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
       {/* Day Navigator */}
       <DayNavigator selectedDate={selectedDate} setSelectedDate={setSelectedDate} todayKey={todayKey} />
 
-      {/* Daily quote — up top and readable */}
+      {/* Quote — fixed, up top and readable */}
       <div style={{ ...S.card, padding:"13px 16px", textAlign:"center" }}>
-        <div style={{ fontSize:14.5, fontStyle:"italic", fontWeight:600, color:T.text2, lineHeight:1.5 }}>“{quote.text}”</div>
-        <div style={{ fontSize:12, fontWeight:800, color:T.primary, marginTop:6 }}>— {quote.author}, Atomic Habits</div>
+        <div style={{ fontSize:14.5, fontStyle:"italic", fontWeight:600, color:T.text2, lineHeight:1.5 }}>“Habits are the compound interest of self-improvement.”</div>
+        <div style={{ fontSize:12, fontWeight:800, color:T.primary, marginTop:6 }}>— James Clear, Atomic Habits</div>
       </div>
 
       {/* Weekend nudge — review this week (only if not reviewed yet) */}
