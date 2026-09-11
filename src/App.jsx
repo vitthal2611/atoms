@@ -2233,8 +2233,6 @@ export default function App() {
         {[
           {id:"today",    icon:"☀️",  label:"Today"},
           {id:"focus",    icon:"🎯",  label:"Focus"},
-          {id:"week",     icon:"📅",  label:"Month"},
-          {id:"streaks",  icon:"🔥",  label:"Streaks"},
           {id:"manage",   icon:"⚙️",  label:"Manage"},
         ].map(t=>(
           <button key={t.id} onClick={()=>{ setView(t.id); if(t.id==="today") setSelectedDate(todayKey); }}
