@@ -1087,6 +1087,9 @@ export default function App() {
     setReviewOpen(true);
   }, [data, todayKey]);
 
+  // Floating add-button menu (add habit / add identity)
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+
   // ── Habit reminders (web push) ──
   const [notifStatus, setNotifStatus] = useState(() => (typeof Notification !== "undefined" ? Notification.permission : "unsupported"));
   const [notifBusy, setNotifBusy] = useState(false);
@@ -2009,7 +2012,8 @@ export default function App() {
       )}
 
       {/* ── Header ── */}
-      <header style={S.header}>
+      <header style={{ ...S.header, flexDirection:"column", alignItems:"stretch" }}>
+       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", width:"100%" }}>
         <div style={{ minHeight:90, display:"flex", flexDirection:"column", justifyContent:"center" }}>
           {/* Always occupy the eyebrow's space (hidden when idle) so the title/date
               don't shift up and down as saving toggles — that caused header flicker. */}
@@ -2070,6 +2074,14 @@ export default function App() {
             </div>
           </div>
         </div>
+       </div>
+       {/* Fixed quote — lives in the sticky header so it stays visible on scroll */}
+       {view === "today" && (
+         <div style={{ marginTop:10, paddingTop:10, borderTop:`1px solid ${T.border}`, textAlign:"center" }}>
+           <span style={{ fontSize:12.5, fontStyle:"italic", fontWeight:600, color:T.text2, lineHeight:1.45 }}>“Habits are the compound interest of self-improvement.” </span>
+           <span style={{ fontSize:11.5, fontWeight:800, color:T.primary, whiteSpace:"nowrap" }}>— James Clear</span>
+         </div>
+       )}
       </header>
 
       {/* ── Scrollable Content ── */}
@@ -2177,18 +2189,37 @@ export default function App() {
         </div>
       )}
 
-      {/* ── Floating add-habit button — easy access from the dashboard ── */}
+      {/* ── Floating add button → Add habit / Add identity menu ── */}
       {view === "today" && (
-        <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:430, height:0, zIndex:55, pointerEvents:"none" }}>
-          <button onClick={() => openAddHabit()} aria-label="Add a new habit"
-            style={{ position:"absolute", right:16, bottom:"calc(env(safe-area-inset-bottom,8px) + 76px)", pointerEvents:"auto",
-              width:54, height:54, borderRadius:"50%", border:"none", cursor:"pointer",
-              background:T.primary, color:"#fff", fontSize:30, fontWeight:400, lineHeight:1,
-              display:"flex", alignItems:"center", justifyContent:"center",
-              boxShadow:`0 6px 18px ${T.primary}66, 0 2px 6px rgba(9,45,75,0.2)`, WebkitTapHighlightColor:"transparent" }}>
-            <span aria-hidden="true" style={{ marginTop:-2 }}>+</span>
-          </button>
-        </div>
+        <>
+          {addMenuOpen && (
+            <div onClick={() => setAddMenuOpen(false)} style={{ position:"fixed", inset:0, zIndex:54 }} aria-hidden="true" />
+          )}
+          <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:430, height:0, zIndex:55, pointerEvents:"none" }}>
+            {addMenuOpen && (
+              <div style={{ position:"absolute", right:16, bottom:"calc(env(safe-area-inset-bottom,8px) + 140px)", pointerEvents:"auto", display:"flex", flexDirection:"column", gap:8, alignItems:"flex-end" }}>
+                {[
+                  { label:"Add habit", icon:"⚡", onClick:() => openAddHabit() },
+                  { label:"Add identity", icon:"🎯", onClick:() => openAddIdentity() },
+                ].map(it => (
+                  <button key={it.label} onClick={() => { setAddMenuOpen(false); it.onClick(); }}
+                    style={{ display:"inline-flex", alignItems:"center", gap:8, background:T.surface, color:T.text, border:`1px solid ${T.border}`, borderRadius:24, padding:"10px 15px", fontSize:14, fontWeight:800, fontFamily:"inherit", cursor:"pointer", boxShadow:"0 6px 18px rgba(9,45,75,0.16)", WebkitTapHighlightColor:"transparent" }}>
+                    <span aria-hidden="true">{it.icon}</span> {it.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button onClick={() => setAddMenuOpen(o => !o)} aria-label={addMenuOpen ? "Close add menu" : "Add habit or identity"} aria-expanded={addMenuOpen}
+              style={{ position:"absolute", right:16, bottom:"calc(env(safe-area-inset-bottom,8px) + 76px)", pointerEvents:"auto",
+                width:54, height:54, borderRadius:"50%", border:"none", cursor:"pointer",
+                background:T.primary, color:"#fff", fontSize:30, fontWeight:400, lineHeight:1,
+                display:"flex", alignItems:"center", justifyContent:"center",
+                boxShadow:`0 6px 18px ${T.primary}66, 0 2px 6px rgba(9,45,75,0.2)`, WebkitTapHighlightColor:"transparent",
+                transition:"transform 0.2s ease", transform: addMenuOpen ? "rotate(45deg)" : "none" }}>
+              <span aria-hidden="true" style={{ marginTop:-2 }}>+</span>
+            </button>
+          </div>
+        </>
       )}
 
       {/* ── Bottom Nav ── */}
@@ -4386,12 +4417,6 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
       {/* Day Navigator */}
       <DayNavigator selectedDate={selectedDate} setSelectedDate={setSelectedDate} todayKey={todayKey} />
 
-      {/* Quote — fixed, up top and readable */}
-      <div style={{ ...S.card, padding:"13px 16px", textAlign:"center" }}>
-        <div style={{ fontSize:14.5, fontStyle:"italic", fontWeight:600, color:T.text2, lineHeight:1.5 }}>“Habits are the compound interest of self-improvement.”</div>
-        <div style={{ fontSize:12, fontWeight:800, color:T.primary, marginTop:6 }}>— James Clear, Atomic Habits</div>
-      </div>
-
       {/* Weekend nudge — review this week (only if not reviewed yet) */}
       {(() => {
         if (selectedDate !== todayKey) return null;
@@ -4650,12 +4675,6 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
           )}
         </div>
       )}
-
-      <button onClick={()=>openAddHabit()} style={S.addHabitBtn}>
-        <span style={{ fontSize:18, color:T.primary, fontWeight:700 }} aria-hidden="true">+</span>
-        <span style={{ fontSize:14, color:T.text2, fontWeight:500 }}>Add a new habit</span>
-      </button>
-      <button onClick={openAddIdentity} style={S.addIdentityBtn}>+ Add New Identity</button>
     </div>
   );
 });
