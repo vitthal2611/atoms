@@ -2177,6 +2177,20 @@ export default function App() {
         </div>
       )}
 
+      {/* ── Floating add-habit button — easy access from the dashboard ── */}
+      {view === "today" && (
+        <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:430, height:0, zIndex:55, pointerEvents:"none" }}>
+          <button onClick={() => openAddHabit()} aria-label="Add a new habit"
+            style={{ position:"absolute", right:16, bottom:"calc(env(safe-area-inset-bottom,8px) + 76px)", pointerEvents:"auto",
+              width:54, height:54, borderRadius:"50%", border:"none", cursor:"pointer",
+              background:T.primary, color:"#fff", fontSize:30, fontWeight:400, lineHeight:1,
+              display:"flex", alignItems:"center", justifyContent:"center",
+              boxShadow:`0 6px 18px ${T.primary}66, 0 2px 6px rgba(9,45,75,0.2)`, WebkitTapHighlightColor:"transparent" }}>
+            <span aria-hidden="true" style={{ marginTop:-2 }}>+</span>
+          </button>
+        </div>
+      )}
+
       {/* ── Bottom Nav ── */}
       <nav style={S.bottomNav} aria-label="Main navigation">
         {[
