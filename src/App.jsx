@@ -110,6 +110,43 @@ const MILESTONES = [
 function getMilestone(s) { let b=null; for(const m of MILESTONES) if(s>=m.days) b=m; return b; }
 function getNextMilestone(s) { return MILESTONES.find(m=>m.days>s)||null; }
 
+// ─── MILESTONE PROGRESS — earned badge + a mini bar to the next milestone ──────
+// Lives on the coaching row (right of the Craving/Response/Reward chips). It turns
+// the streak into a reward: which badge you've earned and how close the next is.
+function MilestoneProgress({ streak = 0 }) {
+  const earned = getMilestone(streak);
+  const next   = getNextMilestone(streak);
+  if (!earned && !next) return null;                 // brand-new habit: stay clean
+  const gold = "#B07B1E";
+  const prevDays = earned ? earned.days : 0;
+  const span = next ? next.days - prevDays : 1;
+  const frac = next ? Math.max(0, Math.min(1, (streak - prevDays) / span)) : 1;
+  const remain = next ? next.days - streak : 0;
+  return (
+    <div style={{ marginLeft:"auto", flexShrink:0, minWidth:92, maxWidth:150, textAlign:"right" }}
+      aria-label={earned
+        ? `Milestone reached: ${earned.label}${next ? `, ${remain} days to ${next.label}` : ""}`
+        : `${remain} days to your first milestone, ${next.label}`}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", gap:4, fontSize:11, fontWeight:800, color: earned ? gold : T.muted, whiteSpace:"nowrap", overflow:"hidden" }}>
+        {earned
+          ? (<>
+              <span aria-hidden="true">{earned.emoji}</span>
+              <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{earned.label}</span>
+            </>)
+          : <span>Next reward</span>}
+      </div>
+      {next && (
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", gap:6, marginTop:4 }}>
+          <div style={{ flex:1, maxWidth:60, height:5, borderRadius:5, background:"#EBE0C6", overflow:"hidden" }}>
+            <div style={{ width:`${Math.round(frac*100)}%`, height:"100%", background:"#F59E0B", borderRadius:5 }} />
+          </div>
+          <span style={{ fontSize:10.5, fontWeight:800, color:gold, whiteSpace:"nowrap" }}>{remain}d → <span aria-hidden="true">{next.emoji}</span></span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 function to24h(timeStr) {
   if (!timeStr) return timeStr;
@@ -3027,6 +3064,8 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               </button>
             )}
           </div>
+          {/* Right — the milestone reward fills the space beside the law chips. */}
+          <MilestoneProgress streak={streak} />
           </div>
 
           {/* Proof row — metrics (votes · streak · consistency) on the left, the 7-day
