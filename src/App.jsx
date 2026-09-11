@@ -4633,31 +4633,6 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
         </div>
       )}
 
-      {/* Daily progress recap — a bar summarising today's habit completion */}
-      {(() => {
-        const total = scheduledHabits.length;
-        if (total === 0) return null;
-        const done = scheduledHabits.filter(({ habit }) => todayData[habit.id] === true).length;
-        const pct  = Math.round((done / total) * 100);
-        const col  = pct === 100 ? T.gold : T.primary;
-        return (
-          <div style={{ ...S.card, padding:"14px 16px", marginTop:4 }}>
-            <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:10 }}>
-              <span style={{ fontSize:22, fontWeight:900, color:T.text, letterSpacing:"-0.02em", fontVariantNumeric:"tabular-nums" }}>
-                {done}<span style={{ fontSize:16, fontWeight:800, color:T.muted }}> / {total}</span>
-              </span>
-              <span style={{ fontSize:14, fontWeight:900, color:col, fontVariantNumeric:"tabular-nums" }}>{pct}%</span>
-            </div>
-            <div style={{ height:12, borderRadius:99, background:T.surf2, overflow:"hidden" }} role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${done} of ${total} habits done`}>
-              <div style={{ height:"100%", width:`${pct}%`, background:col, borderRadius:99, transition:"width 0.5s ease" }} />
-            </div>
-            <div style={{ fontSize:12, fontWeight:700, color:T.muted, marginTop:8 }}>
-              {pct === 100 ? "All done — great work! 🎉" : `${selectedDate === todayKey ? "Habits done today" : "Habits done"} · ${total - done} to go`}
-            </div>
-          </div>
-        );
-      })()}
-
       <button onClick={()=>openAddHabit()} style={S.addHabitBtn}>
         <span style={{ fontSize:18, color:T.primary, fontWeight:700 }} aria-hidden="true">+</span>
         <span style={{ fontSize:14, color:T.text2, fontWeight:500 }}>Add a new habit</span>
