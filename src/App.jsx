@@ -2626,7 +2626,7 @@ function IdentityName({ text, color }) {
     <span ref={ref} style={{ flex:1, minWidth:0, position:"relative", display:"block", cursor:"default" }}
       onMouseEnter={show} onMouseLeave={hide}
       onClick={(e) => { e.stopPropagation(); open ? hide() : show(); }}>
-      <span style={{ display:"block", fontSize:15, fontWeight:900, letterSpacing:"-0.01em", lineHeight:1.2, color, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{text}</span>
+      <span style={{ display:"block", fontSize:14.5, fontWeight:800, letterSpacing:"-0.01em", lineHeight:1.25, color, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{text}</span>
       {open && pos && (
         <div role="tooltip" onClick={e => e.stopPropagation()} style={{ position:"fixed", top:pos.top, left:pos.left, zIndex:200, width:W, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 10px 28px rgba(9,45,75,0.2)", padding:"10px 12px" }}>
           <div style={{ fontSize:9.5, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color, marginBottom:4 }}>I am</div>
@@ -2765,8 +2765,8 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               <span aria-hidden="true" style={{ width:2, flex:1, minHeight:13, background:`linear-gradient(${C}40, ${C})`, borderRadius:2 }} />
             </div>
             <div style={{ flex:1, minWidth:0, paddingTop:1 }}>
-              <div style={{ fontSize:8.5, fontWeight:900, letterSpacing:"0.09em", textTransform:"uppercase", color:T.muted, marginBottom:2 }}>After</div>
-              <div style={{ fontSize:13, fontWeight:800, color:T.text2, lineHeight:1.25, wordBreak:"break-word" }}>{cueAnchor}</div>
+              <div style={{ fontSize:10, fontWeight:900, letterSpacing:"0.08em", textTransform:"uppercase", color:T.muted, marginBottom:2 }}>After</div>
+              <div style={{ fontSize:12.5, fontWeight:700, color:T.text2, lineHeight:1.3, wordBreak:"break-word" }}>{cueAnchor}</div>
             </div>
           </div>
         )}
@@ -2794,10 +2794,10 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
           >
             {!checked && !missed && cueText && (
-              <div style={{ fontSize:8.5, fontWeight:900, letterSpacing:"0.09em", textTransform:"uppercase", color:C, marginBottom:2 }}>I will</div>
+              <div style={{ fontSize:10, fontWeight:900, letterSpacing:"0.08em", textTransform:"uppercase", color:C, marginBottom:2 }}>I will</div>
             )}
             <span style={{
-              display:"block", wordBreak:"break-word", fontSize:15.5, fontWeight:700, letterSpacing:"-0.01em", lineHeight:1.3,
+              display:"block", wordBreak:"break-word", fontSize:14.5, fontWeight:700, letterSpacing:"-0.01em", lineHeight:1.3,
               color: checked ? T.text2 : missed ? T.muted : T.text,
               textDecoration: checked ? "line-through" : "none",
               textDecorationColor: C + "88",
