@@ -4388,6 +4388,12 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
       {/* Day Navigator */}
       <DayNavigator selectedDate={selectedDate} setSelectedDate={setSelectedDate} todayKey={todayKey} />
 
+      {/* Daily quote — up top and readable */}
+      <div style={{ ...S.card, padding:"13px 16px", textAlign:"center" }}>
+        <div style={{ fontSize:14.5, fontStyle:"italic", fontWeight:600, color:T.text2, lineHeight:1.5 }}>“{quote.text}”</div>
+        <div style={{ fontSize:12, fontWeight:800, color:T.primary, marginTop:6 }}>— {quote.author}, Atomic Habits</div>
+      </div>
+
       {/* Weekend nudge — review this week (only if not reviewed yet) */}
       {(() => {
         if (selectedDate !== todayKey) return null;
@@ -4652,11 +4658,6 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
         <span style={{ fontSize:14, color:T.text2, fontWeight:500 }}>Add a new habit</span>
       </button>
       <button onClick={openAddIdentity} style={S.addIdentityBtn}>+ Add New Identity</button>
-
-      <div style={S.footer}>
-        <span style={S.footerQuote}>"Habits are the compound interest of self-improvement."</span>
-        <span style={S.footerAuthor}>— James Clear, Atomic Habits</span>
-      </div>
     </div>
   );
 });
