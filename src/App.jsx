@@ -2781,55 +2781,143 @@ function IdentityName({ text, color }) {
   );
 }
 
-// ─── VOTES BADGE — tappable votes total; popover shows check-ins month by month ─
-function VotesBadge({ habit, allData, votes, total, color, isBad }) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState(null);
-  const ref = useRef(null);
-  const W = 200;
-  const months = useMemo(() => {
-    const m = {};
-    for (const k in allData) {
-      if (allData[k] && allData[k][habit.id] === true && isScheduledOn(habit.frequency, k)) {
-        const ym = k.slice(0, 7);
-        m[ym] = (m[ym] || 0) + 1;
-      }
-    }
-    return Object.entries(m).sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 6);
-  }, [allData, habit.id, habit.frequency]);
-  const max = months.reduce((a, [, c]) => Math.max(a, c), 1);
-  const show = () => { const r = ref.current?.getBoundingClientRect(); if (r) setPos({ top: r.bottom + 6, left: Math.min(Math.max(8, r.right - W), window.innerWidth - W - 8) }); setOpen(true); };
-  const hide = () => setOpen(false);
+// ─── HABIT CALENDAR MODAL — month-by-month check-in calendar for one habit ─────
+// A day per cell, coloured by whether the habit was kept / missed / skipped, with
+// ‹ › month navigation and a per-month kept-rate summary.
+function statusLabel(st, isBad) {
+  return st === "done"   ? (isBad ? "Stayed clean" : "Checked in")
+    :  st === "miss"     ? "Missed"
+    :  st === "undone"   ? (isBad ? "Slipped" : "Not done")
+    :  st === "today"    ? "Scheduled today"
+    :  st === "off"      ? "Not scheduled"
+    :  st === "future"   ? "Upcoming"
+    :  "Before you started";
+}
+
+function HabitCalendarModal({ habit, allData = {}, isBad = false, onClose }) {
+  const [monthOffset, setMonthOffset] = useState(0);
+  const [selDay, setSelDay] = useState(null);
+  const C = isBad ? "#D4537E" : T.primary;
+  const todayKey = getTodayKey();
+  const startKey = habitStartKey(habit, allData);
+
+  const { monthDates, monthLabel, firstDow } = useMemo(() => {
+    const now = new Date();
+    const base = new Date(now.getFullYear(), now.getMonth() - monthOffset, 1);
+    const y = base.getFullYear(), m = base.getMonth();
+    const days = new Date(y, m + 1, 0).getDate();
+    const dates = Array.from({ length: days }, (_, i) => dateToKey(new Date(y, m, i + 1)));
+    const label = base.toLocaleDateString(navigator.language || undefined, { month: "long", year: "numeric" });
+    const fd = (new Date(dates[0] + "T00:00").getDay() + 6) % 7;   // Mon=0
+    return { monthDates: dates, monthLabel: label, firstDow: fd };
+  }, [monthOffset]);
+
+  const dayStatus = (d) => {
+    if (startKey && d < startKey) return "pre";
+    if (!isScheduledOn(habit.frequency, d)) return "off";
+    const v = allData[d] ? allData[d][habit.id] : undefined;
+    if (v === true) return "done";
+    if (v === "miss") return "miss";
+    if (d > todayKey) return "future";
+    if (d === todayKey) return "today";
+    return "undone";
+  };
+
+  let kept = 0, due = 0;
+  for (const d of monthDates) {
+    const st = dayStatus(d);
+    if (st === "done") { kept++; due++; }
+    else if (st === "miss" || st === "undone") due++;
+  }
+  const rate = due ? Math.round((kept / due) * 100) : 0;
+  const rateColor = rate >= 80 ? "#0F9D74" : rate >= 50 ? "#C2751A" : "#B4402A";
+  const cell = { aspectRatio:"1", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12.5, fontWeight:800, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", padding:0 };
+
   return (
-    <span ref={ref} style={{ position:"relative", display:"inline-flex" }}
-      onMouseEnter={show} onMouseLeave={hide}
-      onClick={(e) => { e.stopPropagation(); open ? hide() : show(); }}>
-      <span aria-label={`${votes} of ${total} ${isBad ? "resisted" : "votes cast"}, monthly breakdown`} style={{ display:"inline-flex", alignItems:"baseline", gap:3, fontSize:11.5, fontWeight:900, color, cursor:"pointer" }}>
-        <Ic name="vote" size={12} color={color} style={{ alignSelf:"center" }} />{votes}<span style={{ fontWeight:800, color: color + "b0" }}>/{total}</span>
-      </span>
-      {open && pos && (
-        <div role="tooltip" onClick={e => e.stopPropagation()} style={{ position:"fixed", top:pos.top, left:pos.left, zIndex:200, width:W, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 10px 28px rgba(9,45,75,0.2)", padding:"11px 13px" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:12, fontWeight:800, color:T.text, marginBottom:8 }}>
-            <Ic name="vote" size={13} color={color} /> {votes} of {total} {isBad ? "resisted" : "votes cast"}
+    <div role="dialog" aria-label={`Check-in calendar for ${habit.label}`} onClick={onClose}
+      style={{ position:"fixed", inset:0, zIndex:400, background:"rgba(9,45,75,0.32)", display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:430, background:T.surface, borderRadius:"18px 18px 0 0", padding:"16px 16px calc(env(safe-area-inset-bottom,0px) + 18px)", maxHeight:"90vh", overflowY:"auto" }}>
+        {/* Title */}
+        <div style={{ display:"flex", alignItems:"flex-start", gap:10, marginBottom:14 }}>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:10, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color:C }}>{isBad ? "Clean days" : "Check-ins"}</div>
+            <div style={{ fontSize:15.5, fontWeight:800, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.label}</div>
           </div>
-          <div style={{ fontSize:10, fontWeight:800, letterSpacing:"0.05em", textTransform:"uppercase", color:T.muted, marginBottom:5 }}>{isBad ? "Resisted / month" : "Votes / month"}</div>
-          {months.length === 0 ? (
-            <div style={{ fontSize:12, color:T.muted }}>No check-ins yet.</div>
-          ) : months.map(([ym, cnt]) => {
-            const lbl = new Date(ym + "-01T00:00").toLocaleDateString(navigator.language || undefined, { month:"short" });
+          <button onClick={onClose} aria-label="Close" style={{ flexShrink:0, width:32, height:32, borderRadius:"50%", background:T.surf2, border:"none", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
+            <Ic name="x" size={15} color={T.muted} />
+          </button>
+        </div>
+
+        {/* Month navigation */}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+          <button onClick={() => { setMonthOffset(o => o + 1); setSelDay(null); }} aria-label="Previous month" style={{ ...S.crudBtn, width:36, height:36, fontSize:20 }}><span aria-hidden="true">&#8249;</span></button>
+          <span style={{ fontSize:14.5, fontWeight:800, color:T.text }}>{monthLabel}</span>
+          <button onClick={() => { setMonthOffset(o => Math.max(0, o - 1)); setSelDay(null); }} disabled={monthOffset === 0} aria-label="Next month" style={{ ...S.crudBtn, width:36, height:36, fontSize:20, opacity: monthOffset === 0 ? 0.3 : 1 }}><span aria-hidden="true">&#8250;</span></button>
+        </div>
+
+        {/* Weekday header */}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6, marginBottom:6 }} aria-hidden="true">
+          {["M","T","W","T","F","S","S"].map((w,i) => (<div key={i} style={{ textAlign:"center", fontSize:10, fontWeight:800, color:T.muted }}>{w}</div>))}
+        </div>
+
+        {/* Day grid */}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6 }}>
+          {Array.from({ length: firstDow }).map((_, i) => (<div key={"e" + i} />))}
+          {monthDates.map(d => {
+            const st = dayStatus(d);
+            const isSel = d === selDay;
+            let s;
+            if      (st === "done")   s = { background:C, color:"#fff", border:"1px solid transparent" };
+            else if (st === "miss")   s = { background:"#FCE9F0", color:"#D65A8A", border:"1.5px solid #F3B6CE" };
+            else if (st === "undone") s = { background:"#fff", color:C, border:`1px solid ${C}55` };
+            else if (st === "today")  s = { background:"#fff", color:C, border:`2px solid ${C}` };
+            else if (st === "off")    s = { background:T.surf2, color:T.border2, border:"1px solid transparent" };
+            else                      s = { background:"transparent", color:T.border2, border:`1px dashed ${T.border}` };
             return (
-              <div key={ym} style={{ display:"flex", alignItems:"center", gap:8, marginTop:6 }}>
-                <span style={{ width:30, fontSize:11, fontWeight:700, color:T.text2 }}>{lbl}</span>
-                <span style={{ flex:1, height:6, borderRadius:99, background:T.surf2, overflow:"hidden" }}>
-                  <span style={{ display:"block", height:"100%", width:`${Math.round((cnt / max) * 100)}%`, background:color, borderRadius:99 }} />
-                </span>
-                <span style={{ width:18, textAlign:"right", fontSize:11, fontWeight:800, color, fontVariantNumeric:"tabular-nums" }}>{cnt}</span>
-              </div>
+              <button key={d} onClick={() => setSelDay(x => x === d ? null : d)} aria-label={`${d}: ${statusLabel(st, isBad)}`}
+                style={{ ...cell, ...s, boxShadow: isSel ? `0 0 0 2px ${T.text}` : "none" }}>
+                {+d.slice(8, 10)}
+              </button>
             );
           })}
         </div>
-      )}
-    </span>
+
+        {/* Selected day / month summary */}
+        <div style={{ marginTop:14, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, borderTop:`1px solid ${T.surf2}`, paddingTop:12 }}>
+          {selDay ? (
+            <span style={{ fontSize:13, fontWeight:700, color:T.text2 }}>{new Date(selDay + "T00:00").toLocaleDateString(navigator.language || undefined, { weekday:"long", day:"numeric", month:"short" })} · {statusLabel(dayStatus(selDay), isBad)}</span>
+          ) : (
+            <span style={{ fontSize:13, fontWeight:700, color:T.text2 }}>{kept} of {due} {isBad ? "clean" : "kept"} this month</span>
+          )}
+          <span style={{ fontSize:14, fontWeight:900, color: due ? rateColor : T.muted }}>{due ? `${rate}%` : "—"}</span>
+        </div>
+
+        {/* Legend */}
+        <div style={{ display:"flex", flexWrap:"wrap", gap:"7px 14px", marginTop:12, fontSize:11, color:T.muted, fontWeight:700 }} aria-hidden="true">
+          <span style={{ display:"inline-flex", alignItems:"center", gap:5 }}><span style={{ width:12, height:12, borderRadius:4, background:C }} />{isBad ? "Clean" : "Done"}</span>
+          <span style={{ display:"inline-flex", alignItems:"center", gap:5 }}><span style={{ width:12, height:12, borderRadius:4, background:"#FCE9F0", border:"1.5px solid #F3B6CE" }} />Missed</span>
+          <span style={{ display:"inline-flex", alignItems:"center", gap:5 }}><span style={{ width:12, height:12, borderRadius:4, background:"#fff", border:`1px solid ${C}55` }} />{isBad ? "Slipped" : "Skipped"}</span>
+          <span style={{ display:"inline-flex", alignItems:"center", gap:5 }}><span style={{ width:12, height:12, borderRadius:4, background:T.surf2 }} />Off day</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── VOTES BADGE — tappable votes total; opens the month-by-month check-in calendar ─
+function VotesBadge({ habit, allData, votes, total, color, isBad }) {
+  const [open, setOpen] = useState(false);
+  const openCal = (e) => { e.stopPropagation(); setOpen(true); };
+  return (
+    <>
+      <span role="button" tabIndex={0} onClick={openCal}
+        onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openCal(e); } }}
+        aria-label={`${votes} of ${total} ${isBad ? "resisted" : "votes cast"}. Open the check-in calendar.`}
+        style={{ display:"inline-flex", alignItems:"baseline", gap:3, fontSize:11.5, fontWeight:900, color, cursor:"pointer" }}>
+        <Ic name="vote" size={12} color={color} style={{ alignSelf:"center" }} />{votes}<span style={{ fontWeight:800, color: color + "b0" }}>/{total}</span>
+      </span>
+      {open && <HabitCalendarModal habit={habit} allData={allData} isBad={isBad} onClose={() => setOpen(false)} />}
+    </>
   );
 }
 
