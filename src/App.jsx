@@ -2075,12 +2075,18 @@ export default function App() {
           </div>
         </div>
        </div>
-       {/* Fixed quote — lives in the sticky header so it stays visible on scroll */}
+       {/* Fixed quote + day navigator — live in the sticky header so they stay
+           visible on scroll (Today only). */}
        {view === "today" && (
-         <div style={{ marginTop:10, paddingTop:10, borderTop:`1px solid ${T.border}`, textAlign:"center" }}>
-           <span style={{ fontSize:12.5, fontStyle:"italic", fontWeight:600, color:T.text2, lineHeight:1.45 }}>“Habits are the compound interest of self-improvement.” </span>
-           <span style={{ fontSize:11.5, fontWeight:800, color:T.primary, whiteSpace:"nowrap" }}>— James Clear</span>
-         </div>
+         <>
+           <div style={{ marginTop:10, paddingTop:10, borderTop:`1px solid ${T.border}`, textAlign:"center" }}>
+             <span style={{ fontSize:12.5, fontStyle:"italic", fontWeight:600, color:T.text2, lineHeight:1.45 }}>“Habits are the compound interest of self-improvement.” </span>
+             <span style={{ fontSize:11.5, fontWeight:800, color:T.primary, whiteSpace:"nowrap" }}>— James Clear</span>
+           </div>
+           <div style={{ marginTop:10 }}>
+             <DayNavigator selectedDate={selectedDate} setSelectedDate={setSelectedDate} todayKey={todayKey} />
+           </div>
+         </>
        )}
       </header>
 
@@ -4395,7 +4401,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
   if (identities.length === 0) {
     return (
       <div style={{...S.content, alignItems:"center", paddingTop:40, textAlign:"center"}}>
-        <DayNavigator selectedDate={selectedDate} setSelectedDate={setSelectedDate} todayKey={todayKey}/>
+        {/* Day navigator lives in the sticky header now */}
         <div style={{fontSize:52,marginBottom:16}} aria-hidden="true">🌱</div>
         <div style={{fontSize:20,fontWeight:700,color:T.text,marginBottom:8}}>Start building your identity</div>
         <div style={{fontSize:16,color:T.muted,lineHeight:1.7,maxWidth:280,marginBottom:28}}>
@@ -4414,8 +4420,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
 
   return (
     <div style={S.content}>
-      {/* Day Navigator */}
-      <DayNavigator selectedDate={selectedDate} setSelectedDate={setSelectedDate} todayKey={todayKey} />
+      {/* Day Navigator now lives in the sticky header (stays pinned on scroll) */}
 
       {/* Weekend nudge — review this week (only if not reviewed yet) */}
       {(() => {
