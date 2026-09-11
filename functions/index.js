@@ -88,19 +88,24 @@ exports.sendHabitReminders = onSchedule(
           const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
           // Title = the action itself, so the notification says exactly what to do.
           const title = breaking ? `Don't ${lower(label)}` : cap(label);
-          // Body = how/why: the 2-min step, the cue+time, or the identity vote.
+          // Body = the cue (when/where) + the identity payoff, so every reminder
+          // says both "do this now" and "this is a vote for who you're becoming".
+          const idName = String(identity.label || "who you're becoming").trim();
           const when = [habit.time, habit.location].filter(Boolean).join(" · ");
+          const cue  = habit.trigger ? `After ${lower(habit.trigger)}` : "";
+          const lead = [cue, when].filter(Boolean).join(" · ");
           let body;
           if (breaking) {
-            body = habit.starter ? `If tempted: ${habit.starter}` : "Notice the urge and let it pass — you're in control.";
-          } else if (habit.starter) {
-            body = `2-min start: ${habit.starter}`;
-          } else if (habit.trigger) {
-            body = `After ${lower(habit.trigger)}${when ? " · " + when : ""}`;
-          } else if (when) {
-            body = `${when} · a vote for ${cap(identity.label || "who you're becoming")}`;
+            body = habit.starter
+              ? `If tempted: ${habit.starter} — one vote for ${idName}.`
+              : `Let the urge pass — one vote for ${idName}.`;
           } else {
-            body = `A vote for ${cap(identity.label || "who you're becoming")}`;
+            const vote = `a vote for ${idName}`;
+            body = lead
+              ? `${lead} · ${vote}`
+              : habit.starter
+                ? `Just 2 minutes: ${habit.starter} · ${vote}`
+                : `Show up today — ${vote}.`;
           }
 
           try {
