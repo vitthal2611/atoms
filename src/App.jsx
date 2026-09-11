@@ -2927,10 +2927,10 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           <div style={{ display:"flex", alignItems:"center", gap:14 }}>
           {/* Left — the three laws as icon chips (tap/hover for detail) + a note icon */}
           <div style={{ display:"flex", alignItems:"center", gap:7, flexShrink:0 }}>
-            <LawChip compact icon="spark" name="Craving" make={breaking ? "make it unattractive" : "make it attractive"} color="#534AB7" emphasis={!habit.attractive}>
+            <LawChip compact icon="star" name="Craving" make={breaking ? "make it unattractive" : "make it attractive"} color="#534AB7" emphasis={!habit.attractive}>
               {habit.attractive || <AddHint label={breaking ? "Add the real cost" : "Add why it's attractive"} />}
             </LawChip>
-            <LawChip compact icon="clock" name="Response" make={breaking ? "make it difficult" : "make it easy"} color="#0F6E56" emphasis={!showStarter && !habit.easy}>
+            <LawChip compact icon="bolt" name="Response" make={breaking ? "make it difficult" : "make it easy"} color="#0F6E56" emphasis={!showStarter && !habit.easy}>
               {showStarter && (breaking ? (
                 <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, fontWeight:700, color:"#712B13", background:"#FAECE7", border:"1px solid #F5C4B3", borderRadius:20, padding:"5px 12px", maxWidth:"100%" }}>
                   <Ic name="warn" size={13} color="#712B13" />
