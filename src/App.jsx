@@ -2797,7 +2797,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               <div style={{ fontSize:8.5, fontWeight:900, letterSpacing:"0.09em", textTransform:"uppercase", color:C, marginBottom:2 }}>I will</div>
             )}
             <span style={{
-              display:"block", wordBreak:"break-word", fontSize:18, fontWeight:800, letterSpacing:"-0.01em", lineHeight:1.28,
+              display:"block", wordBreak:"break-word", fontSize:15.5, fontWeight:700, letterSpacing:"-0.01em", lineHeight:1.3,
               color: checked ? T.text2 : missed ? T.muted : T.text,
               textDecoration: checked ? "line-through" : "none",
               textDecorationColor: C + "88",
