@@ -755,6 +755,8 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     identityId: initial.identityId || identities[0]?.id || "",
     frequency:  initial.frequency  || DEFAULT_FREQUENCY,
     kind:       initial.kind       || "good",
+    target:     initial.target ? String(initial.target) : "",
+    unit:       initial.unit       || "",
   });
   const [submitted, setSubmitted] = useState(false);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
@@ -785,6 +787,8 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     satisfying: fId + "-satisfying",
     time:       fId + "-time",
     location:   fId + "-location",
+    target:     fId + "-target",
+    unit:       fId + "-unit",
   };
 
   // ── Draft with James Clear — fills only the EMPTY fields, never overwrites you ──
@@ -992,6 +996,29 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
       </div>
       <label style={S.fieldLabel}>Frequency</label>
       <FrequencyPicker value={form.frequency} onChange={v=>set("frequency",v)} />
+
+      {/* Optional daily target — turns the check into a counter (e.g. 8 glasses).
+          Leave blank for a simple done/undone habit. Build habits only. */}
+      {!breaking && (
+        <>
+          <label style={S.fieldLabel}>Daily target <span style={{ fontWeight:600, color:T.muted }}>(optional)</span></label>
+          <div style={{ display:"flex", gap:10 }}>
+            <div style={{ width:110, flexShrink:0 }}>
+              <input id={ids.target} style={S.input} type="number" min="0" inputMode="numeric" value={form.target}
+                onChange={e=>set("target", e.target.value.replace(/[^\d]/g, ""))} placeholder="e.g. 8" aria-label="Daily target amount" />
+            </div>
+            <div style={{ flex:1, minWidth:0 }}>
+              <input id={ids.unit} style={S.input} value={form.unit} onChange={e=>set("unit", e.target.value)}
+                placeholder="unit — e.g. glasses, pages, reps" maxLength={20} aria-label="Target unit" />
+            </div>
+          </div>
+          <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>
+            {Number(form.target) > 1
+              ? `Tap + to count up to ${Math.round(Number(form.target))}${form.unit ? " " + form.unit.trim() : ""} — the vote lands when you hit the target.`
+              : "Set a number to count reps toward a target; leave blank for a simple check."}
+          </div>
+        </>
+      )}
 
       {/* Laws 2 & 3 — accelerants, compact two-up */}
       <div style={{ display:"flex", gap:10, marginTop:22 }}>
@@ -1499,6 +1526,30 @@ export default function App() {
     // the inline row reward (justChecked), no full-screen popup message.
   }, [selectedDate]);
 
+  // ── Quantity habits — bump the day's count toward the target. Storing `true`
+  // once the target is reached keeps every done-check (streak/votes/%/calendar)
+  // working unchanged; partial progress is stored as a plain number. ──
+  const adjustCount = useCallback((habitId, target, delta) => {
+    const t = Math.max(1, Math.round(target || 1));
+    const cur = dataRef.current[selectedDate]?.[habitId];
+    const before = cur === true ? t : (typeof cur === "number" ? cur : 0);
+    const n = Math.max(0, Math.min(t, before + delta));
+    setData(prev => {
+      const day = prev[selectedDate] || {};
+      const next = { ...day };
+      if (n <= 0) delete next[habitId];
+      else if (n >= t) next[habitId] = true;   // target met → counts as done
+      else next[habitId] = n;                   // partial progress
+      return { ...prev, [selectedDate]: next };
+    });
+    // Celebrate only at the moment the target is reached, not on every tap.
+    if (before < t && n >= t) {
+      clearTimeout(justCheckedTimerRef.current);
+      setJustChecked(habitId);
+      justCheckedTimerRef.current = setTimeout(() => setJustChecked(null), 3400);
+    }
+  }, [selectedDate]);
+
   // Toggle a habit done for an ARBITRARY day — used by the Month calendar so you
   // can fill in / undo check-ins for any past day, across all weeks.
   const toggleForDate = useCallback((dateKey, habitId) => {
@@ -1906,29 +1957,35 @@ export default function App() {
   }
 
   // ── CRUD: Habits ──
-  const addHabit = ({ label, trigger, attractive, easy, starter, satisfying, time, location, icon, identityId, frequency, kind }) => {
+  // A daily target only applies to good habits; store it as a number (>1) or drop it.
+  const cleanTarget = (kind, target) => (kind !== "bad" && Math.round(Number(target)) > 1 ? Math.round(Number(target)) : 0);
+
+  const addHabit = ({ label, trigger, attractive, easy, starter, satisfying, time, location, icon, identityId, frequency, kind, target, unit }) => {
+    const tgt = cleanTarget(kind, target);
     setIdentities(prev => prev.map(ident =>
       ident.id !== identityId ? ident :
-      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: kind || "good", frequency: frequency || DEFAULT_FREQUENCY, createdAt: getTodayKey() }] }
+      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: kind || "good", frequency: frequency || DEFAULT_FREQUENCY, target: tgt, unit: tgt ? (unit || "").trim() : "", createdAt: getTodayKey() }] }
     ));
     setModal(null);
   };
 
-  const updateHabit = ({ label, trigger, attractive, easy, starter, satisfying, time, location, icon, identityId: newIdentityId, frequency, kind }) => {
+  const updateHabit = ({ label, trigger, attractive, easy, starter, satisfying, time, location, icon, identityId: newIdentityId, frequency, kind, target, unit }) => {
     const { identityId: oldIdentityId, habitId } = modalCtx;
     const freq = frequency || DEFAULT_FREQUENCY;
     const k = kind || "good";
+    const tgt = cleanTarget(k, target);
+    const uni = tgt ? (unit || "").trim() : "";
     if (newIdentityId === oldIdentityId) {
       setIdentities(prev => prev.map(ident =>
         ident.id !== oldIdentityId ? ident :
-        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: k, frequency: freq }) }
+        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni }) }
       ));
     } else {
       setIdentities(prev => {
         const habitData = prev.find(i => i.id === oldIdentityId)?.habits.find(h => h.id === habitId);
         return prev.map(ident => {
           if (ident.id === oldIdentityId) return { ...ident, habits: ident.habits.filter(h => h.id !== habitId) };
-          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: k, frequency: freq }] };
+          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni }] };
           return ident;
         });
       });
@@ -2175,6 +2232,7 @@ export default function App() {
             todayData={selectedData}
             allData={data}
             toggle={toggle}
+            adjustCount={adjustCount}
             onOpenFocus={() => setView("focus")}
             reviews={reviews}
             onOpenWeeklyReview={() => setReviewOpenWk(weekStartKey(todayKey))}
@@ -2565,6 +2623,30 @@ function HabitRing({ checked, missed, color, streak, next, onClick, label, size 
   );
 }
 
+// ─── COUNTER RING — quantity habits: tap to add one toward the target ─────────
+function CounterRing({ count, target, color, onInc, size = 44, label }) {
+  const r = (size / 2) - 3;
+  const c = 2 * Math.PI * r;
+  const mid = size / 2;
+  const pct = Math.max(0, Math.min(1, target ? count / target : 0));
+  return (
+    <button className="habit-toggle" onClick={onInc} aria-label={label}
+      style={{ position:"relative", width:size, height:size, flexShrink:0, background:"transparent", border:"none", padding:0, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", WebkitTapHighlightColor:"transparent" }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+        <circle cx={mid} cy={mid} r={r} fill={color + "12"} stroke={T.surf2} strokeWidth="3.5" />
+        {pct > 0 && (
+          <circle cx={mid} cy={mid} r={r} fill="none" stroke={color} strokeWidth="3.5"
+            strokeDasharray={`${pct * c} ${c}`} strokeLinecap="round"
+            transform={`rotate(-90 ${mid} ${mid})`} style={{ transition:"stroke-dasharray 0.3s ease" }} />
+        )}
+      </svg>
+      <span style={{ position:"absolute", inset:0, display:"flex", alignItems:"baseline", justifyContent:"center", gap:1, fontSize:14, fontWeight:900, color, pointerEvents:"none" }}>
+        {count}<span style={{ fontSize:9, color:T.muted, fontWeight:800 }}>/{target}</span>
+      </span>
+    </button>
+  );
+}
+
 // ─── NOTES JOURNAL — edit today's note + scroll (and edit) past days ───────────
 // James Clear's "Reflection & Review", per habit: one scrollable log where any
 // day's note is editable. Opened from the card's note link and the ⋯ menu.
@@ -2923,8 +3005,18 @@ function VotesBadge({ habit, allData, votes, total, color, isBad }) {
 
 // ─── HABIT ROW ────────────────────────────────────────────────────────────────
 // One habit on the timeline: cue → action → coaching (identity header is above).
-function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, active = false }) {
+function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, adjustCount, count = 0, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, active = false }) {
   const next = getNextMilestone(streak);
+  // Quantity habits: a target amount (e.g. 8 glasses) counted up per day.
+  const target = habit.target > 1 ? Math.round(habit.target) : 0;
+  const isQty = target > 0;
+  const unit = (habit.unit || "").trim();
+  // Tapping the ring/action: quantity habits add one (or undo to zero when done);
+  // simple habits just toggle done.
+  const activate = () => {
+    if (isQty && adjustCount) adjustCount(habit.id, target, checked ? -target : 1);
+    else toggle(habit.id, habit.frequency, identity);
+  };
 
   // One cue line above the label: trigger · time · location · frequency.
   // The milestone countdown lives in the micro-bar, not as text.
@@ -3005,24 +3097,30 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
         {/* Step 2: the check-in ring + the action (the hero) */}
         <div style={{ display:"flex", alignItems:"center", gap:11, marginTop: (!checked && !missed && cueText) ? 2 : 0 }}>
-          <span style={{ flexShrink:0, width:36, display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <HabitRing
-              checked={checked}
-              missed={missed}
-              color={C}
-              streak={streak}
-              next={next}
-              size={36}
-              onClick={() => toggle(habit.id, habit.frequency, identity)}
-              label={checked ? `Uncheck: ${habit.label}` : (breaking ? `Mark clean: ${habit.label}` : `Check: ${habit.label}`)}
-            />
+          <span style={{ flexShrink:0, width: isQty && !checked && !missed ? 44 : 36, display:"flex", alignItems:"center", justifyContent:"center" }}>
+            {isQty && !checked && !missed ? (
+              <CounterRing count={count} target={target} color={C} size={44}
+                onInc={() => adjustCount(habit.id, target, 1)}
+                label={`Add one${unit ? " " + unit : ""} for ${habit.label} — ${count} of ${target}`} />
+            ) : (
+              <HabitRing
+                checked={checked}
+                missed={missed}
+                color={C}
+                streak={streak}
+                next={next}
+                size={36}
+                onClick={activate}
+                label={checked ? `Uncheck: ${habit.label}` : (breaking ? `Mark clean: ${habit.label}` : `Check: ${habit.label}`)}
+              />
+            )}
           </span>
           <span
-            onClick={() => toggle(habit.id, habit.frequency, identity)}
+            onClick={activate}
             role="button"
             tabIndex={0}
-            onKeyDown={e => { if (e.key === "Enter") toggle(habit.id, habit.frequency, identity); }}
-            aria-label={checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
+            onKeyDown={e => { if (e.key === "Enter") activate(); }}
+            aria-label={isQty && !checked ? `Add one for ${habit.label}` : checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
             style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
           >
             {!checked && !missed && cueText && (
@@ -3036,6 +3134,16 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             }}>
               {habit.label}
             </span>
+            {isQty && !checked && !missed && (
+              <span style={{ display:"block", fontSize:11.5, fontWeight:700, color:T.text2, marginTop:3 }}>
+                {count} of {target}{unit ? " " + unit : ""} · {target - count} to go
+              </span>
+            )}
+            {isQty && checked && (
+              <span style={{ display:"block", fontSize:11.5, fontWeight:700, color:"#0F9D74", marginTop:3 }}>
+                {target} of {target}{unit ? " " + unit : ""} · done
+              </span>
+            )}
             {/* Time (a reminder when a trigger exists) + place, as clear chips */}
             {!checked && (habit.time || habit.location) && (
               <span style={{ display:"flex", alignItems:"center", gap:6, marginTop:6, flexWrap:"wrap" }}>
@@ -3054,6 +3162,11 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               </span>
             )}
           </span>
+          {isQty && !checked && !missed && count > 0 && (
+            <button onClick={(e) => { e.stopPropagation(); adjustCount(habit.id, target, -1); }}
+              aria-label={`Remove one — ${count} of ${target}`}
+              style={{ flexShrink:0, width:30, height:30, borderRadius:"50%", border:`1px solid ${C}33`, background:"#fff", color:C, fontSize:20, fontWeight:800, lineHeight:1, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>−</button>
+          )}
           {missed && (
             <span style={{ flexShrink:0 }}>
               <span style={{ fontSize:12, fontWeight:800, color:T.red, whiteSpace:"nowrap", background:T.red + "14", padding:"2px 8px", borderRadius:20 }}>Missed</span>
@@ -4460,7 +4573,7 @@ const FocusView = memo(function FocusView({ dailyTasks, selectedDate, setSelecte
 });
 
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
-const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, markMiss, habitNotes, setHabitNote, justChecked, getStreakForHabit, openEditHabit, openDeleteHabit, openReviewFor, setModal, openAddHabit, openAddIdentity, onOpenFocus, reviews, onOpenWeeklyReview, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, addFocusTask, toggleTask, deleteTask, editTask, toggleStar, toggleFocus, deferTask, reviewTarget, onOpenReview, onDismissReview }) {
+const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, adjustCount, markMiss, habitNotes, setHabitNote, justChecked, getStreakForHabit, openEditHabit, openDeleteHabit, openReviewFor, setModal, openAddHabit, openAddIdentity, onOpenFocus, reviews, onOpenWeeklyReview, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, addFocusTask, toggleTask, deleteTask, editTask, toggleStar, toggleFocus, deferTask, reviewTarget, onOpenReview, onDismissReview }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
   const [matrixExpanded, setMatrixExpanded] = useState(false);
@@ -4633,9 +4746,11 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                   identity={identity}
                   checked={todayData[habit.id] === true}
                   missed={todayData[habit.id] === "miss"}
+                  count={todayData[habit.id] === true ? (habit.target > 1 ? Math.round(habit.target) : 1) : (typeof todayData[habit.id] === "number" ? todayData[habit.id] : 0)}
                   warnMissedYesterday={selectedDate === todayKey && missedYesterdayIds.has(habit.id) && todayData[habit.id] == null}
                   streak={getStreakForHabit(habit.id, habit.frequency)}
                   toggle={toggle}
+                  adjustCount={adjustCount}
                   onMiss={markMiss}
                   first={true}
                   showIdentity={false}
