@@ -1249,7 +1249,7 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     kind:       initial.kind       || "good",
     target:     initial.target ? String(initial.target) : "",
     unit:       initial.unit       || "",
-    goalType:   initial.goal?.type === "monthlytotal" ? "monthlytotal" : "checklist",
+    goalType:   "monthlytotal",   // single goal type: accumulate a monthly total
     goalUnit:   initial.goal?.unit  || "",
     goalCount:  initial.goal?.count ? String(initial.goal.count) : "",
     goalStart:  initial.goal?.start != null ? String(initial.goal.start) : "",
@@ -1527,17 +1527,7 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
           build habits so every habit shows visible, climbing progress. */}
       {!breaking && (
         <>
-          <label style={{ ...S.fieldLabel, marginTop:18 }}>Goal type</label>
-          <div style={{ display:"flex", gap:6, marginBottom:10 }} role="group" aria-label="Goal type">
-            {[["checklist","Reach N items","books, chapters, POCs"],["monthlytotal","Monthly total","km, minutes, ₹ per month"]].map(([val,lbl,hint]) => (
-              <button key={val} type="button" onClick={()=>set("goalType", val)} aria-pressed={form.goalType===val}
-                style={{ flex:1, padding:"9px 8px", borderRadius:10, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", textAlign:"left",
-                  border:`2px solid ${form.goalType===val ? T.gold : T.border}`, background: form.goalType===val ? T.surf2 : "transparent" }}>
-                <div style={{ fontSize:13, fontWeight:800, color: form.goalType===val ? T.text : T.muted }}>{lbl}</div>
-                <div style={{ fontSize:9.5, fontWeight:700, color:T.muted, marginTop:1 }}>{hint}</div>
-              </button>
-            ))}
-          </div>
+          <label style={{ ...S.fieldLabel, marginTop:18 }}>Monthly goal <span style={{ fontWeight:600, color:T.muted }}>— accumulate a total each month</span></label>
 
           {form.goalType === "monthlytotal" ? (
             <>
