@@ -180,33 +180,22 @@ function MilestoneProgress({ streak = 0 }) {
   );
 }
 
-// ─── GOAL PROGRESS — a personal milestone ladder that fills as you check in ────
-// e.g. every 20 reading sessions = 1 book, climbing 1 → 10 books. Shown on the
-// card in place of the streak milestone when the habit has a goal defined.
-function GoalProgress({ goal, goalDone = [] }) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState(null);
-  const ref = useRef(null);
-  const W = 224;
+// ─── GOAL PROGRESS — compact card chip; tap to open the log/ladder modal ──────
+// Shows N/target + a bar; tapping opens GoalProgressModal to log named items.
+function GoalProgress({ goal, goalLog = [], goalDone = [], onOpen }) {
   const count = Math.max(1, goal.count || 1);
   const unit  = goal.unit || "unit";
-  const doneSet = new Set(goalDone);
-  const doneUnits = Math.min(doneSet.size, count);
+  const doneUnits = Math.min((goalLog.length || goalDone.length || 0), count);
   const complete  = doneUnits >= count;
   const frac   = doneUnits / count;
   const remain = count - doneUnits;
-  const nextNum = Array.from({ length: count }, (_, i) => i + 1).find(n => !doneSet.has(n)) || count;
   const gold = "#B07B1E";
   const pl = (n) => `${n} ${unit}${n === 1 ? "" : "s"}`;
 
-  const show = () => { const r = ref.current?.getBoundingClientRect(); if (r) setPos({ top: r.bottom + 6, left: Math.min(Math.max(8, r.right - W), window.innerWidth - W - 8) }); setOpen(true); };
-  const hide = () => setOpen(false);
-
   return (
-    <div ref={ref} style={{ position:"relative", marginLeft:"auto", flexShrink:0, minWidth:96, maxWidth:158, textAlign:"right", cursor:"pointer", WebkitTapHighlightColor:"transparent" }}
-      onMouseEnter={show} onMouseLeave={hide}
-      onClick={(e) => { e.stopPropagation(); open ? hide() : show(); }}
-      aria-label={complete ? `Goal complete: ${pl(count)}. Tap for the ladder.` : `${doneUnits} of ${count} ${unit}s done. Tap for the ladder.`}>
+    <button type="button" onClick={(e) => { e.stopPropagation(); onOpen && onOpen(); }}
+      style={{ marginLeft:"auto", flexShrink:0, minWidth:96, maxWidth:158, textAlign:"right", cursor:"pointer", WebkitTapHighlightColor:"transparent", background:"transparent", border:"none", padding:0, fontFamily:"inherit" }}
+      aria-label={complete ? `Goal complete: ${pl(count)}. Tap to view or log progress.` : `${doneUnits} of ${count} ${unit}s done. Tap to log progress.`}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", gap:4, fontSize:11, fontWeight:800, color:gold, whiteSpace:"nowrap", overflow:"hidden" }}>
         <span aria-hidden="true">{complete ? "🏆" : "🎯"}</span>
         <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{doneUnits}/{count} {unit}{count === 1 ? "" : "s"}</span>
@@ -215,46 +204,29 @@ function GoalProgress({ goal, goalDone = [] }) {
         <div style={{ flex:1, maxWidth:62, height:5, borderRadius:5, background:"#EBE0C6", overflow:"hidden" }}>
           <div style={{ width:`${Math.round(frac * 100)}%`, height:"100%", background:"#F59E0B", borderRadius:5 }} />
         </div>
-        <span style={{ fontSize:10.5, fontWeight:800, color:gold, whiteSpace:"nowrap" }}>{complete ? "done" : `${remain} left`}</span>
+        <span style={{ fontSize:10.5, fontWeight:800, color:gold, whiteSpace:"nowrap" }}>{complete ? "done" : `+ log`}</span>
       </div>
-
-      {open && pos && (
-        <div role="tooltip" onClick={e => e.stopPropagation()} style={{ position:"fixed", top:pos.top, left:pos.left, zIndex:200, width:W, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 10px 28px rgba(9,45,75,0.2)", padding:"11px 13px", textAlign:"left" }}>
-          <div style={{ fontSize:12, fontWeight:900, color:T.text, marginBottom:2 }}>{complete ? `🏆 ${pl(count)} — done!` : `${doneUnits}/${count} ${unit}${count === 1 ? "" : "s"}`}</div>
-          <div style={{ fontSize:11, fontWeight:700, color:T.muted, marginBottom:9 }}>{complete ? "goal reached 🎉" : goal.by ? `🗓️ By ${longDateLabel(goal.by)} · ${daysUntil(goal.by)}d left` : "open the ⋯ menu to tick milestones"}</div>
-          <div style={{ maxHeight:190, overflowY:"auto", margin:"0 -3px", padding:"0 3px" }}>
-            {Array.from({ length: count }, (_, i) => i + 1).map(n => {
-              const done = doneSet.has(n);
-              const isNext = !complete && n === nextNum;
-              return (
-                <div key={n} style={{ display:"flex", alignItems:"center", gap:8, padding:"3px 0", opacity: done || isNext ? 1 : 0.5 }}>
-                  <span aria-hidden="true" style={{ width:16, textAlign:"center", fontSize:12 }}>{done ? "✅" : isNext ? "🎯" : "▫️"}</span>
-                  <span style={{ flex:1, fontSize:11.5, fontWeight: isNext ? 900 : 700, color: done ? gold : isNext ? T.text : T.muted }}>{pl(n)}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
+    </button>
   );
 }
 
 // ─── GOAL PROGRESS MODAL — the full goal ladder, reachable from the card menu ──
 // Always available (even after the habit is checked for the day), unlike the
 // inline card element which only shows in the pending coaching panel.
-function GoalProgressModal({ habit, identity, allData = {}, onToggleMilestone, onClose }) {
+function GoalProgressModal({ habit, identity, onAddEntry, onRemoveEntry, onClose }) {
   const goal = habit.goal || { unit: "unit", count: 1 };
   const count = Math.max(1, goal.count || 1);
   const unit = goal.unit || "unit";
-  const doneSet = new Set(habit.goalDone || []);
-  const doneUnits = Math.min(doneSet.size, count);
+  // Named log of completed items; seed length from an old numeric goalDone.
+  const log = habit.goalLog || (habit.goalDone || []).map(() => ({ name: "", at: "" }));
+  const doneUnits = Math.min(log.length, count);
   const complete = doneUnits >= count;
-  const nextNum = Array.from({ length: count }, (_, i) => i + 1).find(n => !doneSet.has(n)) || count;
   const frac = doneUnits / count;
   const gold = "#B07B1E";
   const pl = (n) => `${n} ${unit}${n === 1 ? "" : "s"}`;
-  const canToggle = !!onToggleMilestone;
+  const [name, setName] = useState("");
+  const canEdit = !!onAddEntry;
+  const add = () => { if (!canEdit || complete) return; onAddEntry(identity.id, habit.id, name); setName(""); };
   return (
     <Modal title="Goal progress" onClose={onClose}>
       <div style={{ padding: "0 20px 20px" }}>
@@ -278,34 +250,42 @@ function GoalProgressModal({ habit, identity, allData = {}, onToggleMilestone, o
         <div style={{ height: 8, borderRadius: 8, background: "#EBE0C6", overflow: "hidden", marginBottom: 14 }}>
           <div style={{ width: `${Math.round(frac * 100)}%`, height: "100%", background: "#F59E0B", borderRadius: 8 }} />
         </div>
-        {canToggle && (
-          <div style={{ fontSize: 11.5, color: T.muted, fontWeight: 700, marginBottom: 10 }}>Tap a milestone to mark it done.</div>
+
+        {/* Log the next item — optionally name it (e.g. the book title). */}
+        {canEdit && !complete && (
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            <input value={name} onChange={e => setName(e.target.value)} maxLength={60}
+              onKeyDown={e => { if (e.key === "Enter") add(); }}
+              placeholder={`Name this ${unit} (optional)`} aria-label={`Name of ${unit} ${doneUnits + 1}`}
+              style={{ ...S.input, marginTop: 0, flex: 1, minWidth: 0 }} />
+            <button type="button" onClick={add} style={{ ...S.btnPrimary, flex: "none", width: "auto", padding: "0 16px" }}>+ Add</button>
+          </div>
         )}
+
         <div style={{ display: "grid", gap: 6 }}>
-          {Array.from({ length: count }, (_, i) => i + 1).map(n => {
-            const done = doneSet.has(n);
-            const isNext = !complete && n === nextNum;
-            const inner = (
-              <>
+          {Array.from({ length: count }, (_, i) => i).map(i => {
+            const entry = log[i];
+            const done = i < doneUnits;
+            const isNext = !complete && i === doneUnits;
+            const label = done ? (entry && entry.name ? entry.name : pl(i + 1)) : pl(i + 1);
+            return (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 10,
+                background: done ? "#FBF0DA" : isNext ? T.surf2 : "transparent",
+                border: `1px solid ${done ? "#F6DFB0" : isNext ? T.border : T.surf2}`, opacity: done || isNext ? 1 : 0.6 }}>
                 <span aria-hidden="true" style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center",
                   background: done ? "#0F9D74" : "transparent", border: `2px solid ${done ? "#0F9D74" : isNext ? gold : T.border2}` }}>
                   {done && <Ic name="check" size={13} color="#fff" />}
                 </span>
-                <span style={{ flex: 1, fontSize: 14, fontWeight: done || isNext ? 900 : 700, color: done ? gold : isNext ? T.text : T.text2, textAlign: "left" }}>{pl(n)}</span>
-                {isNext && <span style={{ fontSize: 11, fontWeight: 800, color: gold }}>next</span>}
-              </>
-            );
-            const style = { display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 10, width: "100%",
-              background: done ? "#FBF0DA" : isNext ? T.surf2 : "transparent",
-              border: `1px solid ${done ? "#F6DFB0" : isNext ? T.border : T.surf2}`,
-              cursor: canToggle ? "pointer" : "default", fontFamily: "inherit", WebkitTapHighlightColor: "transparent" };
-            return canToggle ? (
-              <button key={n} type="button" onClick={() => onToggleMilestone(identity.id, habit.id, n)}
-                aria-pressed={done} aria-label={`${pl(n)} ${done ? "completed — tap to undo" : "not done — tap to mark completed"}`} style={style}>
-                {inner}
-              </button>
-            ) : (
-              <div key={n} style={style}>{inner}</div>
+                <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 800, color: T.muted, width: 18 }}>{i + 1}.</span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: done || isNext ? 900 : 700, color: done ? T.text : isNext ? T.text : T.muted, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+                {done && canEdit && (
+                  <button type="button" onClick={() => onRemoveEntry(identity.id, habit.id, i)} aria-label={`Remove ${label}`}
+                    style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
+                    <Ic name="x" size={13} color={T.muted} />
+                  </button>
+                )}
+                {isNext && <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 800, color: gold }}>next</span>}
+              </div>
             );
           })}
         </div>
@@ -1733,18 +1713,29 @@ export default function App() {
     });
   }, [selectedDate]);
 
-  // Manually tick a goal milestone (unit number) done / undone. Persists on the
-  // habit as `goalDone`, so the user controls when a milestone counts as reached.
-  const toggleGoalMilestone = useCallback((identityId, habitId, n) => {
+  // Goal progress is a named log of completed items (e.g. the book titles you
+  // read). doneCount = goalLog.length. Old habits used a numeric `goalDone`; we
+  // seed the log from it once so their count carries over.
+  const seedLog = (h) => h.goalLog || (h.goalDone || []).map(() => ({ name: "", at: "" }));
+  const addGoalEntry = useCallback((identityId, habitId, name) => {
     setIdentities(prev => prev.map(ident =>
       ident.id !== identityId ? ident : {
         ...ident,
         habits: ident.habits.map(h => {
           if (h.id !== habitId) return h;
-          const done = new Set(h.goalDone || []);
-          done.has(n) ? done.delete(n) : done.add(n);
-          return { ...h, goalDone: [...done].sort((a, b) => a - b) };
+          const cap = h.goal?.count || 0;
+          const log = seedLog(h);
+          if (cap && log.length >= cap) return h;                    // don't exceed the target
+          return { ...h, goalLog: [...log, { name: (name || "").trim().slice(0, 60), at: getTodayKey() }] };
         }),
+      }
+    ));
+  }, []);
+  const removeGoalEntry = useCallback((identityId, habitId, idx) => {
+    setIdentities(prev => prev.map(ident =>
+      ident.id !== identityId ? ident : {
+        ...ident,
+        habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, goalLog: seedLog(h).filter((_, i) => i !== idx) }),
       }
     ));
   }, []);
@@ -2423,7 +2414,8 @@ export default function App() {
             reviews={reviews}
             onOpenWeeklyReview={() => setReviewOpenWk(weekStartKey(todayKey))}
             markMiss={markMiss}
-            toggleGoalMilestone={toggleGoalMilestone}
+            addGoalEntry={addGoalEntry}
+            removeGoalEntry={removeGoalEntry}
             habitNotes={habitNotes}
             setHabitNote={setHabitNote}
             justChecked={justChecked}
@@ -2925,7 +2917,7 @@ function NotesJournalModal({ habit, identity, allData = {}, habitNotes = {}, onS
 }
 
 // ─── ROW MENU — notes / miss / edit / delete behind one ⋯ button ──────────────
-function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHabit, onReview, habitNotes = {}, allData = {}, setHabitNote, onToggleGoalMilestone }) {
+function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHabit, onReview, habitNotes = {}, allData = {}, setHabitNote, onAddGoalEntry, onRemoveGoalEntry }) {
   const [open, setOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [goalOpen, setGoalOpen] = useState(false);
@@ -2987,7 +2979,7 @@ function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHab
           onClose={() => setNotesOpen(false)}
         />
       )}
-      {goalOpen && <GoalProgressModal habit={habit} identity={identity} allData={allData} onToggleMilestone={onToggleGoalMilestone} onClose={() => setGoalOpen(false)} />}
+      {goalOpen && <GoalProgressModal habit={habit} identity={identity} onAddEntry={onAddGoalEntry} onRemoveEntry={onRemoveGoalEntry} onClose={() => setGoalOpen(false)} />}
     </>
   );
 }
@@ -3199,8 +3191,9 @@ function VotesBadge({ habit, allData, votes, total, color, isBad }) {
 
 // ─── HABIT ROW ────────────────────────────────────────────────────────────────
 // One habit on the timeline: cue → action → coaching (identity header is above).
-function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, adjustCount, count = 0, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, active = false }) {
+function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, adjustCount, count = 0, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, onAddGoalEntry, onRemoveGoalEntry, active = false }) {
   const next = getNextMilestone(streak);
+  const [goalModalOpen, setGoalModalOpen] = useState(false);
   // Quantity habits: a target amount (e.g. 8 glasses) counted up per day.
   const target = habit.target > 1 ? Math.round(habit.target) : 0;
   const isQty = target > 0;
@@ -3499,7 +3492,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             )}
           </div>
           {/* Right — a personal goal ladder if set, otherwise the streak milestone. */}
-          {habit.goal ? <GoalProgress goal={habit.goal} goalDone={habit.goalDone} /> : <MilestoneProgress streak={streak} />}
+          {habit.goal ? <GoalProgress goal={habit.goal} goalLog={habit.goalLog} goalDone={habit.goalDone} onOpen={() => setGoalModalOpen(true)} /> : <MilestoneProgress streak={streak} />}
           </div>
 
           {/* Proof row — metrics (votes · streak · consistency) on the left, the 7-day
@@ -3550,6 +3543,9 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           onSaveNote={(dateKey, text) => setHabitNote(dateKey, habit.id, text)}
           onClose={() => setJournalOpen(false)}
         />
+      )}
+      {goalModalOpen && habit.goal && (
+        <GoalProgressModal habit={habit} identity={identity} onAddEntry={onAddGoalEntry} onRemoveEntry={onRemoveGoalEntry} onClose={() => setGoalModalOpen(false)} />
       )}
 
     </div>
@@ -4499,7 +4495,7 @@ const FocusView = memo(function FocusView({ dailyTasks, selectedDate, setSelecte
 });
 
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
-const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, adjustCount, markMiss, toggleGoalMilestone, habitNotes, setHabitNote, justChecked, getStreakForHabit, openEditHabit, openDeleteHabit, openReviewFor, setModal, openAddHabit, openAddIdentity, onOpenFocus, reviews, onOpenWeeklyReview, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, addFocusTask, toggleTask, deleteTask, editTask, toggleStar, toggleFocus, deferTask, reviewTarget, onOpenReview, onDismissReview }) {
+const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, adjustCount, markMiss, addGoalEntry, removeGoalEntry, habitNotes, setHabitNote, justChecked, getStreakForHabit, openEditHabit, openDeleteHabit, openReviewFor, setModal, openAddHabit, openAddIdentity, onOpenFocus, reviews, onOpenWeeklyReview, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, addFocusTask, toggleTask, deleteTask, editTask, toggleStar, toggleFocus, deferTask, reviewTarget, onOpenReview, onDismissReview }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
   const [matrixExpanded, setMatrixExpanded] = useState(false);
@@ -4667,7 +4663,9 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                   active={habit.id === firstPendingId}
                   streakBadge={streakBadge}
                   onEdit={() => openEditHabit(identity.id, habit)}
-                  menu={<RowMenu habit={habit} identity={identity} missed={todayData[habit.id] === "miss"} onMiss={markMiss} openEditHabit={openEditHabit} openDeleteHabit={openDeleteHabit} onReview={openReviewFor} habitNotes={habitNotes} allData={allData} setHabitNote={setHabitNote} onToggleGoalMilestone={toggleGoalMilestone} />}
+                  menu={<RowMenu habit={habit} identity={identity} missed={todayData[habit.id] === "miss"} onMiss={markMiss} openEditHabit={openEditHabit} openDeleteHabit={openDeleteHabit} onReview={openReviewFor} habitNotes={habitNotes} allData={allData} setHabitNote={setHabitNote} onAddGoalEntry={addGoalEntry} onRemoveGoalEntry={removeGoalEntry} />}
+                  onAddGoalEntry={addGoalEntry}
+                  onRemoveGoalEntry={removeGoalEntry}
                   habit={habit}
                   identity={identity}
                   checked={todayData[habit.id] === true}
