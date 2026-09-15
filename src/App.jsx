@@ -221,7 +221,7 @@ function GoalProgress({ goal, goalDone = [] }) {
       {open && pos && (
         <div role="tooltip" onClick={e => e.stopPropagation()} style={{ position:"fixed", top:pos.top, left:pos.left, zIndex:200, width:W, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 10px 28px rgba(9,45,75,0.2)", padding:"11px 13px", textAlign:"left" }}>
           <div style={{ fontSize:12, fontWeight:900, color:T.text, marginBottom:2 }}>{complete ? `🏆 ${pl(count)} — done!` : `${doneUnits}/${count} ${unit}${count === 1 ? "" : "s"}`}</div>
-          <div style={{ fontSize:11, fontWeight:700, color:T.muted, marginBottom:9 }}>{complete ? "goal reached 🎉" : "open the ⋯ menu to tick milestones"}</div>
+          <div style={{ fontSize:11, fontWeight:700, color:T.muted, marginBottom:9 }}>{complete ? "goal reached 🎉" : goal.by ? `🗓️ By ${longDateLabel(goal.by)} · ${daysUntil(goal.by)}d left` : "open the ⋯ menu to tick milestones"}</div>
           <div style={{ maxHeight:190, overflowY:"auto", margin:"0 -3px", padding:"0 3px" }}>
             {Array.from({ length: count }, (_, i) => i + 1).map(n => {
               const done = doneSet.has(n);
@@ -262,6 +262,18 @@ function GoalProgressModal({ habit, identity, allData = {}, onToggleMilestone, o
           <div style={{ fontSize: 34, lineHeight: 1 }} aria-hidden="true">{complete ? "🏆" : "🎯"}</div>
           <div style={{ fontSize: 22, fontWeight: 900, color: gold, marginTop: 4 }}>{doneUnits}/{count} {unit}{count === 1 ? "" : "s"}</div>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: T.muted, marginTop: 2 }}>{complete ? "goal reached 🎉" : `${count - doneUnits} to go`}</div>
+          {goal.by && (() => {
+            const left = daysUntil(goal.by);
+            const overdue = left < 0 && !complete;
+            return (
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, padding: "4px 11px", borderRadius: 20,
+                background: complete ? "#E1F5EE" : overdue ? "#FCE9F0" : T.surf2,
+                fontSize: 12, fontWeight: 800, color: complete ? "#0F6E56" : overdue ? "#B4402A" : T.text2 }}>
+                <span aria-hidden="true">🗓️</span>
+                <span>By {longDateLabel(goal.by)}{complete ? "" : overdue ? ` · ${Math.abs(left)} days over` : ` · ${left} days left`}</span>
+              </div>
+            );
+          })()}
         </div>
         <div style={{ height: 8, borderRadius: 8, background: "#EBE0C6", overflow: "hidden", marginBottom: 14 }}>
           <div style={{ width: `${Math.round(frac * 100)}%`, height: "100%", background: "#F59E0B", borderRadius: 8 }} />
@@ -325,6 +337,16 @@ function dateToKey(d) {
     String(d.getDate()).padStart(2, "0");
 }
 function getTodayKey() { return dateToKey(new Date()); }
+// Last day of the year (default goal deadline) for the given date's year.
+function lastDayOfYearKey(ref = new Date()) { return `${ref.getFullYear()}-12-31`; }
+// "31 Dec 2026" style label for a YYYY-MM-DD key.
+function longDateLabel(key) {
+  return new Date(key + "T00:00").toLocaleDateString(navigator.language || undefined, { day: "numeric", month: "short", year: "numeric" });
+}
+// Whole days from today (key) until a target key; negative if past.
+function daysUntil(targetKey, fromKey = getTodayKey()) {
+  return Math.round((new Date(targetKey + "T00:00") - new Date(fromKey + "T00:00")) / 86400000);
+}
 // Monday-start of the week containing dateKey; and the 7 day-keys Mon..Sun.
 function weekStartKey(dateKey) {
   const d = new Date(dateKey + "T00:00");
@@ -1149,9 +1171,9 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
                 const u = form.goalUnit.trim(); const cnt = parseInt(form.goalCount,10);
                 if (u && cnt >= 1) {
                   const pl = (n) => `${n} ${u}${n===1?"":"s"}`;
-                  return `${cnt} milestones: ${pl(1)} → ${pl(cnt)}. Tick each off as you finish it.`;
+                  return `${cnt} milestones: ${pl(1)} → ${pl(cnt)}. Tick each off by ${longDateLabel(initial.goal?.by || lastDayOfYearKey())}.`;
                 }
-                return "A simple milestone ladder — e.g. book · 12 gives you 1 book → 12 books to tick off.";
+                return "A simple milestone ladder — e.g. book · 12 gives you 1 book → 12 books, due end of year.";
               })()}
             </div>
           )}
@@ -2113,11 +2135,12 @@ export default function App() {
   // ── CRUD: Habits ──
   // A daily target only applies to good habits; store it as a number (>1) or drop it.
   const cleanTarget = (kind, target) => (kind !== "bad" && Math.round(Number(target)) > 1 ? Math.round(Number(target)) : 0);
-  const cleanGoal = (kind, goalUnit, goalCount) => {
+  const cleanGoal = (kind, goalUnit, goalCount, existingBy) => {
     if (kind === "bad") return null;
     const u = (goalUnit || "").trim();
     const c = Math.max(0, parseInt(goalCount, 10) || 0);
-    return (u && c >= 1) ? { unit: u.slice(0, 16), count: c } : null;
+    // Deadline defaults to the last day of this year; keep an existing one on edit.
+    return (u && c >= 1) ? { unit: u.slice(0, 16), count: c, by: existingBy || lastDayOfYearKey() } : null;
   };
 
   const addHabit = ({ label, trigger, attractive, easy, starter, satisfying, time, location, icon, identityId, frequency, kind, target, unit, goalUnit, goalCount }) => {
@@ -2136,7 +2159,8 @@ export default function App() {
     const k = kind || "good";
     const tgt = cleanTarget(k, target);
     const uni = tgt ? (unit || "").trim() : "";
-    const goal = cleanGoal(k, goalUnit, goalCount);
+    const existingBy = identities.find(i => i.id === oldIdentityId)?.habits.find(h => h.id === habitId)?.goal?.by;
+    const goal = cleanGoal(k, goalUnit, goalCount, existingBy);
     if (newIdentityId === oldIdentityId) {
       setIdentities(prev => prev.map(ident =>
         ident.id !== oldIdentityId ? ident :
