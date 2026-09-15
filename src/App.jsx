@@ -189,6 +189,9 @@ function goalStats(habit) {
   const g = habit.goal; if (!g) return null;
   const unit = g.unit || "unit";
   const log = habit.goalLog || (habit.goalDone || []).map(() => ({ name: "", at: "" }));
+  const gMonthKey = getTodayKey().slice(0, 7);
+  const mt = Number(g.monthlyTarget) || 0;   // optional monthly pace for checklist/target/amount
+  const mkMonth = (done) => mt > 0 ? { done, target: mt, frac: Math.min(1, done / mt), unit } : null;
   if (g.type === "monthly" || g.type === "reading") {
     const perMonth = Math.max(1, g.perMonth || 1);
     const size = Math.max(0, g.size || 0);           // 0 = no fixed size (finish manually)
@@ -218,19 +221,24 @@ function goalStats(habit) {
     const covered = Math.max(0, Math.min(span, reduce ? start - latest : latest - start));
     const complete = reduce ? latest <= target : latest >= target;
     const toGo = Math.max(0, reduce ? latest - target : target - latest);
+    // This month's change: from the last reading before this month (else start) to latest.
+    const prev = readings.filter(e => (e.at || "") < gMonthKey + "-01");
+    const baseline = prev.length ? Number(prev[prev.length - 1].value) : start;
+    const monthChange = Math.max(0, reduce ? baseline - latest : latest - baseline);
     return { type: "target", unit, log: readings, start, target, reduce, latest, complete,
       frac: covered / span, headline: `${fmtNum(latest)} ${unit}`,
-      remainLabel: complete ? "reached" : `${fmtNum(toGo)} ${unit} to go` };
+      remainLabel: complete ? "reached" : `${fmtNum(toGo)} ${unit} to go`, month: mkMonth(monthChange) };
   }
   if (g.type === "amount") {
     const target = Math.max(0, Number(g.target) || 0);
     const entries = log.map((e, i) => ({ ...e, _i: i })).filter(e => e && e.value != null && isFinite(Number(e.value)));
     const sum = entries.reduce((s, e) => s + Number(e.value), 0);
+    const monthSum = entries.reduce((s, e) => s + ((e.at || "").slice(0, 7) === gMonthKey ? Number(e.value) : 0), 0);
     const complete = target > 0 && sum >= target;
     return { type: "amount", unit, log: entries, target, sum, complete,
       frac: target > 0 ? Math.min(1, sum / target) : 0,
       headline: `${fmtNum(sum)}/${fmtNum(target)} ${unit}`,
-      remainLabel: complete ? "done" : `${fmtNum(Math.max(0, target - sum))} ${unit} left` };
+      remainLabel: complete ? "done" : `${fmtNum(Math.max(0, target - sum))} ${unit} left`, month: mkMonth(monthSum) };
   }
   const count = Math.max(1, g.count || 1);
   const per = Math.max(0, Number(g.per) || 0);
@@ -244,14 +252,16 @@ function goalStats(habit) {
     const done = Math.min(Math.floor(capped / per), count);
     const complete = done >= count;
     const currentSub = complete ? per : capped - done * per;
+    const monthSub = entries.reduce((s, e) => s + ((e.at || "").slice(0, 7) === gMonthKey ? Number(e.value) : 0), 0);
     return { type: "checklist", per, subUnit, unit, log: entries, count, done, totalSub, currentSub, complete,
       frac: cap ? capped / cap : 0, headline: `${done}/${count} ${unit}${count === 1 ? "" : "s"}`,
-      remainLabel: complete ? "done" : `${fmtNum(per - currentSub)} ${subUnit}${(per - currentSub) === 1 ? "" : "s"} to next ${unit}` };
+      remainLabel: complete ? "done" : `${fmtNum(per - currentSub)} ${subUnit}${(per - currentSub) === 1 ? "" : "s"} to next ${unit}`, month: mkMonth(monthSub) };
   }
   const done = Math.min(log.length, count);
+  const monthDone = log.filter(e => (e.at || "").slice(0, 7) === gMonthKey).length;
   return { type: "checklist", unit, log, count, done, complete: done >= count,
     frac: done / count, headline: `${done}/${count} ${unit}${count === 1 ? "" : "s"}`,
-    remainLabel: done >= count ? "done" : `${count - done} left` };
+    remainLabel: done >= count ? "done" : `${count - done} left`, month: mkMonth(monthDone) };
 }
 
 // ─── GOAL PROGRESS — compact card chip; tap to open the log modal ─────────────
@@ -334,9 +344,25 @@ function GoalProgressModal({ habit, identity, ops = {}, onClose }) {
           </div>
           {deadlineChip}
         </div>
-        <div style={{ height: 8, borderRadius: 8, background: "#EBE0C6", overflow: "hidden", marginBottom: 14 }}>
+        <div style={{ height: 8, borderRadius: 8, background: "#EBE0C6", overflow: "hidden", marginBottom: st.month ? 10 : 14 }}>
           <div style={{ width: `${Math.round(st.frac * 100)}%`, height: "100%", background: "#F59E0B", borderRadius: 8 }} />
         </div>
+
+        {/* This-month pace against the monthly target (checklist/target/amount). */}
+        {st.month && (() => {
+          const onTrack = st.month.done >= st.month.target;
+          return (
+            <div style={{ background: T.surf2, borderRadius: 10, padding: "9px 11px", marginBottom: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: T.text2 }}>This month</span>
+                <span style={{ fontSize: 11.5, fontWeight: 900, color: onTrack ? "#0F9D74" : "#B07B1E" }}>{fmtNum(st.month.done)}/{fmtNum(st.month.target)} {st.month.unit}{onTrack ? " ✓" : ""}</span>
+              </div>
+              <div style={{ height: 5, borderRadius: 5, background: "#E2ECF2", overflow: "hidden" }}>
+                <div style={{ width: `${Math.round(st.month.frac * 100)}%`, height: "100%", background: onTrack ? "#0F9D74" : "#F59E0B", borderRadius: 5 }} />
+              </div>
+            </div>
+          );
+        })()}
 
         {isMonthly ? (
           <MonthlyGoalBody st={st} unit={unit} subUnit={subUnit} gold={gold} canEdit={canEdit}
@@ -1157,6 +1183,7 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     goalPerMonth: initial.goal?.perMonth ? String(initial.goal.perMonth) : "",  // monthly: items/month
     goalSize:   initial.goal?.size  ? String(initial.goal.size) : "",  // monthly: default sub-units per item
     goalDaily:  initial.goal?.daily ? String(initial.goal.daily) : "", // monthly: daily target (quick-log)
+    goalMonthly: initial.goal?.monthlyTarget ? String(initial.goal.monthlyTarget) : "", // monthly pace for checklist/target/amount
   });
   const [submitted, setSubmitted] = useState(false);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
@@ -1210,6 +1237,7 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     goalPerMonth: fId + "-goalPerMonth",
     goalSize:   fId + "-goalSize",
     goalDaily:  fId + "-goalDaily",
+    goalMonthly: fId + "-goalMonthly",
   };
 
   // ── Draft with James Clear — fills only the EMPTY fields, never overwrites you ──
@@ -1588,6 +1616,29 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
                 })()}
               </div>
             </>
+          )}
+
+          {/* Monthly expectation (pace) — optional, for the non-monthly goal types. */}
+          {["checklist","target","amount"].includes(form.goalType) && (
+            <div style={{ marginTop:12 }}>
+              <div style={{ display:"flex", alignItems:"flex-end", gap:8 }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Monthly target <span style={{fontWeight:600}}>(optional)</span></div>
+                  <input id={ids.goalMonthly} style={{ ...S.input, marginTop:0 }} type="number" min="1" inputMode="decimal" value={form.goalMonthly} onChange={e=>set("goalMonthly", e.target.value.replace(/[^\d.]/g,""))}
+                    placeholder={form.goalType==="amount" ? `${form.goalUnit.trim()||"units"}/month` : form.goalType==="target" ? `${form.goalUnit.trim()||"units"} change/month` : `${form.goalUnit.trim()||"items"}/month`} aria-label="Monthly target" />
+                </div>
+              </div>
+              <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>
+                {(() => {
+                  const m = parseFloat(form.goalMonthly); const u = form.goalUnit.trim() || (form.goalType==="checklist"?"items":"units");
+                  if (isFinite(m) && m > 0) {
+                    const what = form.goalType==="amount" ? `${fmtNum(m)} ${u}` : form.goalType==="target" ? `${fmtNum(m)} ${u} of change` : `${fmtNum(m)} ${u}`;
+                    return `Expect ${what} each month — the card shows this-month pace against it.`;
+                  }
+                  return "Set a monthly pace to see how you're tracking this month, not just overall.";
+                })()}
+              </div>
+            </div>
           )}
         </>
       )}
@@ -2628,15 +2679,17 @@ export default function App() {
     if (!u) return null;
     // Deadline defaults to the last day of this year; keep an existing one on edit.
     const by = existingBy || lastDayOfYearKey();
+    const monthly = parseFloat(f.goalMonthly);
+    const withMonthly = (g) => (isFinite(monthly) && monthly > 0 ? { ...g, monthlyTarget: monthly } : g);
     if (f.goalType === "target") {
       const start = parseFloat(f.goalStart), target = parseFloat(f.goalTarget);
       if (!isFinite(start) || !isFinite(target) || start === target) return null;
-      return { type: "target", unit: u.slice(0, 16), start, target, by };
+      return withMonthly({ type: "target", unit: u.slice(0, 16), start, target, by });
     }
     if (f.goalType === "amount") {
       const target = parseFloat(f.goalTarget);
       if (!isFinite(target) || target <= 0) return null;
-      return { type: "amount", unit: u.slice(0, 16), target, by };
+      return withMonthly({ type: "amount", unit: u.slice(0, 16), target, by });
     }
     if (f.goalType === "monthly") {
       const su = (f.goalSubUnit || "").trim();
@@ -2653,7 +2706,7 @@ export default function App() {
     const per = Math.max(0, parseInt(f.goalPer, 10) || 0);
     const goal = { type: "checklist", unit: u.slice(0, 16), count: c, by };
     if (per >= 1) { goal.per = per; goal.subUnit = (f.goalSubUnit || "unit").trim().slice(0, 16); }
-    return goal;
+    return withMonthly(goal);
   };
 
   const addHabit = (f) => {
