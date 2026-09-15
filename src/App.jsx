@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo, useId, memo, Fragment } from "react";
+import { createPortal } from "react-dom";
 import { initializeApp, getApps } from "firebase/app";
 import { getFirestore, initializeFirestore, doc, getDoc, setDoc } from "firebase/firestore";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "firebase/auth";
@@ -1062,7 +1063,10 @@ function Modal({ title, onClose, children, descriptionId }) {
     };
   }, [onClose]);
 
-  return (
+  // Portal to <body> so the fixed overlay is viewport-relative even when the
+  // trigger sits inside a transformed/sticky ancestor (e.g. the sticky header),
+  // which would otherwise become the containing block and clip the modal.
+  return createPortal(
     <div style={S.overlay} onClick={onClose} role="presentation">
       <div
         ref={panelRef}
@@ -1083,7 +1087,8 @@ function Modal({ title, onClose, children, descriptionId }) {
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
