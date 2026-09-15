@@ -328,6 +328,7 @@ function GoalProgressModal({ habit, identity, ops = {}, onClose }) {
       ops.addEntry(identity.id, habit.id, input);
     }
     setInput("");
+    onClose();   // close the sheet once an entry is recorded
   };
   const deadlineChip = goal.by && (() => {
     const left = daysUntil(goal.by);
@@ -383,13 +384,13 @@ function GoalProgressModal({ habit, identity, ops = {}, onClose }) {
             itemName={itemName} setItemName={setItemName} itemSize={itemSize} setItemSize={setItemSize}
             input={input} setInput={setInput}
             onStart={() => { ops.startItem(identity.id, habit.id, itemName, itemSize || st.size); setItemName(""); setItemSize(""); }}
-            onLog={(v) => ops.logItem(identity.id, habit.id, v)}
+            onLog={(v) => { ops.logItem(identity.id, habit.id, v); onClose(); }}
             onUndo={() => ops.undoLog(identity.id, habit.id)}
-            onFinish={() => ops.finishItem(identity.id, habit.id)}
+            onFinish={() => { ops.finishItem(identity.id, habit.id); onClose(); }}
             onRemoveItem={(idx) => ops.removeItem(identity.id, habit.id, idx)} />
         ) : isMonthlyTotal ? (
           <MonthlyTotalBody st={st} unit={unit} gold={gold} canEdit={canEdit} input={input} setInput={setInput}
-            onLog={(v) => ops.addEntry(identity.id, habit.id, { value: v })}
+            onLog={(v) => { if (!isFinite(v)) return; ops.addEntry(identity.id, habit.id, { value: v }); onClose(); }}
             onRemove={(i) => ops.removeEntry(identity.id, habit.id, i)} />
         ) : (
         <>
