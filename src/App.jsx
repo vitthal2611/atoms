@@ -180,6 +180,70 @@ function MilestoneProgress({ streak = 0 }) {
   );
 }
 
+// ─── GOAL PROGRESS — a personal milestone ladder that fills as you check in ────
+// e.g. every 20 reading sessions = 1 book, climbing 1 → 10 books. Shown on the
+// card in place of the streak milestone when the habit has a goal defined.
+function GoalProgress({ goal, votes = 0 }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+  const ref = useRef(null);
+  const W = 224;
+  const per   = Math.max(1, goal.per || 1);
+  const count = Math.max(1, goal.count || 1);
+  const unit  = goal.unit || "unit";
+  const need  = per * count;
+  const capped = Math.min(votes, need);
+  const doneUnits = Math.floor(capped / per);
+  const complete  = doneUnits >= count;
+  const inUnit = capped % per;
+  const frac   = complete ? 1 : inUnit / per;
+  const remain = complete ? 0 : per - inUnit;
+  const nextNum = Math.min(doneUnits + 1, count);
+  const gold = "#B07B1E";
+  const pl = (n) => `${n} ${unit}${n === 1 ? "" : "s"}`;
+
+  const show = () => { const r = ref.current?.getBoundingClientRect(); if (r) setPos({ top: r.bottom + 6, left: Math.min(Math.max(8, r.right - W), window.innerWidth - W - 8) }); setOpen(true); };
+  const hide = () => setOpen(false);
+
+  return (
+    <div ref={ref} style={{ position:"relative", marginLeft:"auto", flexShrink:0, minWidth:96, maxWidth:158, textAlign:"right", cursor:"pointer", WebkitTapHighlightColor:"transparent" }}
+      onMouseEnter={show} onMouseLeave={hide}
+      onClick={(e) => { e.stopPropagation(); open ? hide() : show(); }}
+      aria-label={complete ? `Goal complete: ${pl(count)}. Tap for the ladder.` : `${doneUnits} of ${count} ${unit}s, ${remain} check-ins to ${pl(nextNum)}. Tap for the ladder.`}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", gap:4, fontSize:11, fontWeight:800, color:gold, whiteSpace:"nowrap", overflow:"hidden" }}>
+        <span aria-hidden="true">{complete ? "🏆" : "🎯"}</span>
+        <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{doneUnits}/{count} {unit}{count === 1 ? "" : "s"}</span>
+      </div>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", gap:6, marginTop:4 }}>
+        <div style={{ flex:1, maxWidth:62, height:5, borderRadius:5, background:"#EBE0C6", overflow:"hidden" }}>
+          <div style={{ width:`${Math.round(frac * 100)}%`, height:"100%", background:"#F59E0B", borderRadius:5 }} />
+        </div>
+        <span style={{ fontSize:10.5, fontWeight:800, color:gold, whiteSpace:"nowrap" }}>{complete ? "done" : `${remain} to go`}</span>
+      </div>
+
+      {open && pos && (
+        <div role="tooltip" onClick={e => e.stopPropagation()} style={{ position:"fixed", top:pos.top, left:pos.left, zIndex:200, width:W, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 10px 28px rgba(9,45,75,0.2)", padding:"11px 13px", textAlign:"left" }}>
+          <div style={{ fontSize:12, fontWeight:900, color:T.text, marginBottom:2 }}>{complete ? `🏆 ${pl(count)} — done!` : `${doneUnits}/${count} ${unit}${count === 1 ? "" : "s"}`}</div>
+          <div style={{ fontSize:11, fontWeight:700, color:T.muted, marginBottom:9 }}>{votes} check-ins · {complete ? "goal reached 🎉" : `${remain} more for ${pl(nextNum)}`}</div>
+          <div style={{ maxHeight:190, overflowY:"auto", margin:"0 -3px", padding:"0 3px" }}>
+            {Array.from({ length: count }, (_, i) => i + 1).map(n => {
+              const done = doneUnits >= n;
+              const isNext = !complete && n === nextNum;
+              return (
+                <div key={n} style={{ display:"flex", alignItems:"center", gap:8, padding:"3px 0", opacity: done || isNext ? 1 : 0.5 }}>
+                  <span aria-hidden="true" style={{ width:16, textAlign:"center", fontSize:12 }}>{done ? "✅" : isNext ? "🎯" : "▫️"}</span>
+                  <span style={{ flex:1, fontSize:11.5, fontWeight: isNext ? 900 : 700, color: done ? gold : isNext ? T.text : T.muted }}>{pl(n)}</span>
+                  <span style={{ fontSize:10.5, fontWeight:800, color:T.muted, fontVariantNumeric:"tabular-nums" }}>{n * per}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 function to24h(timeStr) {
   if (!timeStr) return timeStr;
@@ -757,6 +821,9 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     kind:       initial.kind       || "good",
     target:     initial.target ? String(initial.target) : "",
     unit:       initial.unit       || "",
+    goalUnit:   initial.goal?.unit  || "",
+    goalPer:    initial.goal?.per   ? String(initial.goal.per)   : "",
+    goalCount:  initial.goal?.count ? String(initial.goal.count) : "",
   });
   const [submitted, setSubmitted] = useState(false);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
@@ -789,6 +856,9 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     location:   fId + "-location",
     target:     fId + "-target",
     unit:       fId + "-unit",
+    goalUnit:   fId + "-goalUnit",
+    goalPer:    fId + "-goalPer",
+    goalCount:  fId + "-goalCount",
   };
 
   // ── Draft with James Clear — fills only the EMPTY fields, never overwrites you ──
@@ -1016,6 +1086,34 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
             {Number(form.target) > 1
               ? `Tap + to count up to ${Math.round(Number(form.target))}${form.unit ? " " + form.unit.trim() : ""} — the vote lands when you hit the target.`
               : "Set a number to count reps toward a target; leave blank for a simple check."}
+          </div>
+
+          {/* Progress goal — a personal milestone ladder that fills as you check in
+              (e.g. every 20 reading sessions = 1 book, up to 10 books). */}
+          <label style={{ ...S.fieldLabel, marginTop:18 }}>Progress goal <span style={{ fontWeight:600, color:T.muted }}>(optional)</span></label>
+          <div style={{ display:"flex", alignItems:"flex-end", gap:8, flexWrap:"wrap" }}>
+            <div style={{ flex:"1 1 110px", minWidth:0 }}>
+              <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Unit</div>
+              <input id={ids.goalUnit} style={{ ...S.input, marginTop:0 }} value={form.goalUnit} onChange={e=>set("goalUnit", e.target.value)} placeholder="e.g. book" maxLength={16} aria-label="Goal unit name" />
+            </div>
+            <div style={{ width:96, flexShrink:0 }}>
+              <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Check-ins each</div>
+              <input id={ids.goalPer} style={{ ...S.input, marginTop:0 }} type="number" min="1" inputMode="numeric" value={form.goalPer} onChange={e=>set("goalPer", e.target.value.replace(/[^\d]/g,""))} placeholder="e.g. 20" aria-label="Check-ins per unit" />
+            </div>
+            <div style={{ width:78, flexShrink:0 }}>
+              <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Goal</div>
+              <input id={ids.goalCount} style={{ ...S.input, marginTop:0 }} type="number" min="1" inputMode="numeric" value={form.goalCount} onChange={e=>set("goalCount", e.target.value.replace(/[^\d]/g,""))} placeholder="e.g. 10" aria-label="Number of units to reach" />
+            </div>
+          </div>
+          <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>
+            {(() => {
+              const u = form.goalUnit.trim(); const per = parseInt(form.goalPer,10); const cnt = parseInt(form.goalCount,10);
+              if (u && per >= 1 && cnt >= 1) {
+                const pl = (n) => `${n} ${u}${n===1?"":"s"}`;
+                return `Every ${per} check-ins = 1 ${u}. You'll watch it climb: ${pl(1)} → ${pl(cnt)} (${per*cnt} check-ins total).`;
+              }
+              return "Turn check-ins into a satisfying ladder — e.g. every 20 sessions = 1 book, up to 10 books.";
+            })()}
           </div>
         </>
       )}
@@ -1959,33 +2057,42 @@ export default function App() {
   // ── CRUD: Habits ──
   // A daily target only applies to good habits; store it as a number (>1) or drop it.
   const cleanTarget = (kind, target) => (kind !== "bad" && Math.round(Number(target)) > 1 ? Math.round(Number(target)) : 0);
+  const cleanGoal = (kind, goalUnit, goalPer, goalCount) => {
+    if (kind === "bad") return null;
+    const u = (goalUnit || "").trim();
+    const p = Math.max(0, parseInt(goalPer, 10) || 0);
+    const c = Math.max(0, parseInt(goalCount, 10) || 0);
+    return (u && p >= 1 && c >= 1) ? { unit: u.slice(0, 16), per: p, count: c } : null;
+  };
 
-  const addHabit = ({ label, trigger, attractive, easy, starter, satisfying, time, location, icon, identityId, frequency, kind, target, unit }) => {
+  const addHabit = ({ label, trigger, attractive, easy, starter, satisfying, time, location, icon, identityId, frequency, kind, target, unit, goalUnit, goalPer, goalCount }) => {
     const tgt = cleanTarget(kind, target);
+    const goal = cleanGoal(kind, goalUnit, goalPer, goalCount);
     setIdentities(prev => prev.map(ident =>
       ident.id !== identityId ? ident :
-      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: kind || "good", frequency: frequency || DEFAULT_FREQUENCY, target: tgt, unit: tgt ? (unit || "").trim() : "", createdAt: getTodayKey() }] }
+      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: kind || "good", frequency: frequency || DEFAULT_FREQUENCY, target: tgt, unit: tgt ? (unit || "").trim() : "", goal, createdAt: getTodayKey() }] }
     ));
     setModal(null);
   };
 
-  const updateHabit = ({ label, trigger, attractive, easy, starter, satisfying, time, location, icon, identityId: newIdentityId, frequency, kind, target, unit }) => {
+  const updateHabit = ({ label, trigger, attractive, easy, starter, satisfying, time, location, icon, identityId: newIdentityId, frequency, kind, target, unit, goalUnit, goalPer, goalCount }) => {
     const { identityId: oldIdentityId, habitId } = modalCtx;
     const freq = frequency || DEFAULT_FREQUENCY;
     const k = kind || "good";
     const tgt = cleanTarget(k, target);
     const uni = tgt ? (unit || "").trim() : "";
+    const goal = cleanGoal(k, goalUnit, goalPer, goalCount);
     if (newIdentityId === oldIdentityId) {
       setIdentities(prev => prev.map(ident =>
         ident.id !== oldIdentityId ? ident :
-        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni }) }
+        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni, goal }) }
       ));
     } else {
       setIdentities(prev => {
         const habitData = prev.find(i => i.id === oldIdentityId)?.habits.find(h => h.id === habitId);
         return prev.map(ident => {
           if (ident.id === oldIdentityId) return { ...ident, habits: ident.habits.filter(h => h.id !== habitId) };
-          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni }] };
+          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni, goal }] };
           return ident;
         });
       });
@@ -3304,8 +3411,8 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               </button>
             )}
           </div>
-          {/* Right — the milestone reward fills the space beside the law chips. */}
-          <MilestoneProgress streak={streak} />
+          {/* Right — a personal goal ladder if set, otherwise the streak milestone. */}
+          {habit.goal ? <GoalProgress goal={habit.goal} votes={votes} /> : <MilestoneProgress streak={streak} />}
           </div>
 
           {/* Proof row — metrics (votes · streak · consistency) on the left, the 7-day
