@@ -284,21 +284,17 @@ function GoalProgress({ habit, onOpen }) {
   const gold = "#B07B1E";
   return (
     <button type="button" onClick={(e) => { e.stopPropagation(); onOpen && onOpen(); }}
-      style={{ marginLeft:"auto", flexShrink:0, minWidth:104, maxWidth:172, cursor:"pointer", WebkitTapHighlightColor:"transparent",
-        background:"#FFF8EC", border:"1px solid #F6DFB0", borderRadius:12, padding:"6px 9px", fontFamily:"inherit" }}
+      style={{ marginLeft:"auto", flexShrink:0, minWidth:96, maxWidth:168, textAlign:"right", cursor:"pointer", WebkitTapHighlightColor:"transparent", background:"transparent", border:"none", padding:0, fontFamily:"inherit" }}
       aria-label={`${st.headline}. Tap to log or view progress.`}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:6, fontSize:11, fontWeight:800, color:gold, whiteSpace:"nowrap", overflow:"hidden" }}>
-        <span style={{ display:"inline-flex", alignItems:"center", gap:4, overflow:"hidden" }}>
-          <span aria-hidden="true">{st.complete ? "🏆" : "🎯"}</span>
-          <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{st.headline}</span>
-        </span>
-        {!st.complete && <span style={{ flexShrink:0, fontSize:10, fontWeight:900, color:"#fff", background:"#F59E0B", borderRadius:6, padding:"1px 6px" }}>＋ log</span>}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", gap:4, fontSize:11, fontWeight:800, color:gold, whiteSpace:"nowrap", overflow:"hidden" }}>
+        <span aria-hidden="true">{st.complete ? "🏆" : "🎯"}</span>
+        <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{st.headline}</span>
       </div>
-      <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:5 }}>
-        <div style={{ flex:1, height:5, borderRadius:5, background:"#EBE0C6", overflow:"hidden" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", gap:6, marginTop:4 }}>
+        <div style={{ flex:1, maxWidth:62, height:5, borderRadius:5, background:"#EBE0C6", overflow:"hidden" }}>
           <div style={{ width:`${Math.round(st.frac * 100)}%`, height:"100%", background:"#F59E0B", borderRadius:5 }} />
         </div>
-        {st.complete && <span style={{ flexShrink:0, fontSize:10.5, fontWeight:800, color:gold }}>done</span>}
+        <span style={{ fontSize:10.5, fontWeight:800, color:gold, whiteSpace:"nowrap" }}>{st.complete ? "done" : "＋ log"}</span>
       </div>
     </button>
   );
