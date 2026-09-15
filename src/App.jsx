@@ -3055,7 +3055,7 @@ export default function App() {
              <span style={{ fontSize:11.5, fontWeight:800, color:T.primary, whiteSpace:"nowrap" }}>— James Clear</span>
            </div>
            <div style={{ marginTop:10 }}>
-             <DayNavigator selectedDate={selectedDate} setSelectedDate={setSelectedDate} todayKey={todayKey} />
+             <DayNavigator selectedDate={selectedDate} setSelectedDate={setSelectedDate} todayKey={todayKey} identities={liveIdentities} allData={data} />
            </div>
          </>
        )}
@@ -4325,7 +4325,8 @@ function formatNavDate(dateKey) {
   return date.toLocaleDateString(navigator.language||undefined,{weekday:"short",day:"numeric",month:"short"});
 }
 
-function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
+function DayNavigator({ selectedDate, setSelectedDate, todayKey, identities, allData }) {
+  const [calOpen, setCalOpen] = useState(false);
   // Recomputed daily (keyed on todayKey) so it stays accurate if the app is kept open overnight
   const minNavDate = useMemo(() => {
     const d = new Date(); d.setDate(d.getDate() - 90); return dateToKey(d);
@@ -4335,6 +4336,7 @@ function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
   const isToday = selectedDate === todayKey;
   const canPrev = selectedDate > minNavDate;
   const canNext = selectedDate < maxNavDate;
+  const hasCal = Array.isArray(identities);
 
   const go = (delta) => {
     const [y,mo,d] = selectedDate.split("-").map(Number);
@@ -4354,12 +4356,14 @@ function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
       }}><span aria-hidden="true">‹</span></button>
 
       <div style={{ flex:1, textAlign:"center" }}>
-        <div style={{ fontSize:16, fontWeight:700, color:T.text, fontFamily:FONT_DISPLAY }}>
-          {formatNavDate(selectedDate)}
-        </div>
+        <button onClick={()=>hasCal && setCalOpen(true)} aria-label={hasCal ? "Open calendar" : undefined} disabled={!hasCal}
+          style={{ display:"inline-flex", alignItems:"center", gap:6, background:"transparent", border:"none", cursor: hasCal?"pointer":"default", fontFamily:"inherit", padding:0, WebkitTapHighlightColor:"transparent" }}>
+          <span style={{ fontSize:16, fontWeight:700, color:T.text, fontFamily:FONT_DISPLAY }}>{formatNavDate(selectedDate)}</span>
+          {hasCal && <span aria-hidden="true" style={{ fontSize:13 }}>📅</span>}
+        </button>
         {!isToday && (
           <button onClick={()=>setSelectedDate(todayKey)} aria-label="Go to today" style={{
-            marginTop:3, fontSize:12, fontWeight:700, color:T.accent,
+            display:"block", margin:"3px auto 0", fontSize:12, fontWeight:700, color:T.accent,
             background:T.accent+"18", border:`1px solid ${T.accent}44`,
             borderRadius:20, padding:"8px 12px", cursor:"pointer",
             letterSpacing:"0.04em", textTransform:"uppercase",
@@ -4375,7 +4379,86 @@ function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
         flexShrink:0, WebkitTapHighlightColor:"transparent",
         opacity: canNext ? 1 : 0.35,
       }}><span aria-hidden="true">›</span></button>
+
+      {calOpen && hasCal && (
+        <DayCalendarModal identities={identities} allData={allData} selectedDate={selectedDate} todayKey={todayKey} minNavDate={minNavDate}
+          onPick={(k)=>{ setSelectedDate(k); setCalOpen(false); }} onClose={()=>setCalOpen(false)} />
+      )}
     </div>
+  );
+}
+
+// ─── DAY CALENDAR — a month grid with each day's check-in detail ──────────────
+// Shaded by completion; tap a past/today day to jump to it. Future days are off.
+function DayCalendarModal({ identities, allData = {}, selectedDate, todayKey, minNavDate, onPick, onClose }) {
+  const [mOff, setMOff] = useState(0);   // months back from the current month
+  const allHabits = useMemo(() => identities.flatMap(i => i.habits.map(h => ({ h, i }))), [identities]);
+  const { dates, label, firstDow } = useMemo(() => {
+    const now = new Date();
+    const base = new Date(now.getFullYear(), now.getMonth() - mOff, 1);
+    const y = base.getFullYear(), m = base.getMonth();
+    const n = new Date(y, m + 1, 0).getDate();
+    const ds = Array.from({ length: n }, (_, i) => dateToKey(new Date(y, m, i + 1)));
+    return { dates: ds, label: base.toLocaleDateString(navigator.language || undefined, { month:"long", year:"numeric" }), firstDow: (new Date(ds[0] + "T00:00").getDay() + 6) % 7 };
+  }, [mOff]);
+
+  const stat = (k) => {
+    let total = 0, done = 0;
+    for (const { h } of allHabits) {
+      const sKey = habitStartKey(h, allData);
+      if (sKey && k < sKey) continue;
+      if (!isScheduledOn(h.frequency, k)) continue;
+      total++;
+      if (allData[k]?.[h.id] === true) done++;
+    }
+    return { total, done };
+  };
+  const LEVELS = ["#EDF2F6", "#BFE0F5", "#7FC0EB", "#3B9BDE", "#0284C7"];
+  const monthStart = dates[0];
+  const canOlder = monthStart > minNavDate;
+  const canNewer = mOff > 0;
+
+  return (
+    <Modal title="Check-in calendar" onClose={onClose}>
+      <div style={{ padding: "0 18px 20px" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+          <button onClick={()=>canOlder && setMOff(o=>o+1)} aria-label="Previous month" disabled={!canOlder} style={{ ...S.crudBtn, width:34, height:34, fontSize:19, opacity:canOlder?1:0.3 }}><span aria-hidden="true">&#8249;</span></button>
+          <span style={{ fontSize:14.5, fontWeight:800, color:T.text }}>{label}</span>
+          <button onClick={()=>canNewer && setMOff(o=>Math.max(0,o-1))} aria-label="Next month" disabled={!canNewer} style={{ ...S.crudBtn, width:34, height:34, fontSize:19, opacity:canNewer?1:0.3 }}><span aria-hidden="true">&#8250;</span></button>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:5, marginBottom:5 }} aria-hidden="true">
+          {["M","T","W","T","F","S","S"].map((w,i)=>(<div key={i} style={{ textAlign:"center", fontSize:10, fontWeight:800, color:T.muted }}>{w}</div>))}
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:5 }}>
+          {Array.from({ length: firstDow }).map((_,i)=>(<div key={"e"+i} />))}
+          {dates.map(k => {
+            const future = k > todayKey;
+            const before = k < minNavDate;
+            const { total, done } = stat(k);
+            const pct = total ? done/total : -1;
+            const lvl = pct < 0 ? -1 : pct === 0 ? 0 : pct <= 0.34 ? 1 : pct <= 0.66 ? 2 : pct < 1 ? 3 : 4;
+            const isSel = k === selectedDate, isToday = k === todayKey;
+            const disabled = future || before;
+            const bg = future ? "transparent" : (lvl < 0 ? "transparent" : LEVELS[lvl]);
+            return (
+              <button key={k} onClick={()=>!disabled && onPick(k)} disabled={disabled}
+                aria-label={`${k}: ${total ? `${done} of ${total} done` : "nothing scheduled"}${future ? " (upcoming)" : ""}`}
+                style={{ aspectRatio:"1", borderRadius:8, padding:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+                  background:bg, cursor:disabled?"default":"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
+                  border: isSel ? `2px solid ${T.text}` : isToday ? `2px solid ${T.gold}` : (lvl<0 && !future ? `1px dashed ${T.border2}` : "1px solid transparent"),
+                  color: lvl>=3 && !future ? "#fff" : (disabled ? T.border2 : T.text2), opacity: future ? 0.4 : (before ? 0.4 : 1) }}>
+                <span style={{ fontSize:12.5, fontWeight:800 }}>{+k.slice(8,10)}</span>
+                {total > 0 && !future && <span style={{ fontSize:8.5, fontWeight:800, lineHeight:1, marginTop:1, opacity:0.9 }}>{done}/{total}</span>}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:5, justifyContent:"flex-end", marginTop:14, fontSize:10, color:T.muted, fontWeight:700 }} aria-hidden="true">
+          Less {LEVELS.map(c=>(<span key={c} style={{ width:12, height:12, borderRadius:3, background:c }} />))} More
+        </div>
+        <div style={{ fontSize:10.5, color:T.muted, fontWeight:700, marginTop:8, textAlign:"center" }}>Tap a day to view it. Numbers show habits done that day. Future days are off.</div>
+      </div>
+    </Modal>
   );
 }
 
