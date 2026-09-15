@@ -4330,9 +4330,7 @@ function DayNavigator({ selectedDate, setSelectedDate, todayKey }) {
   const minNavDate = useMemo(() => {
     const d = new Date(); d.setDate(d.getDate() - 90); return dateToKey(d);
   }, [todayKey]);
-  const maxNavDate = useMemo(() => {
-    const d = new Date(); d.setDate(d.getDate() + 30); return dateToKey(d);
-  }, [todayKey]);
+  const maxNavDate = todayKey;   // no future days — can't check in ahead of today
 
   const isToday = selectedDate === todayKey;
   const canPrev = selectedDate > minNavDate;
