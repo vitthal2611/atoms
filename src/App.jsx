@@ -192,12 +192,15 @@ function goalStats(habit) {
   if (g.type === "target") {
     const start = Number(g.start) || 0, target = Number(g.target) || 0;
     const reduce = start > target;
-    const latest = log.length ? Number(log[log.length - 1].value) : start;
+    // Only numeric readings count (a log carried over from a checklist has names, not values).
+    // Keep each reading's original index (_i) so the modal can remove the right one.
+    const readings = log.map((e, i) => ({ ...e, _i: i })).filter(e => e && e.value != null && isFinite(Number(e.value)));
+    const latest = readings.length ? Number(readings[readings.length - 1].value) : start;
     const span = Math.abs(target - start) || 1;
     const covered = Math.max(0, Math.min(span, reduce ? start - latest : latest - start));
     const complete = reduce ? latest <= target : latest >= target;
     const toGo = Math.max(0, reduce ? latest - target : target - latest);
-    return { type: "target", unit, log, start, target, reduce, latest, complete,
+    return { type: "target", unit, log: readings, start, target, reduce, latest, complete,
       frac: covered / span, headline: `${fmtNum(latest)} ${unit}`,
       remainLabel: complete ? "reached" : `${fmtNum(toGo)} ${unit} to go` };
   }
@@ -299,15 +302,14 @@ function GoalProgressModal({ habit, identity, onAddEntry, onRemoveEntry, onClose
             {st.log.length === 0 ? (
               <div style={{ fontSize: 13, color: T.muted, textAlign: "center", padding: "6px 0" }}>No readings yet — log your current {unit} above.</div>
             ) : st.log.slice().reverse().map((e, ri) => {
-              const idx = st.log.length - 1 - ri;
               const latestRow = ri === 0;
               return (
-                <div key={idx} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 10,
+                <div key={e._i} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 10,
                   background: latestRow ? "#FBF0DA" : "transparent", border: `1px solid ${latestRow ? "#F6DFB0" : T.surf2}` }}>
                   <span style={{ fontSize: 15, fontWeight: 900, color: latestRow ? gold : T.text, width: 72 }}>{fmtNum(Number(e.value))} {unit}</span>
                   <span style={{ flex: 1, fontSize: 12, color: T.muted }}>{e.at ? longDateLabel(e.at) : ""}{latestRow ? " · latest" : ""}</span>
                   {canEdit && (
-                    <button type="button" onClick={() => onRemoveEntry(identity.id, habit.id, idx)} aria-label={`Remove reading ${fmtNum(Number(e.value))} ${unit}`}
+                    <button type="button" onClick={() => onRemoveEntry(identity.id, habit.id, e._i)} aria-label={`Remove reading ${fmtNum(Number(e.value))} ${unit}`}
                       style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
                       <Ic name="x" size={13} color={T.muted} />
                     </button>
@@ -2273,19 +2275,23 @@ export default function App() {
     const k = kind || "good";
     const tgt = cleanTarget(k, target);
     const uni = tgt ? (unit || "").trim() : "";
-    const existingBy = identities.find(i => i.id === oldIdentityId)?.habits.find(h => h.id === habitId)?.goal?.by;
+    const oldHabit = identities.find(i => i.id === oldIdentityId)?.habits.find(h => h.id === habitId);
+    const existingBy = oldHabit?.goal?.by;
     const goal = cleanGoal(k, f, existingBy);
+    // Switching goal type (or dropping the goal) makes old log entries meaningless.
+    const resetLog = (oldHabit?.goal?.type || "checklist") !== (goal?.type || "checklist");
+    const logPatch = resetLog ? { goalLog: [], goalDone: [] } : {};
     if (newIdentityId === oldIdentityId) {
       setIdentities(prev => prev.map(ident =>
         ident.id !== oldIdentityId ? ident :
-        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni, goal }) }
+        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni, goal, ...logPatch }) }
       ));
     } else {
       setIdentities(prev => {
         const habitData = prev.find(i => i.id === oldIdentityId)?.habits.find(h => h.id === habitId);
         return prev.map(ident => {
           if (ident.id === oldIdentityId) return { ...ident, habits: ident.habits.filter(h => h.id !== habitId) };
-          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni, goal }] };
+          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni, goal, ...logPatch }] };
           return ident;
         });
       });
