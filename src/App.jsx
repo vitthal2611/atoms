@@ -189,6 +189,23 @@ function goalStats(habit) {
   const g = habit.goal; if (!g) return null;
   const unit = g.unit || "unit";
   const log = habit.goalLog || (habit.goalDone || []).map(() => ({ name: "", at: "" }));
+  if (g.type === "monthly") {
+    const perMonth = Math.max(1, g.perMonth || 1);
+    const size = Math.max(1, g.size || 1);
+    const subUnit = g.subUnit || "unit";
+    const items = habit.goalItems || [];
+    const monthKey = getTodayKey().slice(0, 7);
+    const doneThisMonth = items.filter(it => (it.at || "").slice(0, 7) === monthKey).length;
+    const cur = habit.goalCurrent || null;
+    const curDone = cur ? (cur.log || []).reduce((s, e) => s + (Number(e.value) || 0), 0) : 0;
+    const curSize = cur ? (Number(cur.size) || size) : size;
+    const complete = doneThisMonth >= perMonth;
+    const frac = Math.min(1, (doneThisMonth + (cur ? Math.min(1, curDone / curSize) : 0)) / perMonth);
+    return { type: "monthly", unit, subUnit, perMonth, size, daily: g.daily || 0,
+      items, monthKey, doneThisMonth, cur, curDone, curSize, complete, frac,
+      headline: `${doneThisMonth}/${perMonth} ${unit}${perMonth === 1 ? "" : "s"}`,
+      remainLabel: complete ? "done" : cur ? `${cur.name || unit}: ${fmtNum(curDone)}/${fmtNum(curSize)}` : `start a ${unit}` };
+  }
   if (g.type === "target") {
     const start = Number(g.start) || 0, target = Number(g.target) || 0;
     const reduce = start > target;
@@ -261,13 +278,16 @@ function GoalProgress({ habit, onOpen }) {
 // ─── GOAL PROGRESS MODAL — the full goal ladder, reachable from the card menu ──
 // Always available (even after the habit is checked for the day), unlike the
 // inline card element which only shows in the pending coaching panel.
-function GoalProgressModal({ habit, identity, onAddEntry, onRemoveEntry, onClose }) {
+function GoalProgressModal({ habit, identity, ops = {}, onClose }) {
   const goal = habit.goal || { type: "checklist", unit: "unit", count: 1 };
   const st = goalStats(habit);
   const unit = goal.unit || "unit";
   const gold = "#B07B1E";
-  const canEdit = !!onAddEntry;
+  const canEdit = !!ops.addEntry;
   const [input, setInput] = useState("");
+  const [itemName, setItemName] = useState("");
+  const [itemSize, setItemSize] = useState("");
+  const isMonthly = goal.type === "monthly";
   const isTarget = goal.type === "target";
   const isAmount = goal.type === "amount";
   const isPerChecklist = goal.type === "checklist" && goal.per > 0;
@@ -278,10 +298,10 @@ function GoalProgressModal({ habit, identity, onAddEntry, onRemoveEntry, onClose
     if (isNumeric) {
       const v = parseFloat(input);
       if (!isFinite(v)) return;
-      onAddEntry(identity.id, habit.id, { value: v });
+      ops.addEntry(identity.id, habit.id, { value: v });
     } else {
       if (st.complete) return;
-      onAddEntry(identity.id, habit.id, input);
+      ops.addEntry(identity.id, habit.id, input);
     }
     setInput("");
   };
@@ -305,7 +325,8 @@ function GoalProgressModal({ habit, identity, onAddEntry, onRemoveEntry, onClose
           <div style={{ fontSize: 34, lineHeight: 1 }} aria-hidden="true">{st.complete ? "🏆" : "🎯"}</div>
           <div style={{ fontSize: 22, fontWeight: 900, color: gold, marginTop: 4 }}>{st.headline}</div>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: T.muted, marginTop: 2 }}>
-            {isTarget ? `${st.reduce ? "Reduce" : "Increase"} to ${fmtNum(st.target)} ${unit} · ${st.complete ? "reached 🎉" : st.remainLabel}`
+            {isMonthly ? (st.complete ? "monthly goal reached 🎉" : st.cur ? `On: ${st.cur.name || unit}` : `Start your next ${unit}`)
+              : isTarget ? `${st.reduce ? "Reduce" : "Increase"} to ${fmtNum(st.target)} ${unit} · ${st.complete ? "reached 🎉" : st.remainLabel}`
               : isAmount ? (st.complete ? "goal reached 🎉" : `${st.remainLabel} to ${fmtNum(st.target)} ${unit}`)
               : isPerChecklist ? (st.complete ? "goal reached 🎉" : `${st.currentSub}/${st.per} ${subUnit}s · ${st.remainLabel}`)
               : (st.complete ? "goal reached 🎉" : `${st.count - st.done} to go`)}
@@ -316,6 +337,16 @@ function GoalProgressModal({ habit, identity, onAddEntry, onRemoveEntry, onClose
           <div style={{ width: `${Math.round(st.frac * 100)}%`, height: "100%", background: "#F59E0B", borderRadius: 8 }} />
         </div>
 
+        {isMonthly ? (
+          <MonthlyGoalBody st={st} unit={unit} subUnit={subUnit} gold={gold} canEdit={canEdit}
+            itemName={itemName} setItemName={setItemName} itemSize={itemSize} setItemSize={setItemSize}
+            input={input} setInput={setInput}
+            onStart={() => { ops.startItem(identity.id, habit.id, itemName, itemSize || st.size); setItemName(""); setItemSize(""); }}
+            onLog={(v) => ops.logItem(identity.id, habit.id, v)}
+            onUndo={() => ops.undoLog(identity.id, habit.id)}
+            onRemoveItem={(idx) => ops.removeItem(identity.id, habit.id, idx)} />
+        ) : (
+        <>
         {/* Log progress — a reading (target), an increment (amount), or a named item (checklist). */}
         {canEdit && !(!isNumeric && st.complete) && (
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
@@ -360,7 +391,7 @@ function GoalProgressModal({ habit, identity, onAddEntry, onRemoveEntry, onClose
               <div style={{ fontSize: 11, color: T.muted, fontWeight: 700, marginTop: 6 }}>
                 Logged {fmtNum(st.totalSub)} {subUnit}s total{canEdit && st.log.length ? ` · undo last: ` : ""}
                 {canEdit && st.log.length > 0 && (
-                  <button type="button" onClick={() => onRemoveEntry(identity.id, habit.id, st.log[st.log.length - 1]._i)}
+                  <button type="button" onClick={() => ops.removeEntry(identity.id, habit.id, st.log[st.log.length - 1]._i)}
                     style={{ background: "transparent", border: "none", color: T.primary, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", fontSize: 11, padding: 0 }}>
                     −{fmtNum(Number(st.log[st.log.length - 1].value))} {subUnit}s
                   </button>
@@ -378,7 +409,7 @@ function GoalProgressModal({ habit, identity, onAddEntry, onRemoveEntry, onClose
                 <span style={{ fontSize: 15, fontWeight: 900, color: gold, width: 84 }}>+{fmtNum(Number(e.value))} {unit}</span>
                 <span style={{ flex: 1, fontSize: 12, color: T.muted }}>{e.at ? longDateLabel(e.at) : ""}</span>
                 {canEdit && (
-                  <button type="button" onClick={() => onRemoveEntry(identity.id, habit.id, e._i)} aria-label={`Remove +${fmtNum(Number(e.value))} ${unit}`}
+                  <button type="button" onClick={() => ops.removeEntry(identity.id, habit.id, e._i)} aria-label={`Remove +${fmtNum(Number(e.value))} ${unit}`}
                     style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
                     <Ic name="x" size={13} color={T.muted} />
                   </button>
@@ -399,7 +430,7 @@ function GoalProgressModal({ habit, identity, onAddEntry, onRemoveEntry, onClose
                   <span style={{ fontSize: 15, fontWeight: 900, color: latestRow ? gold : T.text, width: 72 }}>{fmtNum(Number(e.value))} {unit}</span>
                   <span style={{ flex: 1, fontSize: 12, color: T.muted }}>{e.at ? longDateLabel(e.at) : ""}{latestRow ? " · latest" : ""}</span>
                   {canEdit && (
-                    <button type="button" onClick={() => onRemoveEntry(identity.id, habit.id, e._i)} aria-label={`Remove reading ${fmtNum(Number(e.value))} ${unit}`}
+                    <button type="button" onClick={() => ops.removeEntry(identity.id, habit.id, e._i)} aria-label={`Remove reading ${fmtNum(Number(e.value))} ${unit}`}
                       style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
                       <Ic name="x" size={13} color={T.muted} />
                     </button>
@@ -427,7 +458,7 @@ function GoalProgressModal({ habit, identity, onAddEntry, onRemoveEntry, onClose
                   <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 800, color: T.muted, width: 18 }}>{i + 1}.</span>
                   <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: done || isNext ? 900 : 700, color: done ? T.text : isNext ? T.text : T.muted, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
                   {done && canEdit && (
-                    <button type="button" onClick={() => onRemoveEntry(identity.id, habit.id, i)} aria-label={`Remove ${label}`}
+                    <button type="button" onClick={() => ops.removeEntry(identity.id, habit.id, i)} aria-label={`Remove ${label}`}
                       style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
                       <Ic name="x" size={13} color={T.muted} />
                     </button>
@@ -438,8 +469,85 @@ function GoalProgressModal({ habit, identity, onAddEntry, onRemoveEntry, onClose
             })}
           </div>
         )}
+        </>
+        )}
       </div>
     </Modal>
+  );
+}
+
+// Monthly-items body: a "currently on" item filled by daily logs, plus this
+// month's completed list. Unfinished items carry to the next month.
+function MonthlyGoalBody({ st, unit, subUnit, gold, canEdit, itemName, setItemName, itemSize, setItemSize, input, setInput, onStart, onLog, onUndo, onRemoveItem }) {
+  const monthName = new Date(st.monthKey + "-01T00:00").toLocaleDateString(navigator.language || undefined, { month: "long" });
+  const now = new Date();
+  const daysLeft = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate();
+  const thisMonth = st.items.map((it, i) => ({ ...it, _i: i })).filter(it => (it.at || "").slice(0, 7) === st.monthKey);
+  const cur = st.cur;
+  const quick = st.daily || Math.max(1, Math.round(st.size / 10));
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <span style={{ fontSize: 13, fontWeight: 800, color: T.text }}>{monthName}</span>
+        <span style={{ fontSize: 11, fontWeight: 800, color: T.muted, background: T.surf2, borderRadius: 20, padding: "3px 10px" }}>{daysLeft} days left</span>
+      </div>
+
+      {cur ? (
+        <div style={{ background: "#FFF8EC", border: "1px solid #F6DFB0", borderRadius: 12, padding: 12, marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 18 }} aria-hidden="true">📖</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: "0.05em", textTransform: "uppercase", color: "#B07B1E" }}>Currently on</div>
+              <div style={{ fontSize: 14.5, fontWeight: 900, color: "#5E3E08", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cur.name || unit}</div>
+            </div>
+            <span style={{ fontSize: 12, fontWeight: 900, color: "#8A5A08" }}>{fmtNum(st.curDone)}/{fmtNum(st.curSize)} {subUnit}s</span>
+          </div>
+          <div style={{ height: 6, borderRadius: 6, background: "#F1E3C4", overflow: "hidden", marginBottom: 11 }}>
+            <div style={{ width: `${Math.round(Math.min(1, st.curDone / st.curSize) * 100)}%`, height: "100%", background: "#F59E0B" }} />
+          </div>
+          {canEdit && (<>
+            <div style={{ display: "flex", gap: 7 }}>
+              <button type="button" onClick={() => onLog(quick)} style={{ flex: 1, textAlign: "center", fontSize: 13, fontWeight: 800, color: "#fff", background: "#0284C7", border: "1px solid #0284C7", borderRadius: 9, padding: "9px 0", cursor: "pointer", fontFamily: "inherit", WebkitTapHighlightColor: "transparent" }}>+{quick} {subUnit}s</button>
+              <input value={input} onChange={e => setInput(e.target.value.replace(/[^\d.]/g, ""))} onKeyDown={e => { if (e.key === "Enter" && input) { onLog(parseFloat(input)); setInput(""); } }}
+                type="number" inputMode="decimal" placeholder="custom" aria-label={`Custom ${subUnit}s`} style={{ ...S.input, marginTop: 0, width: 84, flexShrink: 0, textAlign: "center" }} />
+              <button type="button" onClick={() => { if (input) { onLog(parseFloat(input)); setInput(""); } }} style={{ ...S.btnPrimary, flex: "none", width: "auto", padding: "0 14px" }}>Add</button>
+            </div>
+            <button type="button" onClick={onUndo} style={{ marginTop: 8, background: "transparent", border: "none", color: T.muted, fontSize: 11, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", padding: 0 }}>↶ Undo last log</button>
+          </>)}
+        </div>
+      ) : canEdit ? (
+        <div style={{ background: T.surf2, borderRadius: 12, padding: 12, marginBottom: 14 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 800, color: T.text2, marginBottom: 8 }}>Start your next {unit}</div>
+          <div style={{ display: "flex", gap: 7 }}>
+            <input value={itemName} onChange={e => setItemName(e.target.value)} maxLength={60} placeholder={`${unit} title (e.g. Atomic Habits)`} aria-label={`${unit} title`} style={{ ...S.input, marginTop: 0, flex: 1, minWidth: 0 }} />
+            <input value={itemSize} onChange={e => setItemSize(e.target.value.replace(/[^\d]/g, ""))} type="number" inputMode="numeric" placeholder={String(st.size)} aria-label={`${subUnit}s in this ${unit}`} style={{ ...S.input, marginTop: 0, width: 72, flexShrink: 0, textAlign: "center" }} />
+          </div>
+          <div style={{ fontSize: 10.5, color: T.muted, fontWeight: 700, margin: "6px 0 9px" }}>How many {subUnit}s in this {unit}? (default {st.size})</div>
+          <button type="button" onClick={onStart} style={{ ...S.btnPrimary, width: "100%" }}>Start {unit}</button>
+        </div>
+      ) : null}
+
+      <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.05em", textTransform: "uppercase", color: T.muted, marginBottom: 7 }}>Finished in {monthName}</div>
+      {thisMonth.length === 0 ? (
+        <div style={{ fontSize: 12.5, color: T.muted, textAlign: "center", padding: "6px 0" }}>None yet — finish your first {unit} this month.</div>
+      ) : (
+        <div style={{ display: "grid", gap: 6 }}>
+          {thisMonth.map(it => (
+            <div key={it._i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 10, background: "#FBF0DA", border: "1px solid #F6DFB0" }}>
+              <span aria-hidden="true" style={{ width: 20, height: 20, borderRadius: 6, background: "#0F9D74", display: "flex", alignItems: "center", justifyContent: "center" }}><Ic name="check" size={12} color="#fff" /></span>
+              <span style={{ flex: 1, fontSize: 13.5, fontWeight: 800, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name || unit}</span>
+              {canEdit && (
+                <button type="button" onClick={() => onRemoveItem(it._i)} aria-label={`Remove ${it.name || unit}`}
+                  style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
+                  <Ic name="x" size={13} color={T.muted} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ fontSize: 10.5, color: T.muted, fontWeight: 700, marginTop: 10, textAlign: "center" }}>Unfinished {unit}s carry into next month; the count resets to 0/{st.perMonth}.</div>
+    </div>
   );
 }
 
@@ -1037,6 +1145,9 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     goalTarget: initial.goal?.target != null ? String(initial.goal.target) : "",
     goalPer:    initial.goal?.per   ? String(initial.goal.per) : "",   // sub-units per item (e.g. pages/book)
     goalSubUnit: initial.goal?.subUnit || "",                          // sub-unit name (e.g. page)
+    goalPerMonth: initial.goal?.perMonth ? String(initial.goal.perMonth) : "",  // monthly: items/month
+    goalSize:   initial.goal?.size  ? String(initial.goal.size) : "",  // monthly: default sub-units per item
+    goalDaily:  initial.goal?.daily ? String(initial.goal.daily) : "", // monthly: daily target (quick-log)
   });
   const [submitted, setSubmitted] = useState(false);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
@@ -1047,6 +1158,8 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
         ? (form.goalUnit.trim().length > 0 && isFinite(parseFloat(form.goalStart)) && isFinite(parseFloat(form.goalTarget)) && parseFloat(form.goalStart) !== parseFloat(form.goalTarget))
     :  form.goalType === "amount"
         ? (form.goalUnit.trim().length > 0 && parseFloat(form.goalTarget) > 0)
+    :  form.goalType === "monthly"
+        ? (form.goalUnit.trim().length > 0 && form.goalSubUnit.trim().length > 0 && parseInt(form.goalPerMonth,10) >= 1 && parseInt(form.goalSize,10) >= 1)
         : (form.goalUnit.trim().length > 0 && parseInt(form.goalCount,10) >= 1));
   const valid = form.label.trim().length > 0 && form.identityId && goalValid;
 
@@ -1083,6 +1196,9 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     goalTarget: fId + "-goalTarget",
     goalPer:    fId + "-goalPer",
     goalSubUnit: fId + "-goalSubUnit",
+    goalPerMonth: fId + "-goalPerMonth",
+    goalSize:   fId + "-goalSize",
+    goalDaily:  fId + "-goalDaily",
   };
 
   // ── Draft with James Clear — fills only the EMPTY fields, never overwrites you ──
@@ -1300,11 +1416,50 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
           <select id={ids.goalType} value={form.goalType} onChange={e=>set("goalType", e.target.value)}
             style={{ ...S.input, cursor:"pointer", appearance:"auto" }}>
             <option value="checklist">Checklist — reach N items (books, chapters, POCs…)</option>
+            <option value="monthly">Monthly items — finish N / month, log daily (books, topics…)</option>
             <option value="target">Target number — reach a value (weight, savings…)</option>
             <option value="amount">Total — accumulate an amount (km, minutes, ₹…)</option>
           </select>
 
-          {form.goalType === "target" ? (
+          {form.goalType === "monthly" ? (
+            <>
+              <div style={{ display:"flex", alignItems:"flex-end", gap:8, marginTop:8 }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Item</div>
+                  <input id={ids.goalUnit} style={{ ...S.input, marginTop:0, ...(submitted && !goalValid ? { borderColor:T.red } : {}) }} value={form.goalUnit} onChange={e=>set("goalUnit", e.target.value)} placeholder="e.g. book, topic" maxLength={16} aria-label="Item name" />
+                </div>
+                <div style={{ width:96, flexShrink:0 }}>
+                  <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Per month</div>
+                  <input id={ids.goalPerMonth} style={{ ...S.input, marginTop:0, ...(submitted && !goalValid ? { borderColor:T.red } : {}) }} type="number" min="1" inputMode="numeric" value={form.goalPerMonth} onChange={e=>set("goalPerMonth", e.target.value.replace(/[^\d]/g,""))} placeholder="2" aria-label="Items per month" />
+                </div>
+              </div>
+              <div style={{ display:"flex", alignItems:"flex-end", gap:8, marginTop:8 }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Counted in</div>
+                  <input id={ids.goalSubUnit} style={{ ...S.input, marginTop:0, ...(submitted && !goalValid ? { borderColor:T.red } : {}) }} value={form.goalSubUnit} onChange={e=>set("goalSubUnit", e.target.value)} placeholder="e.g. page, lesson, min" maxLength={16} aria-label="Sub-unit name" />
+                </div>
+                <div style={{ width:96, flexShrink:0 }}>
+                  <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Per {form.goalUnit.trim()||"item"}</div>
+                  <input id={ids.goalSize} style={{ ...S.input, marginTop:0, ...(submitted && !goalValid ? { borderColor:T.red } : {}) }} type="number" min="1" inputMode="numeric" value={form.goalSize} onChange={e=>set("goalSize", e.target.value.replace(/[^\d]/g,""))} placeholder="300" aria-label="Sub-units per item" />
+                </div>
+                <div style={{ width:80, flexShrink:0 }}>
+                  <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Daily <span style={{fontWeight:600}}>(opt)</span></div>
+                  <input id={ids.goalDaily} style={{ ...S.input, marginTop:0 }} type="number" min="1" inputMode="numeric" value={form.goalDaily} onChange={e=>set("goalDaily", e.target.value.replace(/[^\d]/g,""))} placeholder="10" aria-label="Daily target" />
+                </div>
+              </div>
+              {submitted && !goalValid ? (
+                <div role="alert" style={{ fontSize:11.5, color:T.red, fontWeight:700, marginTop:5 }}>Set item, per-month, sub-unit, and size — e.g. book · 2 · page · 300.</div>
+              ) : (
+                <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>
+                  {(() => {
+                    const u = form.goalUnit.trim(); const su = form.goalSubUnit.trim(); const pm = parseInt(form.goalPerMonth,10); const sz = parseInt(form.goalSize,10); const dy = parseInt(form.goalDaily,10);
+                    if (u && su && pm >= 1 && sz >= 1) return `Finish ${pm} ${u}${pm===1?"":"s"} each month — each takes ${sz} ${su}s${dy>=1?`, ~${dy} ${su}s/day`:""}. Log daily; unfinished ${u}s carry to next month.`;
+                    return "Finish N items per month, each filled by daily effort — e.g. 2 books/month at 300 pages, logging ~10 pages a day.";
+                  })()}
+                </div>
+              )}
+            </>
+          ) : form.goalType === "target" ? (
             <>
               <div style={{ display:"flex", alignItems:"flex-end", gap:8, marginTop:8 }}>
                 <div style={{ flex:1, minWidth:0 }}>
@@ -1987,6 +2142,44 @@ export default function App() {
     ));
   }, []);
 
+  // ── Monthly-items goal: named current item filled by daily sub-unit logs. ──
+  const patchHabit = (identityId, habitId, fn) => setIdentities(prev => prev.map(ident =>
+    ident.id !== identityId ? ident : { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : fn(h)) }));
+  const startGoalItem = useCallback((identityId, habitId, name, size) => {
+    patchHabit(identityId, habitId, h => {
+      if (h.goalCurrent) return h;                       // already working one
+      const sz = Math.max(1, parseInt(size, 10) || h.goal?.size || 1);
+      return { ...h, goalCurrent: { name: (name || "").trim().slice(0, 60), size: sz, log: [] } };
+    });
+  }, []);
+  const logGoalItem = useCallback((identityId, habitId, value) => {
+    patchHabit(identityId, habitId, h => {
+      const cur = h.goalCurrent; if (!cur) return h;
+      const v = Number(value); if (!isFinite(v) || v <= 0) return h;
+      const log = [...(cur.log || []), { value: v, at: getTodayKey() }];
+      const done = log.reduce((s, e) => s + (Number(e.value) || 0), 0);
+      if (done >= (cur.size || 1)) {                      // item filled → complete it, carry nothing
+        return { ...h, goalItems: [...(h.goalItems || []), { name: cur.name, size: cur.size, at: getTodayKey() }], goalCurrent: null };
+      }
+      return { ...h, goalCurrent: { ...cur, log } };
+    });
+  }, []);
+  const undoGoalLog = useCallback((identityId, habitId) => {
+    patchHabit(identityId, habitId, h => {
+      if (!h.goalCurrent) return h;
+      const log = [...(h.goalCurrent.log || [])]; log.pop();
+      return { ...h, goalCurrent: { ...h.goalCurrent, log } };
+    });
+  }, []);
+  const removeGoalItem = useCallback((identityId, habitId, idx) => {
+    patchHabit(identityId, habitId, h => ({ ...h, goalItems: (h.goalItems || []).filter((_, i) => i !== idx) }));
+  }, []);
+
+  const goalOps = useMemo(() => ({
+    addEntry: addGoalEntry, removeEntry: removeGoalEntry,
+    startItem: startGoalItem, logItem: logGoalItem, undoLog: undoGoalLog, removeItem: removeGoalItem,
+  }), [addGoalEntry, removeGoalEntry, startGoalItem, logGoalItem, undoGoalLog, removeGoalItem]);
+
   // Daily reflection note per habit — a short "what did I do today" for later review.
   const setHabitNote = useCallback((dateKey, habitId, text) => {
     setHabitNotes(prev => {
@@ -2389,6 +2582,16 @@ export default function App() {
       if (!isFinite(target) || target <= 0) return null;
       return { type: "amount", unit: u.slice(0, 16), target, by };
     }
+    if (f.goalType === "monthly") {
+      const su = (f.goalSubUnit || "").trim();
+      const perMonth = Math.max(0, parseInt(f.goalPerMonth, 10) || 0);
+      const size = Math.max(0, parseInt(f.goalSize, 10) || 0);
+      const daily = Math.max(0, parseInt(f.goalDaily, 10) || 0);
+      if (!su || perMonth < 1 || size < 1) return null;
+      const goal = { type: "monthly", unit: u.slice(0, 16), subUnit: su.slice(0, 16), perMonth, size };
+      if (daily >= 1) goal.daily = daily;
+      return goal;   // no fixed end date — it's a recurring monthly goal
+    }
     const c = Math.max(0, parseInt(f.goalCount, 10) || 0);
     if (c < 1) return null;
     const per = Math.max(0, parseInt(f.goalPer, 10) || 0);
@@ -2420,7 +2623,7 @@ export default function App() {
     const goal = cleanGoal(k, f, existingBy);
     // Switching goal type (or dropping the goal) makes old log entries meaningless.
     const resetLog = (oldHabit?.goal?.type || "checklist") !== (goal?.type || "checklist");
-    const logPatch = resetLog ? { goalLog: [], goalDone: [] } : {};
+    const logPatch = resetLog ? { goalLog: [], goalDone: [], goalItems: [], goalCurrent: null } : {};
     if (newIdentityId === oldIdentityId) {
       setIdentities(prev => prev.map(ident =>
         ident.id !== oldIdentityId ? ident :
@@ -2683,8 +2886,7 @@ export default function App() {
             reviews={reviews}
             onOpenWeeklyReview={() => setReviewOpenWk(weekStartKey(todayKey))}
             markMiss={markMiss}
-            addGoalEntry={addGoalEntry}
-            removeGoalEntry={removeGoalEntry}
+            goalOps={goalOps}
             habitNotes={habitNotes}
             setHabitNote={setHabitNote}
             justChecked={justChecked}
@@ -3186,7 +3388,7 @@ function NotesJournalModal({ habit, identity, allData = {}, habitNotes = {}, onS
 }
 
 // ─── ROW MENU — notes / miss / edit / delete behind one ⋯ button ──────────────
-function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHabit, onReview, habitNotes = {}, allData = {}, setHabitNote, onAddGoalEntry, onRemoveGoalEntry }) {
+function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHabit, onReview, habitNotes = {}, allData = {}, setHabitNote, goalOps }) {
   const [open, setOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [goalOpen, setGoalOpen] = useState(false);
@@ -3248,7 +3450,7 @@ function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHab
           onClose={() => setNotesOpen(false)}
         />
       )}
-      {goalOpen && <GoalProgressModal habit={habit} identity={identity} onAddEntry={onAddGoalEntry} onRemoveEntry={onRemoveGoalEntry} onClose={() => setGoalOpen(false)} />}
+      {goalOpen && <GoalProgressModal habit={habit} identity={identity} ops={goalOps} onClose={() => setGoalOpen(false)} />}
     </>
   );
 }
@@ -3460,7 +3662,7 @@ function VotesBadge({ habit, allData, votes, total, color, isBad }) {
 
 // ─── HABIT ROW ────────────────────────────────────────────────────────────────
 // One habit on the timeline: cue → action → coaching (identity header is above).
-function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, adjustCount, count = 0, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, onAddGoalEntry, onRemoveGoalEntry, onCheckedWithGoal, active = false }) {
+function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, adjustCount, count = 0, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, goalOps, onCheckedWithGoal, active = false }) {
   const next = getNextMilestone(streak);
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   // Quantity habits: a target amount (e.g. 8 glasses) counted up per day.
@@ -3475,7 +3677,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
     else toggle(habit.id, habit.frequency, identity);
     // Just checked it off (not unchecking) and it has a goal → prompt to log progress.
     // Handled by the parent (this row unmounts as it moves to Completed).
-    if (!wasChecked && habit.goal && onCheckedWithGoal) onCheckedWithGoal();
+    if (!wasChecked && habit.goal && goalOps && onCheckedWithGoal) onCheckedWithGoal();
   };
 
   // One cue line above the label: trigger · time · location · frequency.
@@ -3818,7 +4020,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         />
       )}
       {goalModalOpen && habit.goal && (
-        <GoalProgressModal habit={habit} identity={identity} onAddEntry={onAddGoalEntry} onRemoveEntry={onRemoveGoalEntry} onClose={() => setGoalModalOpen(false)} />
+        <GoalProgressModal habit={habit} identity={identity} ops={goalOps} onClose={() => setGoalModalOpen(false)} />
       )}
 
     </div>
@@ -4768,7 +4970,7 @@ const FocusView = memo(function FocusView({ dailyTasks, selectedDate, setSelecte
 });
 
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
-const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, adjustCount, markMiss, addGoalEntry, removeGoalEntry, habitNotes, setHabitNote, justChecked, getStreakForHabit, openEditHabit, openDeleteHabit, openReviewFor, setModal, openAddHabit, openAddIdentity, onOpenFocus, reviews, onOpenWeeklyReview, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, addFocusTask, toggleTask, deleteTask, editTask, toggleStar, toggleFocus, deferTask, reviewTarget, onOpenReview, onDismissReview }) {
+const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, adjustCount, markMiss, goalOps, habitNotes, setHabitNote, justChecked, getStreakForHabit, openEditHabit, openDeleteHabit, openReviewFor, setModal, openAddHabit, openAddIdentity, onOpenFocus, reviews, onOpenWeeklyReview, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, addFocusTask, toggleTask, deleteTask, editTask, toggleStar, toggleFocus, deferTask, reviewTarget, onOpenReview, onDismissReview }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const [goalPrompt, setGoalPrompt] = useState(null); // {habit, identity} after checking a goal habit
   const notTodayListId = useId();
@@ -4937,9 +5139,8 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                   active={habit.id === firstPendingId}
                   streakBadge={streakBadge}
                   onEdit={() => openEditHabit(identity.id, habit)}
-                  menu={<RowMenu habit={habit} identity={identity} missed={todayData[habit.id] === "miss"} onMiss={markMiss} openEditHabit={openEditHabit} openDeleteHabit={openDeleteHabit} onReview={openReviewFor} habitNotes={habitNotes} allData={allData} setHabitNote={setHabitNote} onAddGoalEntry={addGoalEntry} onRemoveGoalEntry={removeGoalEntry} />}
-                  onAddGoalEntry={addGoalEntry}
-                  onRemoveGoalEntry={removeGoalEntry}
+                  menu={<RowMenu habit={habit} identity={identity} missed={todayData[habit.id] === "miss"} onMiss={markMiss} openEditHabit={openEditHabit} openDeleteHabit={openDeleteHabit} onReview={openReviewFor} habitNotes={habitNotes} allData={allData} setHabitNote={setHabitNote} goalOps={goalOps} />}
+                  goalOps={goalOps}
                   onCheckedWithGoal={() => setGoalPrompt({ identityId: identity.id, habitId: habit.id })}
                   habit={habit}
                   identity={identity}
@@ -5133,7 +5334,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
         const gi = identities.find(i => i.id === goalPrompt.identityId);
         const gh = gi?.habits.find(h => h.id === goalPrompt.habitId);
         if (!gh || !gh.goal) return null;
-        return <GoalProgressModal habit={gh} identity={gi} onAddEntry={addGoalEntry} onRemoveEntry={removeGoalEntry} onClose={() => setGoalPrompt(null)} />;
+        return <GoalProgressModal habit={gh} identity={gi} ops={goalOps} onClose={() => setGoalPrompt(null)} />;
       })()}
     </div>
   );
