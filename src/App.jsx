@@ -1173,7 +1173,7 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     kind:       initial.kind       || "good",
     target:     initial.target ? String(initial.target) : "",
     unit:       initial.unit       || "",
-    goalType:   initial.goal?.type  || "checklist",
+    goalType:   "checklist",   // single goal type: reach N items
     goalUnit:   initial.goal?.unit  || "",
     goalCount:  initial.goal?.count ? String(initial.goal.count) : "",
     goalStart:  initial.goal?.start != null ? String(initial.goal.start) : "",
@@ -1449,14 +1449,7 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
           build habits so every habit shows visible, climbing progress. */}
       {!breaking && (
         <>
-          <label htmlFor={ids.goalType} style={{ ...S.fieldLabel, marginTop:18 }}>Goal type</label>
-          <select id={ids.goalType} value={form.goalType} onChange={e=>set("goalType", e.target.value)}
-            style={{ ...S.input, cursor:"pointer", appearance:"auto" }}>
-            <option value="reading">Reading — books per month, log pages, mark finished</option>
-            <option value="checklist">Checklist — reach N items (books, chapters, POCs…)</option>
-            <option value="monthly">Monthly items — finish N / month, log daily (topics, courses…)</option>
-            <option value="target">Target number — reach a value (weight, savings…)</option>
-          </select>
+          <label style={{ ...S.fieldLabel, marginTop:18 }}>Progress goal — reach N items</label>
 
           {form.goalType === "reading" ? (
             <>
