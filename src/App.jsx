@@ -215,6 +215,21 @@ function goalStats(habit) {
       remainLabel: complete ? "done" : `${fmtNum(Math.max(0, target - sum))} ${unit} left` };
   }
   const count = Math.max(1, g.count || 1);
+  const per = Math.max(0, Number(g.per) || 0);
+  if (per > 0) {
+    // Sub-unit checklist: log amounts (e.g. pages); each item completes at `per`.
+    const subUnit = g.subUnit || "unit";
+    const entries = log.map((e, i) => ({ ...e, _i: i })).filter(e => e && e.value != null && isFinite(Number(e.value)));
+    const totalSub = entries.reduce((s, e) => s + Number(e.value), 0);
+    const cap = per * count;
+    const capped = Math.min(totalSub, cap);
+    const done = Math.min(Math.floor(capped / per), count);
+    const complete = done >= count;
+    const currentSub = complete ? per : capped - done * per;
+    return { type: "checklist", per, subUnit, unit, log: entries, count, done, totalSub, currentSub, complete,
+      frac: cap ? capped / cap : 0, headline: `${done}/${count} ${unit}${count === 1 ? "" : "s"}`,
+      remainLabel: complete ? "done" : `${fmtNum(per - currentSub)} ${subUnit}${(per - currentSub) === 1 ? "" : "s"} to next ${unit}` };
+  }
   const done = Math.min(log.length, count);
   return { type: "checklist", unit, log, count, done, complete: done >= count,
     frac: done / count, headline: `${done}/${count} ${unit}${count === 1 ? "" : "s"}`,
@@ -255,7 +270,9 @@ function GoalProgressModal({ habit, identity, onAddEntry, onRemoveEntry, onClose
   const [input, setInput] = useState("");
   const isTarget = goal.type === "target";
   const isAmount = goal.type === "amount";
-  const isNumeric = isTarget || isAmount;
+  const isPerChecklist = goal.type === "checklist" && goal.per > 0;
+  const subUnit = goal.subUnit || "unit";
+  const isNumeric = isTarget || isAmount || isPerChecklist;
   const add = () => {
     if (!canEdit) return;
     if (isNumeric) {
@@ -290,6 +307,7 @@ function GoalProgressModal({ habit, identity, onAddEntry, onRemoveEntry, onClose
           <div style={{ fontSize: 12.5, fontWeight: 700, color: T.muted, marginTop: 2 }}>
             {isTarget ? `${st.reduce ? "Reduce" : "Increase"} to ${fmtNum(st.target)} ${unit} · ${st.complete ? "reached 🎉" : st.remainLabel}`
               : isAmount ? (st.complete ? "goal reached 🎉" : `${st.remainLabel} to ${fmtNum(st.target)} ${unit}`)
+              : isPerChecklist ? (st.complete ? "goal reached 🎉" : `${st.currentSub}/${st.per} ${subUnit}s · ${st.remainLabel}`)
               : (st.complete ? "goal reached 🎉" : `${st.count - st.done} to go`)}
           </div>
           {deadlineChip}
@@ -303,14 +321,54 @@ function GoalProgressModal({ habit, identity, onAddEntry, onRemoveEntry, onClose
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
             <input value={input} onChange={e => setInput(isNumeric ? e.target.value.replace(/[^\d.]/g, "") : e.target.value)} maxLength={60}
               onKeyDown={e => { if (e.key === "Enter") add(); }} type={isNumeric ? "number" : "text"} inputMode={isNumeric ? "decimal" : undefined}
-              placeholder={isTarget ? `Log current ${unit} (e.g. ${fmtNum(st.latest)})` : isAmount ? `Add ${unit} (e.g. 3)` : `Name this ${unit} (optional)`}
-              aria-label={isTarget ? `Current ${unit} reading` : isAmount ? `Amount of ${unit} to add` : `Name of ${unit} ${st.done + 1}`}
+              placeholder={isTarget ? `Log current ${unit} (e.g. ${fmtNum(st.latest)})` : isAmount ? `Add ${unit} (e.g. 3)` : isPerChecklist ? `Add ${subUnit}s today (e.g. 5)` : `Name this ${unit} (optional)`}
+              aria-label={isTarget ? `Current ${unit} reading` : isAmount ? `Amount of ${unit} to add` : isPerChecklist ? `${subUnit}s to add` : `Name of ${unit} ${st.done + 1}`}
               style={{ ...S.input, marginTop: 0, flex: 1, minWidth: 0 }} />
             <button type="button" onClick={add} style={{ ...S.btnPrimary, flex: "none", width: "auto", padding: "0 16px" }}>+ Add</button>
           </div>
         )}
 
-        {isAmount ? (
+        {isPerChecklist ? (
+          /* Sub-unit checklist — item ladder; the current item shows its fill bar. */
+          <div style={{ display: "grid", gap: 6 }}>
+            {Array.from({ length: st.count }, (_, i) => i).map(i => {
+              const done = i < st.done;
+              const isNext = !st.complete && i === st.done;
+              return (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 10,
+                  background: done ? "#FBF0DA" : isNext ? T.surf2 : "transparent",
+                  border: `1px solid ${done ? "#F6DFB0" : isNext ? T.border : T.surf2}`, opacity: done || isNext ? 1 : 0.6 }}>
+                  <span aria-hidden="true" style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center",
+                    background: done ? "#0F9D74" : "transparent", border: `2px solid ${done ? "#0F9D74" : isNext ? gold : T.border2}` }}>
+                    {done && <Ic name="check" size={13} color="#fff" />}
+                  </span>
+                  <span style={{ flexShrink: 0, fontSize: 13, fontWeight: done || isNext ? 900 : 700, color: done ? T.text : isNext ? T.text : T.muted, width: 78 }}>{unit} {i + 1}</span>
+                  {isNext ? (
+                    <span style={{ flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ flex: 1, height: 6, borderRadius: 6, background: "#EBE0C6", overflow: "hidden" }}>
+                        <span style={{ display: "block", width: `${Math.round((st.currentSub / st.per) * 100)}%`, height: "100%", background: "#F59E0B" }} />
+                      </span>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: gold, whiteSpace: "nowrap" }}>{fmtNum(st.currentSub)}/{st.per}</span>
+                    </span>
+                  ) : (
+                    <span style={{ flex: 1, fontSize: 11.5, fontWeight: 700, color: done ? gold : T.muted, textAlign: "right" }}>{done ? "done" : `${st.per} ${subUnit}s`}</span>
+                  )}
+                </div>
+              );
+            })}
+            {st.log.length > 0 && (
+              <div style={{ fontSize: 11, color: T.muted, fontWeight: 700, marginTop: 6 }}>
+                Logged {fmtNum(st.totalSub)} {subUnit}s total{canEdit && st.log.length ? ` · undo last: ` : ""}
+                {canEdit && st.log.length > 0 && (
+                  <button type="button" onClick={() => onRemoveEntry(identity.id, habit.id, st.log[st.log.length - 1]._i)}
+                    style={{ background: "transparent", border: "none", color: T.primary, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", fontSize: 11, padding: 0 }}>
+                    −{fmtNum(Number(st.log[st.log.length - 1].value))} {subUnit}s
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ) : isAmount ? (
           /* Total — each logged increment, newest first. */
           <div style={{ display: "grid", gap: 6 }}>
             {st.log.length === 0 ? (
@@ -977,6 +1035,8 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     goalCount:  initial.goal?.count ? String(initial.goal.count) : "",
     goalStart:  initial.goal?.start != null ? String(initial.goal.start) : "",
     goalTarget: initial.goal?.target != null ? String(initial.goal.target) : "",
+    goalPer:    initial.goal?.per   ? String(initial.goal.per) : "",   // sub-units per item (e.g. pages/book)
+    goalSubUnit: initial.goal?.subUnit || "",                          // sub-unit name (e.g. page)
   });
   const [submitted, setSubmitted] = useState(false);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
@@ -1021,6 +1081,8 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     goalCount:  fId + "-goalCount",
     goalStart:  fId + "-goalStart",
     goalTarget: fId + "-goalTarget",
+    goalPer:    fId + "-goalPer",
+    goalSubUnit: fId + "-goalSubUnit",
   };
 
   // ── Draft with James Clear — fills only the EMPTY fields, never overwrites you ──
@@ -1309,20 +1371,31 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
                   <input id={ids.goalCount} style={{ ...S.input, marginTop:0, ...(submitted && !goalValid ? { borderColor:T.red } : {}) }} type="number" min="1" inputMode="numeric" value={form.goalCount} onChange={e=>set("goalCount", e.target.value.replace(/[^\d]/g,""))} placeholder="e.g. 4" aria-label="Target number of units" />
                 </div>
               </div>
-              {submitted && !goalValid ? (
+              {submitted && !goalValid && (
                 <div role="alert" style={{ fontSize:11.5, color:T.red, fontWeight:700, marginTop:5 }}>Set a unit and a target — e.g. book · 4.</div>
-              ) : (
-                <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>
-                  {(() => {
-                    const u = form.goalUnit.trim(); const cnt = parseInt(form.goalCount,10);
-                    if (u && cnt >= 1) {
-                      const pl = (n) => `${n} ${u}${n===1?"":"s"}`;
-                      return `${cnt} milestones: ${pl(1)} → ${pl(cnt)}. Tick each off (and name it) by ${longDateLabel(initial.goal?.by || lastDayOfYearKey())}.`;
-                    }
-                    return "A checklist — e.g. book · 4 gives you 1 book → 4 books to tick off and name.";
-                  })()}
-                </div>
               )}
+              {/* Optional: break each item into sub-units (e.g. pages/book) so
+                  daily logging auto-completes an item when it fills up. */}
+              <div style={{ display:"flex", alignItems:"flex-end", gap:8, marginTop:8 }}>
+                <div style={{ width:130, flexShrink:0 }}>
+                  <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Amount per {form.goalUnit.trim() || "item"} <span style={{fontWeight:600}}>(opt)</span></div>
+                  <input id={ids.goalPer} style={{ ...S.input, marginTop:0 }} type="number" min="1" inputMode="numeric" value={form.goalPer} onChange={e=>set("goalPer", e.target.value.replace(/[^\d]/g,""))} placeholder="e.g. 300" aria-label={`Amount per ${form.goalUnit.trim()||"item"}`} />
+                </div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>counted in</div>
+                  <input id={ids.goalSubUnit} style={{ ...S.input, marginTop:0 }} value={form.goalSubUnit} onChange={e=>set("goalSubUnit", e.target.value)} placeholder="e.g. page" maxLength={16} aria-label="Sub-unit name" />
+                </div>
+              </div>
+              <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>
+                {(() => {
+                  const u = form.goalUnit.trim() || "item"; const cnt = parseInt(form.goalCount,10) || 0;
+                  const per = parseInt(form.goalPer,10) || 0; const su = form.goalSubUnit.trim() || "page";
+                  const pl = (n) => `${n} ${u}${n===1?"":"s"}`;
+                  if (per >= 1 && cnt >= 1) return `Log ${su}s daily — each ${u} completes at ${per} ${su}s, up to ${pl(cnt)} (${per*cnt} ${su}s total).`;
+                  if (cnt >= 1) return `${cnt} milestones: ${pl(1)} → ${pl(cnt)}. Leave "amount per ${u}" blank to just tick each off, or set it (e.g. 300 pages) to log daily and auto-complete.`;
+                  return "A checklist — e.g. book · 4. Optionally set pages-per-book to log daily and auto-complete each book.";
+                })()}
+              </div>
             </>
           )}
         </>
@@ -1893,8 +1966,10 @@ export default function App() {
         habits: ident.habits.map(h => {
           if (h.id !== habitId) return h;
           const log = seedLog(h);
-          const isTarget = h.goal?.type === "target";
-          if (!isTarget && h.goal?.count && log.length >= h.goal.count) return h;  // checklist cap
+          const g = h.goal;
+          // Cap only a plain (name-based) checklist by its count; per/amount/target log freely.
+          const capByCount = g && g.type === "checklist" && !g.per && g.count;
+          if (capByCount && log.length >= g.count) return h;
           const item = (entry && typeof entry === "object" && "value" in entry)
             ? { value: Number(entry.value), at: getTodayKey() }
             : { name: String(entry || "").trim().slice(0, 60), at: getTodayKey() };
@@ -2315,7 +2390,11 @@ export default function App() {
       return { type: "amount", unit: u.slice(0, 16), target, by };
     }
     const c = Math.max(0, parseInt(f.goalCount, 10) || 0);
-    return c >= 1 ? { type: "checklist", unit: u.slice(0, 16), count: c, by } : null;
+    if (c < 1) return null;
+    const per = Math.max(0, parseInt(f.goalPer, 10) || 0);
+    const goal = { type: "checklist", unit: u.slice(0, 16), count: c, by };
+    if (per >= 1) { goal.per = per; goal.subUnit = (f.goalSubUnit || "unit").trim().slice(0, 16); }
+    return goal;
   };
 
   const addHabit = (f) => {
