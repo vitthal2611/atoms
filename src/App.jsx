@@ -3381,7 +3381,7 @@ function VotesBadge({ habit, allData, votes, total, color, isBad }) {
 
 // ─── HABIT ROW ────────────────────────────────────────────────────────────────
 // One habit on the timeline: cue → action → coaching (identity header is above).
-function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, adjustCount, count = 0, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, onAddGoalEntry, onRemoveGoalEntry, active = false }) {
+function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, adjustCount, count = 0, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, onAddGoalEntry, onRemoveGoalEntry, onCheckedWithGoal, active = false }) {
   const next = getNextMilestone(streak);
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   // Quantity habits: a target amount (e.g. 8 glasses) counted up per day.
@@ -3395,7 +3395,8 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
     if (isQty && adjustCount) adjustCount(habit.id, target, checked ? -target : 1);
     else toggle(habit.id, habit.frequency, identity);
     // Just checked it off (not unchecking) and it has a goal → prompt to log progress.
-    if (!wasChecked && habit.goal && onAddGoalEntry) setGoalModalOpen(true);
+    // Handled by the parent (this row unmounts as it moves to Completed).
+    if (!wasChecked && habit.goal && onCheckedWithGoal) onCheckedWithGoal();
   };
 
   // One cue line above the label: trigger · time · location · frequency.
@@ -4690,6 +4691,7 @@ const FocusView = memo(function FocusView({ dailyTasks, selectedDate, setSelecte
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
 const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, adjustCount, markMiss, addGoalEntry, removeGoalEntry, habitNotes, setHabitNote, justChecked, getStreakForHabit, openEditHabit, openDeleteHabit, openReviewFor, setModal, openAddHabit, openAddIdentity, onOpenFocus, reviews, onOpenWeeklyReview, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, addFocusTask, toggleTask, deleteTask, editTask, toggleStar, toggleFocus, deferTask, reviewTarget, onOpenReview, onDismissReview }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
+  const [goalPrompt, setGoalPrompt] = useState(null); // {habit, identity} after checking a goal habit
   const notTodayListId = useId();
   const [matrixExpanded, setMatrixExpanded] = useState(false);
   const [laterOpen, setLaterOpen] = useState(false);
@@ -4859,6 +4861,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                   menu={<RowMenu habit={habit} identity={identity} missed={todayData[habit.id] === "miss"} onMiss={markMiss} openEditHabit={openEditHabit} openDeleteHabit={openDeleteHabit} onReview={openReviewFor} habitNotes={habitNotes} allData={allData} setHabitNote={setHabitNote} onAddGoalEntry={addGoalEntry} onRemoveGoalEntry={removeGoalEntry} />}
                   onAddGoalEntry={addGoalEntry}
                   onRemoveGoalEntry={removeGoalEntry}
+                  onCheckedWithGoal={() => setGoalPrompt({ identityId: identity.id, habitId: habit.id })}
                   habit={habit}
                   identity={identity}
                   checked={todayData[habit.id] === true}
@@ -5042,6 +5045,17 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
           )}
         </div>
       )}
+
+      {/* After checking a goal habit — prompt to log progress. Lives here (not on
+          the row) because the row unmounts as it moves to Completed. Resolves the
+          live habit so edits reflect immediately. */}
+      {(() => {
+        if (!goalPrompt) return null;
+        const gi = identities.find(i => i.id === goalPrompt.identityId);
+        const gh = gi?.habits.find(h => h.id === goalPrompt.habitId);
+        if (!gh || !gh.goal) return null;
+        return <GoalProgressModal habit={gh} identity={gi} onAddEntry={addGoalEntry} onRemoveEntry={removeGoalEntry} onClose={() => setGoalPrompt(null)} />;
+      })()}
     </div>
   );
 });
