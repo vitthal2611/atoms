@@ -982,7 +982,7 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const breaking = form.kind === "bad";
   // Progress goal is required for build habits (bad habits don't have one).
-  const goalValid = breaking || form.goalType === "none"
+  const goalValid = breaking
     || (form.goalType === "target"
         ? (form.goalUnit.trim().length > 0 && isFinite(parseFloat(form.goalStart)) && isFinite(parseFloat(form.goalTarget)) && parseFloat(form.goalStart) !== parseFloat(form.goalTarget))
     :  form.goalType === "amount"
@@ -1240,14 +1240,9 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
             <option value="checklist">Checklist — reach N items (books, chapters, POCs…)</option>
             <option value="target">Target number — reach a value (weight, savings…)</option>
             <option value="amount">Total — accumulate an amount (km, minutes, ₹…)</option>
-            <option value="none">Stay consistent — no number (just show up)</option>
           </select>
 
-          {form.goalType === "none" ? (
-            <div style={{ fontSize:11, color:T.muted, marginTop:6 }}>
-              No number to hit — this habit is tracked by consistency (streak, votes, never-miss-twice). Best for outcomes like clearer skin, healthy hair, or quitting snoring, where showing up daily is the goal.
-            </div>
-          ) : form.goalType === "target" ? (
+          {form.goalType === "target" ? (
             <>
               <div style={{ display:"flex", alignItems:"flex-end", gap:8, marginTop:8 }}>
                 <div style={{ flex:1, minWidth:0 }}>
@@ -2309,7 +2304,6 @@ export default function App() {
     if (!u) return null;
     // Deadline defaults to the last day of this year; keep an existing one on edit.
     const by = existingBy || lastDayOfYearKey();
-    if (f.goalType === "none") return null;
     if (f.goalType === "target") {
       const start = parseFloat(f.goalStart), target = parseFloat(f.goalTarget);
       if (!isFinite(start) || !isFinite(target) || start === target) return null;
