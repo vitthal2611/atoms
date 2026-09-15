@@ -1194,8 +1194,6 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
         ? (parseInt(form.goalPerMonth,10) >= 1)
     :  form.goalType === "target"
         ? (form.goalUnit.trim().length > 0 && isFinite(parseFloat(form.goalStart)) && isFinite(parseFloat(form.goalTarget)) && parseFloat(form.goalStart) !== parseFloat(form.goalTarget))
-    :  form.goalType === "amount"
-        ? (form.goalUnit.trim().length > 0 && parseFloat(form.goalTarget) > 0)
     :  form.goalType === "monthly"
         ? (form.goalUnit.trim().length > 0 && form.goalSubUnit.trim().length > 0 && parseInt(form.goalPerMonth,10) >= 1 && parseInt(form.goalSize,10) >= 1)
         : (form.goalUnit.trim().length > 0 && parseInt(form.goalCount,10) >= 1));
@@ -1458,7 +1456,6 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
             <option value="checklist">Checklist — reach N items (books, chapters, POCs…)</option>
             <option value="monthly">Monthly items — finish N / month, log daily (topics, courses…)</option>
             <option value="target">Target number — reach a value (weight, savings…)</option>
-            <option value="amount">Total — accumulate an amount (km, minutes, ₹…)</option>
           </select>
 
           {form.goalType === "reading" ? (
@@ -1554,30 +1551,6 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
                 </div>
               )}
             </>
-          ) : form.goalType === "amount" ? (
-            <>
-              <div style={{ display:"flex", alignItems:"flex-end", gap:8, marginTop:8 }}>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Unit</div>
-                  <input id={ids.goalUnit} style={{ ...S.input, marginTop:0, ...(submitted && !goalValid ? { borderColor:T.red } : {}) }} value={form.goalUnit} onChange={e=>set("goalUnit", e.target.value)} placeholder="e.g. km, min, ₹" maxLength={16} aria-label="Amount unit" />
-                </div>
-                <div style={{ width:110, flexShrink:0 }}>
-                  <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Total goal</div>
-                  <input id={ids.goalTarget} style={{ ...S.input, marginTop:0, ...(submitted && !goalValid ? { borderColor:T.red } : {}) }} type="number" inputMode="decimal" value={form.goalTarget} onChange={e=>set("goalTarget", e.target.value.replace(/[^\d.]/g,""))} placeholder="200" aria-label="Total to accumulate" />
-                </div>
-              </div>
-              {submitted && !goalValid ? (
-                <div role="alert" style={{ fontSize:11.5, color:T.red, fontWeight:700, marginTop:5 }}>Set a unit and a total — e.g. km · 200, or ₹ · 200000.</div>
-              ) : (
-                <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>
-                  {(() => {
-                    const u = form.goalUnit.trim(); const t = parseFloat(form.goalTarget);
-                    if (u && isFinite(t) && t > 0) return `Accumulate ${fmtNum(t)} ${u} by ${longDateLabel(initial.goal?.by || lastDayOfYearKey())}. Log each bit as you go (e.g. 3 ${u} today).`;
-                    return "Add up progress toward a total — e.g. walk 200 km, meditate 600 min, earn ₹2,00,000.";
-                  })()}
-                </div>
-              )}
-            </>
           ) : (
             <>
               <div style={{ display:"flex", alignItems:"flex-end", gap:8, marginTop:8 }}>
@@ -1619,7 +1592,7 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
           )}
 
           {/* Monthly expectation (pace) — optional, for the non-monthly goal types. */}
-          {["checklist","target","amount"].includes(form.goalType) && (
+          {["checklist","target"].includes(form.goalType) && (
             <div style={{ marginTop:12 }}>
               <div style={{ display:"flex", alignItems:"flex-end", gap:8 }}>
                 <div style={{ flex:1, minWidth:0 }}>
