@@ -200,10 +200,11 @@ function goalStats(habit) {
     const monthSum = monthEntries.reduce((s, e) => s + Number(e.value), 0);
     const complete = monthSum >= target;
     const monthShort = new Date(gMonthKey + "-01T00:00").toLocaleDateString(navigator.language || undefined, { month: "short" });
+    const uPl = (n) => `${unit}${Math.abs(n) === 1 ? "" : "s"}`;
     return { type: "monthlytotal", unit, log: monthEntries, target, monthSum, complete, daily: Number(g.daily) || 0, monthKey: gMonthKey,
       frac: Math.min(1, monthSum / target),
-      headline: `${fmtNum(monthSum)}/${fmtNum(target)} ${unit} · ${monthShort}`,
-      remainLabel: complete ? "done" : `${fmtNum(target - monthSum)} ${unit} left` };
+      headline: `${fmtNum(monthSum)}/${fmtNum(target)} ${uPl(target)} · ${monthShort}`,
+      remainLabel: complete ? "done" : `${fmtNum(target - monthSum)} ${uPl(target - monthSum)} to go` };
   }
   if (g.type === "monthly" || g.type === "reading") {
     const perMonth = Math.max(1, g.perMonth || 1);
@@ -534,40 +535,41 @@ function MonthlyTotalBody({ st, unit, gold, canEdit, input, setInput, onLog, onR
   const remaining = Math.max(0, st.target - st.monthSum);
   const perDay = st.complete ? 0 : remaining / Math.max(1, daysLeft);
   const quick = st.daily || (Math.round((st.target / 30) * 10) / 10);
-  const addCustom = () => { if (input) { onLog(parseFloat(input)); setInput(""); } };
+  const uPl = (n) => `${unit}${Math.abs(n) === 1 ? "" : "s"}`;
+  const addCustom = () => { const v = parseFloat(input); if (isFinite(v) && v > 0) { onLog(v); setInput(""); } };
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-        <span style={{ fontSize: 13, fontWeight: 800, color: T.text }}>{monthName}</span>
-        <span style={{ fontSize: 11, fontWeight: 800, color: T.muted, background: T.surf2, borderRadius: 20, padding: "3px 10px" }}>{daysLeft} days left</span>
-      </div>
-      <div style={{ fontSize: 11.5, fontWeight: 700, color: T.muted, marginBottom: 14 }}>
-        {st.complete ? "Monthly goal reached 🎉" : <>{fmtNum(remaining)} {unit} to go · <b style={{ color: T.text }}>{fmtNum(perDay)} {unit}/day</b> to finish {monthName}</>}
+      {/* Pace: how much per day to finish — the "to go" count already shows in the header. */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 14 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: T.muted }}>
+          {st.complete ? "Monthly goal reached 🎉" : <><b style={{ color: T.text, fontWeight: 900 }}>{fmtNum(perDay)} {uPl(perDay)}/day</b> to finish {monthName}</>}
+        </span>
+        <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 800, color: T.muted, background: T.surf2, borderRadius: 20, padding: "3px 10px" }}>{daysLeft} days left</span>
       </div>
 
-      {canEdit && (
+      {canEdit && !st.complete && (
         <div style={{ background: "#FFF8EC", border: "1px solid #F6DFB0", borderRadius: 12, padding: 12, marginBottom: 14 }}>
-          <div style={{ fontSize: 10.5, fontWeight: 800, color: "#8A5A08", marginBottom: 8 }}>Log today's {unit}{st.daily ? <span style={{ color: "#B07B1E", fontWeight: 700 }}> · target {fmtNum(st.daily)}</span> : null}</div>
-          <div style={{ display: "flex", gap: 7 }}>
-            <button type="button" onClick={() => onLog(quick)} style={{ flex: 1, textAlign: "center", fontSize: 13, fontWeight: 800, color: "#fff", background: "#0284C7", border: "1px solid #0284C7", borderRadius: 9, padding: "9px 0", cursor: "pointer", fontFamily: "inherit", WebkitTapHighlightColor: "transparent" }}>+{fmtNum(quick)} {unit}</button>
+          <div style={{ fontSize: 10.5, fontWeight: 800, color: "#8A5A08", marginBottom: 9 }}>Log today's {uPl(2)}{st.daily ? <span style={{ color: "#B07B1E", fontWeight: 700 }}> · target {fmtNum(st.daily)}/day</span> : null}</div>
+          <button type="button" onClick={() => onLog(quick)} style={{ width: "100%", textAlign: "center", fontSize: 14, fontWeight: 800, color: "#fff", background: "#0284C7", border: "1px solid #0284C7", borderRadius: 10, padding: "11px 0", cursor: "pointer", fontFamily: "inherit", WebkitTapHighlightColor: "transparent" }}>+{fmtNum(quick)} {uPl(quick)} today</button>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
             <input value={input} onChange={e => setInput(e.target.value.replace(/[^\d.]/g, ""))} onKeyDown={e => { if (e.key === "Enter") addCustom(); }}
-              type="number" inputMode="decimal" placeholder="custom" aria-label={`Custom ${unit}`} style={{ ...S.input, marginTop: 0, width: 84, flexShrink: 0, textAlign: "center" }} />
-            <button type="button" onClick={addCustom} style={{ ...S.btnPrimary, flex: "none", width: "auto", padding: "0 14px" }}>Add</button>
+              type="number" inputMode="decimal" placeholder={`Other amount (${unit})`} aria-label={`Custom ${unit} amount`} style={{ ...S.input, marginTop: 0, flex: 1, minWidth: 0 }} />
+            <button type="button" onClick={addCustom} style={{ ...S.btnSecondary, flex: "none", width: "auto", padding: "0 16px" }}>Add</button>
           </div>
         </div>
       )}
 
       <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.05em", textTransform: "uppercase", color: T.muted, marginBottom: 7 }}>Logged in {monthName}</div>
       {st.log.length === 0 ? (
-        <div style={{ fontSize: 12.5, color: T.muted, textAlign: "center", padding: "6px 0" }}>Nothing logged this month yet.</div>
+        <div style={{ fontSize: 12.5, color: T.muted, textAlign: "center", padding: "10px 0" }}>Nothing logged this month yet.</div>
       ) : (
         <div style={{ display: "grid", gap: 6 }}>
           {st.log.slice().reverse().map(e => (
             <div key={e._i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 10, border: `1px solid ${T.surf2}` }}>
-              <span style={{ fontSize: 14, fontWeight: 900, color: gold, width: 74 }}>+{fmtNum(Number(e.value))} {unit}</span>
+              <span style={{ fontSize: 14, fontWeight: 900, color: gold, width: 92, flexShrink: 0 }}>+{fmtNum(Number(e.value))} {uPl(Number(e.value))}</span>
               <span style={{ flex: 1, fontSize: 12, color: T.muted }}>{e.at ? longDateLabel(e.at) : ""}</span>
               {canEdit && (
-                <button type="button" onClick={() => onRemove(e._i)} aria-label={`Remove +${fmtNum(Number(e.value))} ${unit}`}
+                <button type="button" onClick={() => onRemove(e._i)} aria-label={`Remove +${fmtNum(Number(e.value))} ${uPl(Number(e.value))}`}
                   style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
                   <Ic name="x" size={13} color={T.muted} />
                 </button>
@@ -576,7 +578,7 @@ function MonthlyTotalBody({ st, unit, gold, canEdit, input, setInput, onLog, onR
           ))}
         </div>
       )}
-      <div style={{ fontSize: 10.5, color: T.muted, fontWeight: 700, marginTop: 10, textAlign: "center" }}>Resets to 0/{fmtNum(st.target)} {unit} on the 1st.</div>
+      <div style={{ fontSize: 10.5, color: T.muted, fontWeight: 700, marginTop: 10, textAlign: "center" }}>Resets to 0/{fmtNum(st.target)} {uPl(st.target)} on the 1st.</div>
     </div>
   );
 }
