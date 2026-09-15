@@ -4392,6 +4392,7 @@ function DayNavigator({ selectedDate, setSelectedDate, todayKey, identities, all
 // Shaded by completion; tap a past/today day to jump to it. Future days are off.
 function DayCalendarModal({ identities, allData = {}, selectedDate, todayKey, minNavDate, onPick, onClose }) {
   const [mOff, setMOff] = useState(0);   // months back from the current month
+  const [peek, setPeek] = useState(selectedDate);   // day tapped for detail
   const allHabits = useMemo(() => identities.flatMap(i => i.habits.map(h => ({ h, i }))), [identities]);
   const { dates, label, firstDow } = useMemo(() => {
     const now = new Date();
@@ -4437,26 +4438,42 @@ function DayCalendarModal({ identities, allData = {}, selectedDate, todayKey, mi
             const { total, done } = stat(k);
             const pct = total ? done/total : -1;
             const lvl = pct < 0 ? -1 : pct === 0 ? 0 : pct <= 0.34 ? 1 : pct <= 0.66 ? 2 : pct < 1 ? 3 : 4;
-            const isSel = k === selectedDate, isToday = k === todayKey;
+            const isPeek = k === peek, isToday = k === todayKey;
             const disabled = future || before;
             const bg = future ? "transparent" : (lvl < 0 ? "transparent" : LEVELS[lvl]);
             return (
-              <button key={k} onClick={()=>!disabled && onPick(k)} disabled={disabled}
+              <button key={k} onClick={()=>!disabled && setPeek(k)} disabled={disabled}
                 aria-label={`${k}: ${total ? `${done} of ${total} done` : "nothing scheduled"}${future ? " (upcoming)" : ""}`}
-                style={{ aspectRatio:"1", borderRadius:8, padding:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
-                  background:bg, cursor:disabled?"default":"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
-                  border: isSel ? `2px solid ${T.text}` : isToday ? `2px solid ${T.gold}` : (lvl<0 && !future ? `1px dashed ${T.border2}` : "1px solid transparent"),
+                style={{ aspectRatio:"1", borderRadius:8, padding:0, display:"flex", alignItems:"center", justifyContent:"center", minWidth:0,
+                  background:bg, cursor:disabled?"default":"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", fontSize:12.5, fontWeight:800,
+                  border: isPeek ? `2px solid ${T.text}` : isToday ? `2px solid ${T.gold}` : (lvl<0 && !future ? `1px dashed ${T.border2}` : "1px solid transparent"),
                   color: lvl>=3 && !future ? "#fff" : (disabled ? T.border2 : T.text2), opacity: future ? 0.4 : (before ? 0.4 : 1) }}>
-                <span style={{ fontSize:12.5, fontWeight:800 }}>{+k.slice(8,10)}</span>
-                {total > 0 && !future && <span style={{ fontSize:8.5, fontWeight:800, lineHeight:1, marginTop:1, opacity:0.9 }}>{done}/{total}</span>}
+                {+k.slice(8,10)}
               </button>
             );
           })}
         </div>
-        <div style={{ display:"flex", alignItems:"center", gap:5, justifyContent:"flex-end", marginTop:14, fontSize:10, color:T.muted, fontWeight:700 }} aria-hidden="true">
+
+        <div style={{ display:"flex", alignItems:"center", gap:5, justifyContent:"flex-end", marginTop:12, fontSize:10, color:T.muted, fontWeight:700 }} aria-hidden="true">
           Less {LEVELS.map(c=>(<span key={c} style={{ width:12, height:12, borderRadius:3, background:c }} />))} More
         </div>
-        <div style={{ fontSize:10.5, color:T.muted, fontWeight:700, marginTop:8, textAlign:"center" }}>Tap a day to view it. Numbers show habits done that day. Future days are off.</div>
+
+        {/* Selected day's check-in detail + jump. */}
+        {(() => {
+          const s = stat(peek);
+          const upcoming = peek > todayKey;
+          return (
+            <div style={{ marginTop:12, borderTop:`1px solid ${T.surf2}`, paddingTop:12, display:"flex", alignItems:"center", gap:10 }}>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:13.5, fontWeight:800, color:T.text }}>{new Date(peek+"T00:00").toLocaleDateString(navigator.language||undefined,{ weekday:"short", day:"numeric", month:"short" })}</div>
+                <div style={{ fontSize:12, fontWeight:700, color:T.muted, marginTop:1 }}>{upcoming ? "Upcoming" : s.total ? `${s.done} of ${s.total} habits done` : "Nothing scheduled"}</div>
+              </div>
+              {!upcoming && (
+                <button type="button" onClick={()=>onPick(peek)} style={{ ...S.btnPrimary, flex:"none", width:"auto", padding:"0 16px" }}>View day</button>
+              )}
+            </div>
+          );
+        })()}
       </div>
     </Modal>
   );
