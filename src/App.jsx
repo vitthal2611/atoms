@@ -827,8 +827,10 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
   });
   const [submitted, setSubmitted] = useState(false);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
-  const valid = form.label.trim().length > 0 && form.identityId;
   const breaking = form.kind === "bad";
+  // Progress goal is required for build habits (bad habits don't have one).
+  const goalValid = breaking || (form.goalUnit.trim().length > 0 && parseInt(form.goalPer,10) >= 1 && parseInt(form.goalCount,10) >= 1);
+  const valid = form.label.trim().length > 0 && form.identityId && goalValid;
 
   // Cue suggestions for the combobox — pick one or type a custom cue.
   const cueOptions = breaking
@@ -1067,54 +1069,40 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
       <label style={S.fieldLabel}>Frequency</label>
       <FrequencyPicker value={form.frequency} onChange={v=>set("frequency",v)} />
 
-      {/* Optional daily target — turns the check into a counter (e.g. 8 glasses).
-          Leave blank for a simple done/undone habit. Build habits only. */}
+      {/* Progress goal — a personal milestone ladder that fills as you check in
+          (e.g. every 20 reading sessions = 1 book, up to 10 books). Required for
+          build habits so every habit shows visible, climbing progress. */}
       {!breaking && (
         <>
-          <label style={S.fieldLabel}>Daily target <span style={{ fontWeight:600, color:T.muted }}>(optional)</span></label>
-          <div style={{ display:"flex", gap:10 }}>
-            <div style={{ width:110, flexShrink:0 }}>
-              <input id={ids.target} style={S.input} type="number" min="0" inputMode="numeric" value={form.target}
-                onChange={e=>set("target", e.target.value.replace(/[^\d]/g, ""))} placeholder="e.g. 8" aria-label="Daily target amount" />
-            </div>
-            <div style={{ flex:1, minWidth:0 }}>
-              <input id={ids.unit} style={S.input} value={form.unit} onChange={e=>set("unit", e.target.value)}
-                placeholder="unit — e.g. glasses, pages, reps" maxLength={20} aria-label="Target unit" />
-            </div>
-          </div>
-          <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>
-            {Number(form.target) > 1
-              ? `Tap + to count up to ${Math.round(Number(form.target))}${form.unit ? " " + form.unit.trim() : ""} — the vote lands when you hit the target.`
-              : "Set a number to count reps toward a target; leave blank for a simple check."}
-          </div>
-
-          {/* Progress goal — a personal milestone ladder that fills as you check in
-              (e.g. every 20 reading sessions = 1 book, up to 10 books). */}
-          <label style={{ ...S.fieldLabel, marginTop:18 }}>Progress goal <span style={{ fontWeight:600, color:T.muted }}>(optional)</span></label>
+          <label style={{ ...S.fieldLabel, marginTop:18 }}>Progress goal</label>
           <div style={{ display:"flex", alignItems:"flex-end", gap:8, flexWrap:"wrap" }}>
             <div style={{ flex:"1 1 110px", minWidth:0 }}>
               <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Unit</div>
-              <input id={ids.goalUnit} style={{ ...S.input, marginTop:0 }} value={form.goalUnit} onChange={e=>set("goalUnit", e.target.value)} placeholder="e.g. book" maxLength={16} aria-label="Goal unit name" />
+              <input id={ids.goalUnit} style={{ ...S.input, marginTop:0, ...(submitted && !goalValid ? { borderColor:T.red } : {}) }} value={form.goalUnit} onChange={e=>set("goalUnit", e.target.value)} placeholder="e.g. book" maxLength={16} aria-label="Goal unit name" />
             </div>
             <div style={{ width:96, flexShrink:0 }}>
               <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Check-ins each</div>
-              <input id={ids.goalPer} style={{ ...S.input, marginTop:0 }} type="number" min="1" inputMode="numeric" value={form.goalPer} onChange={e=>set("goalPer", e.target.value.replace(/[^\d]/g,""))} placeholder="e.g. 20" aria-label="Check-ins per unit" />
+              <input id={ids.goalPer} style={{ ...S.input, marginTop:0, ...(submitted && !goalValid ? { borderColor:T.red } : {}) }} type="number" min="1" inputMode="numeric" value={form.goalPer} onChange={e=>set("goalPer", e.target.value.replace(/[^\d]/g,""))} placeholder="e.g. 20" aria-label="Check-ins per unit" />
             </div>
             <div style={{ width:78, flexShrink:0 }}>
               <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Goal</div>
-              <input id={ids.goalCount} style={{ ...S.input, marginTop:0 }} type="number" min="1" inputMode="numeric" value={form.goalCount} onChange={e=>set("goalCount", e.target.value.replace(/[^\d]/g,""))} placeholder="e.g. 10" aria-label="Number of units to reach" />
+              <input id={ids.goalCount} style={{ ...S.input, marginTop:0, ...(submitted && !goalValid ? { borderColor:T.red } : {}) }} type="number" min="1" inputMode="numeric" value={form.goalCount} onChange={e=>set("goalCount", e.target.value.replace(/[^\d]/g,""))} placeholder="e.g. 10" aria-label="Number of units to reach" />
             </div>
           </div>
-          <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>
-            {(() => {
-              const u = form.goalUnit.trim(); const per = parseInt(form.goalPer,10); const cnt = parseInt(form.goalCount,10);
-              if (u && per >= 1 && cnt >= 1) {
-                const pl = (n) => `${n} ${u}${n===1?"":"s"}`;
-                return `Every ${per} check-ins = 1 ${u}. You'll watch it climb: ${pl(1)} → ${pl(cnt)} (${per*cnt} check-ins total).`;
-              }
-              return "Turn check-ins into a satisfying ladder — e.g. every 20 sessions = 1 book, up to 10 books.";
-            })()}
-          </div>
+          {submitted && !goalValid ? (
+            <div role="alert" style={{ fontSize:11.5, color:T.red, fontWeight:700, marginTop:5 }}>Set a unit, check-ins per unit, and a goal — e.g. book · 20 · 10.</div>
+          ) : (
+            <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>
+              {(() => {
+                const u = form.goalUnit.trim(); const per = parseInt(form.goalPer,10); const cnt = parseInt(form.goalCount,10);
+                if (u && per >= 1 && cnt >= 1) {
+                  const pl = (n) => `${n} ${u}${n===1?"":"s"}`;
+                  return `Every ${per} check-ins = 1 ${u}. You'll watch it climb: ${pl(1)} → ${pl(cnt)} (${per*cnt} check-ins total).`;
+                }
+                return "Turn check-ins into a satisfying ladder — e.g. every 20 sessions = 1 book, up to 10 books.";
+              })()}
+            </div>
+          )}
         </>
       )}
 
