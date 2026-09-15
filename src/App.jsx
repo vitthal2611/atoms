@@ -180,31 +180,51 @@ function MilestoneProgress({ streak = 0 }) {
   );
 }
 
-// ─── GOAL PROGRESS — compact card chip; tap to open the log/ladder modal ──────
-// Shows N/target + a bar; tapping opens GoalProgressModal to log named items.
-function GoalProgress({ goal, goalLog = [], goalDone = [], onOpen }) {
-  const count = Math.max(1, goal.count || 1);
-  const unit  = goal.unit || "unit";
-  const doneUnits = Math.min((goalLog.length || goalDone.length || 0), count);
-  const complete  = doneUnits >= count;
-  const frac   = doneUnits / count;
-  const remain = count - doneUnits;
-  const gold = "#B07B1E";
-  const pl = (n) => `${n} ${unit}${n === 1 ? "" : "s"}`;
+// Round to at most one decimal for display.
+const fmtNum = (n) => (Number.isInteger(n) ? String(n) : (Math.round(n * 10) / 10).toFixed(1));
 
+// Progress summary for either goal type. Log entries are {name,at} (checklist)
+// or {value,at} (target). Old numeric goalDone seeds a blank-named checklist log.
+function goalStats(habit) {
+  const g = habit.goal; if (!g) return null;
+  const unit = g.unit || "unit";
+  const log = habit.goalLog || (habit.goalDone || []).map(() => ({ name: "", at: "" }));
+  if (g.type === "target") {
+    const start = Number(g.start) || 0, target = Number(g.target) || 0;
+    const reduce = start > target;
+    const latest = log.length ? Number(log[log.length - 1].value) : start;
+    const span = Math.abs(target - start) || 1;
+    const covered = Math.max(0, Math.min(span, reduce ? start - latest : latest - start));
+    const complete = reduce ? latest <= target : latest >= target;
+    const toGo = Math.max(0, reduce ? latest - target : target - latest);
+    return { type: "target", unit, log, start, target, reduce, latest, complete,
+      frac: covered / span, headline: `${fmtNum(latest)} ${unit}`,
+      remainLabel: complete ? "reached" : `${fmtNum(toGo)} ${unit} to go` };
+  }
+  const count = Math.max(1, g.count || 1);
+  const done = Math.min(log.length, count);
+  return { type: "checklist", unit, log, count, done, complete: done >= count,
+    frac: done / count, headline: `${done}/${count} ${unit}${count === 1 ? "" : "s"}`,
+    remainLabel: done >= count ? "done" : `${count - done} left` };
+}
+
+// ─── GOAL PROGRESS — compact card chip; tap to open the log modal ─────────────
+function GoalProgress({ habit, onOpen }) {
+  const st = goalStats(habit); if (!st) return null;
+  const gold = "#B07B1E";
   return (
     <button type="button" onClick={(e) => { e.stopPropagation(); onOpen && onOpen(); }}
-      style={{ marginLeft:"auto", flexShrink:0, minWidth:96, maxWidth:158, textAlign:"right", cursor:"pointer", WebkitTapHighlightColor:"transparent", background:"transparent", border:"none", padding:0, fontFamily:"inherit" }}
-      aria-label={complete ? `Goal complete: ${pl(count)}. Tap to view or log progress.` : `${doneUnits} of ${count} ${unit}s done. Tap to log progress.`}>
+      style={{ marginLeft:"auto", flexShrink:0, minWidth:96, maxWidth:168, textAlign:"right", cursor:"pointer", WebkitTapHighlightColor:"transparent", background:"transparent", border:"none", padding:0, fontFamily:"inherit" }}
+      aria-label={`${st.headline}. Tap to log or view progress.`}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", gap:4, fontSize:11, fontWeight:800, color:gold, whiteSpace:"nowrap", overflow:"hidden" }}>
-        <span aria-hidden="true">{complete ? "🏆" : "🎯"}</span>
-        <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{doneUnits}/{count} {unit}{count === 1 ? "" : "s"}</span>
+        <span aria-hidden="true">{st.complete ? "🏆" : "🎯"}</span>
+        <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{st.headline}</span>
       </div>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", gap:6, marginTop:4 }}>
         <div style={{ flex:1, maxWidth:62, height:5, borderRadius:5, background:"#EBE0C6", overflow:"hidden" }}>
-          <div style={{ width:`${Math.round(frac * 100)}%`, height:"100%", background:"#F59E0B", borderRadius:5 }} />
+          <div style={{ width:`${Math.round(st.frac * 100)}%`, height:"100%", background:"#F59E0B", borderRadius:5 }} />
         </div>
-        <span style={{ fontSize:10.5, fontWeight:800, color:gold, whiteSpace:"nowrap" }}>{complete ? "done" : `+ log`}</span>
+        <span style={{ fontSize:10.5, fontWeight:800, color:gold, whiteSpace:"nowrap" }}>{st.complete ? "done" : "＋ log"}</span>
       </div>
     </button>
   );
@@ -214,81 +234,118 @@ function GoalProgress({ goal, goalLog = [], goalDone = [], onOpen }) {
 // Always available (even after the habit is checked for the day), unlike the
 // inline card element which only shows in the pending coaching panel.
 function GoalProgressModal({ habit, identity, onAddEntry, onRemoveEntry, onClose }) {
-  const goal = habit.goal || { unit: "unit", count: 1 };
-  const count = Math.max(1, goal.count || 1);
+  const goal = habit.goal || { type: "checklist", unit: "unit", count: 1 };
+  const st = goalStats(habit);
   const unit = goal.unit || "unit";
-  // Named log of completed items; seed length from an old numeric goalDone.
-  const log = habit.goalLog || (habit.goalDone || []).map(() => ({ name: "", at: "" }));
-  const doneUnits = Math.min(log.length, count);
-  const complete = doneUnits >= count;
-  const frac = doneUnits / count;
   const gold = "#B07B1E";
-  const pl = (n) => `${n} ${unit}${n === 1 ? "" : "s"}`;
-  const [name, setName] = useState("");
   const canEdit = !!onAddEntry;
-  const add = () => { if (!canEdit || complete) return; onAddEntry(identity.id, habit.id, name); setName(""); };
+  const [input, setInput] = useState("");
+  const isTarget = goal.type === "target";
+  const add = () => {
+    if (!canEdit) return;
+    if (isTarget) {
+      const v = parseFloat(input);
+      if (!isFinite(v)) return;
+      onAddEntry(identity.id, habit.id, { value: v });
+    } else {
+      if (st.complete) return;
+      onAddEntry(identity.id, habit.id, input);
+    }
+    setInput("");
+  };
+  const deadlineChip = goal.by && (() => {
+    const left = daysUntil(goal.by);
+    const overdue = left < 0 && !st.complete;
+    return (
+      <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, padding: "4px 11px", borderRadius: 20,
+        background: st.complete ? "#E1F5EE" : overdue ? "#FCE9F0" : T.surf2,
+        fontSize: 12, fontWeight: 800, color: st.complete ? "#0F6E56" : overdue ? "#B4402A" : T.text2 }}>
+        <span aria-hidden="true">🗓️</span>
+        <span>By {longDateLabel(goal.by)}{st.complete ? "" : overdue ? ` · ${Math.abs(left)} days over` : ` · ${left} days left`}</span>
+      </div>
+    );
+  })();
+
   return (
     <Modal title="Goal progress" onClose={onClose}>
       <div style={{ padding: "0 20px 20px" }}>
         <div style={{ textAlign: "center", marginBottom: 12 }}>
-          <div style={{ fontSize: 34, lineHeight: 1 }} aria-hidden="true">{complete ? "🏆" : "🎯"}</div>
-          <div style={{ fontSize: 22, fontWeight: 900, color: gold, marginTop: 4 }}>{doneUnits}/{count} {unit}{count === 1 ? "" : "s"}</div>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: T.muted, marginTop: 2 }}>{complete ? "goal reached 🎉" : `${count - doneUnits} to go`}</div>
-          {goal.by && (() => {
-            const left = daysUntil(goal.by);
-            const overdue = left < 0 && !complete;
-            return (
-              <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, padding: "4px 11px", borderRadius: 20,
-                background: complete ? "#E1F5EE" : overdue ? "#FCE9F0" : T.surf2,
-                fontSize: 12, fontWeight: 800, color: complete ? "#0F6E56" : overdue ? "#B4402A" : T.text2 }}>
-                <span aria-hidden="true">🗓️</span>
-                <span>By {longDateLabel(goal.by)}{complete ? "" : overdue ? ` · ${Math.abs(left)} days over` : ` · ${left} days left`}</span>
-              </div>
-            );
-          })()}
+          <div style={{ fontSize: 34, lineHeight: 1 }} aria-hidden="true">{st.complete ? "🏆" : "🎯"}</div>
+          <div style={{ fontSize: 22, fontWeight: 900, color: gold, marginTop: 4 }}>{st.headline}</div>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: T.muted, marginTop: 2 }}>
+            {isTarget ? `${st.reduce ? "Reduce" : "Increase"} to ${fmtNum(st.target)} ${unit} · ${st.complete ? "reached 🎉" : st.remainLabel}` : (st.complete ? "goal reached 🎉" : `${st.count - st.done} to go`)}
+          </div>
+          {deadlineChip}
         </div>
         <div style={{ height: 8, borderRadius: 8, background: "#EBE0C6", overflow: "hidden", marginBottom: 14 }}>
-          <div style={{ width: `${Math.round(frac * 100)}%`, height: "100%", background: "#F59E0B", borderRadius: 8 }} />
+          <div style={{ width: `${Math.round(st.frac * 100)}%`, height: "100%", background: "#F59E0B", borderRadius: 8 }} />
         </div>
 
-        {/* Log the next item — optionally name it (e.g. the book title). */}
-        {canEdit && !complete && (
+        {/* Log progress — a reading (target) or a named item (checklist). */}
+        {canEdit && !(!isTarget && st.complete) && (
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-            <input value={name} onChange={e => setName(e.target.value)} maxLength={60}
-              onKeyDown={e => { if (e.key === "Enter") add(); }}
-              placeholder={`Name this ${unit} (optional)`} aria-label={`Name of ${unit} ${doneUnits + 1}`}
+            <input value={input} onChange={e => setInput(isTarget ? e.target.value.replace(/[^\d.]/g, "") : e.target.value)} maxLength={60}
+              onKeyDown={e => { if (e.key === "Enter") add(); }} type={isTarget ? "number" : "text"} inputMode={isTarget ? "decimal" : undefined}
+              placeholder={isTarget ? `Log current ${unit} (e.g. ${fmtNum(st.latest)})` : `Name this ${unit} (optional)`}
+              aria-label={isTarget ? `Current ${unit} reading` : `Name of ${unit} ${st.done + 1}`}
               style={{ ...S.input, marginTop: 0, flex: 1, minWidth: 0 }} />
             <button type="button" onClick={add} style={{ ...S.btnPrimary, flex: "none", width: "auto", padding: "0 16px" }}>+ Add</button>
           </div>
         )}
 
-        <div style={{ display: "grid", gap: 6 }}>
-          {Array.from({ length: count }, (_, i) => i).map(i => {
-            const entry = log[i];
-            const done = i < doneUnits;
-            const isNext = !complete && i === doneUnits;
-            const label = done ? (entry && entry.name ? entry.name : pl(i + 1)) : pl(i + 1);
-            return (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 10,
-                background: done ? "#FBF0DA" : isNext ? T.surf2 : "transparent",
-                border: `1px solid ${done ? "#F6DFB0" : isNext ? T.border : T.surf2}`, opacity: done || isNext ? 1 : 0.6 }}>
-                <span aria-hidden="true" style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center",
-                  background: done ? "#0F9D74" : "transparent", border: `2px solid ${done ? "#0F9D74" : isNext ? gold : T.border2}` }}>
-                  {done && <Ic name="check" size={13} color="#fff" />}
-                </span>
-                <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 800, color: T.muted, width: 18 }}>{i + 1}.</span>
-                <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: done || isNext ? 900 : 700, color: done ? T.text : isNext ? T.text : T.muted, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
-                {done && canEdit && (
-                  <button type="button" onClick={() => onRemoveEntry(identity.id, habit.id, i)} aria-label={`Remove ${label}`}
-                    style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
-                    <Ic name="x" size={13} color={T.muted} />
-                  </button>
-                )}
-                {isNext && <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 800, color: gold }}>next</span>}
-              </div>
-            );
-          })}
-        </div>
+        {isTarget ? (
+          /* Target — the reading history, newest first. */
+          <div style={{ display: "grid", gap: 6 }}>
+            {st.log.length === 0 ? (
+              <div style={{ fontSize: 13, color: T.muted, textAlign: "center", padding: "6px 0" }}>No readings yet — log your current {unit} above.</div>
+            ) : st.log.slice().reverse().map((e, ri) => {
+              const idx = st.log.length - 1 - ri;
+              const latestRow = ri === 0;
+              return (
+                <div key={idx} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 10,
+                  background: latestRow ? "#FBF0DA" : "transparent", border: `1px solid ${latestRow ? "#F6DFB0" : T.surf2}` }}>
+                  <span style={{ fontSize: 15, fontWeight: 900, color: latestRow ? gold : T.text, width: 72 }}>{fmtNum(Number(e.value))} {unit}</span>
+                  <span style={{ flex: 1, fontSize: 12, color: T.muted }}>{e.at ? longDateLabel(e.at) : ""}{latestRow ? " · latest" : ""}</span>
+                  {canEdit && (
+                    <button type="button" onClick={() => onRemoveEntry(identity.id, habit.id, idx)} aria-label={`Remove reading ${fmtNum(Number(e.value))} ${unit}`}
+                      style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
+                      <Ic name="x" size={13} color={T.muted} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* Checklist — the milestone ladder. */
+          <div style={{ display: "grid", gap: 6 }}>
+            {Array.from({ length: st.count }, (_, i) => i).map(i => {
+              const entry = st.log[i];
+              const done = i < st.done;
+              const isNext = !st.complete && i === st.done;
+              const label = done ? (entry && entry.name ? entry.name : `${i + 1} ${unit}${i === 0 ? "" : "s"}`) : `${i + 1} ${unit}${i === 0 ? "" : "s"}`;
+              return (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 10,
+                  background: done ? "#FBF0DA" : isNext ? T.surf2 : "transparent",
+                  border: `1px solid ${done ? "#F6DFB0" : isNext ? T.border : T.surf2}`, opacity: done || isNext ? 1 : 0.6 }}>
+                  <span aria-hidden="true" style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center",
+                    background: done ? "#0F9D74" : "transparent", border: `2px solid ${done ? "#0F9D74" : isNext ? gold : T.border2}` }}>
+                    {done && <Ic name="check" size={13} color="#fff" />}
+                  </span>
+                  <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 800, color: T.muted, width: 18 }}>{i + 1}.</span>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: done || isNext ? 900 : 700, color: done ? T.text : isNext ? T.text : T.muted, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+                  {done && canEdit && (
+                    <button type="button" onClick={() => onRemoveEntry(identity.id, habit.id, i)} aria-label={`Remove ${label}`}
+                      style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
+                      <Ic name="x" size={13} color={T.muted} />
+                    </button>
+                  )}
+                  {isNext && <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 800, color: gold }}>next</span>}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </Modal>
   );
@@ -881,14 +938,19 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     kind:       initial.kind       || "good",
     target:     initial.target ? String(initial.target) : "",
     unit:       initial.unit       || "",
+    goalType:   initial.goal?.type  || "checklist",
     goalUnit:   initial.goal?.unit  || "",
     goalCount:  initial.goal?.count ? String(initial.goal.count) : "",
+    goalStart:  initial.goal?.start != null ? String(initial.goal.start) : "",
+    goalTarget: initial.goal?.target != null ? String(initial.goal.target) : "",
   });
   const [submitted, setSubmitted] = useState(false);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const breaking = form.kind === "bad";
   // Progress goal is required for build habits (bad habits don't have one).
-  const goalValid = breaking || (form.goalUnit.trim().length > 0 && parseInt(form.goalCount,10) >= 1);
+  const goalValid = breaking || (form.goalType === "target"
+    ? (form.goalUnit.trim().length > 0 && isFinite(parseFloat(form.goalStart)) && isFinite(parseFloat(form.goalTarget)) && parseFloat(form.goalStart) !== parseFloat(form.goalTarget))
+    : (form.goalUnit.trim().length > 0 && parseInt(form.goalCount,10) >= 1));
   const valid = form.label.trim().length > 0 && form.identityId && goalValid;
 
   // Cue suggestions for the combobox — pick one or type a custom cue.
@@ -919,6 +981,8 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     unit:       fId + "-unit",
     goalUnit:   fId + "-goalUnit",
     goalCount:  fId + "-goalCount",
+    goalStart:  fId + "-goalStart",
+    goalTarget: fId + "-goalTarget",
   };
 
   // ── Draft with James Clear — fills only the EMPTY fields, never overwrites you ──
@@ -1133,29 +1197,75 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
       {!breaking && (
         <>
           <label style={{ ...S.fieldLabel, marginTop:18 }}>Progress goal</label>
-          <div style={{ display:"flex", alignItems:"flex-end", gap:8 }}>
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Unit</div>
-              <input id={ids.goalUnit} style={{ ...S.input, marginTop:0, ...(submitted && !goalValid ? { borderColor:T.red } : {}) }} value={form.goalUnit} onChange={e=>set("goalUnit", e.target.value)} placeholder="e.g. book" maxLength={16} aria-label="Goal unit name" />
-            </div>
-            <div style={{ width:96, flexShrink:0 }}>
-              <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Target</div>
-              <input id={ids.goalCount} style={{ ...S.input, marginTop:0, ...(submitted && !goalValid ? { borderColor:T.red } : {}) }} type="number" min="1" inputMode="numeric" value={form.goalCount} onChange={e=>set("goalCount", e.target.value.replace(/[^\d]/g,""))} placeholder="e.g. 12" aria-label="Target number of units" />
-            </div>
+          {/* Goal type: a checklist of N items, or a number moving to a target. */}
+          <div style={{ display:"flex", gap:6, marginBottom:10 }} role="group" aria-label="Goal type">
+            {[["checklist","Checklist","e.g. 12 books"],["target","Target number","e.g. 86 → 83 kg"]].map(([val,lbl]) => (
+              <button key={val} type="button" onClick={()=>set("goalType", val)} aria-pressed={form.goalType===val}
+                style={{ flex:1, padding:"9px 8px", borderRadius:10, cursor:"pointer", fontFamily:"inherit", fontSize:13, fontWeight:800, WebkitTapHighlightColor:"transparent",
+                  border:`2px solid ${form.goalType===val ? T.gold : T.border}`, background: form.goalType===val ? T.surf2 : "transparent", color: form.goalType===val ? T.text : T.muted }}>
+                {lbl}
+              </button>
+            ))}
           </div>
-          {submitted && !goalValid ? (
-            <div role="alert" style={{ fontSize:11.5, color:T.red, fontWeight:700, marginTop:5 }}>Set a unit and a target — e.g. book · 12.</div>
+
+          {form.goalType === "target" ? (
+            <>
+              <div style={{ display:"flex", alignItems:"flex-end", gap:8 }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Unit</div>
+                  <input id={ids.goalUnit} style={{ ...S.input, marginTop:0, ...(submitted && !goalValid ? { borderColor:T.red } : {}) }} value={form.goalUnit} onChange={e=>set("goalUnit", e.target.value)} placeholder="e.g. kg" maxLength={16} aria-label="Measurement unit" />
+                </div>
+                <div style={{ width:90, flexShrink:0 }}>
+                  <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Current</div>
+                  <input id={ids.goalStart} style={{ ...S.input, marginTop:0, ...(submitted && !goalValid ? { borderColor:T.red } : {}) }} type="number" inputMode="decimal" value={form.goalStart} onChange={e=>set("goalStart", e.target.value.replace(/[^\d.]/g,""))} placeholder="86" aria-label="Current value" />
+                </div>
+                <div style={{ width:90, flexShrink:0 }}>
+                  <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Goal</div>
+                  <input id={ids.goalTarget} style={{ ...S.input, marginTop:0, ...(submitted && !goalValid ? { borderColor:T.red } : {}) }} type="number" inputMode="decimal" value={form.goalTarget} onChange={e=>set("goalTarget", e.target.value.replace(/[^\d.]/g,""))} placeholder="83" aria-label="Goal value" />
+                </div>
+              </div>
+              {submitted && !goalValid ? (
+                <div role="alert" style={{ fontSize:11.5, color:T.red, fontWeight:700, marginTop:5 }}>Set a unit, a current value, and a different goal — e.g. kg · 86 · 83.</div>
+              ) : (
+                <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>
+                  {(() => {
+                    const u = form.goalUnit.trim(); const s = parseFloat(form.goalStart); const t = parseFloat(form.goalTarget);
+                    if (u && isFinite(s) && isFinite(t) && s !== t) {
+                      const dir = s > t ? "Reduce" : "Increase";
+                      return `${dir} from ${s} to ${t} ${u} (${Math.abs(s-t)} ${u} to change) by ${longDateLabel(initial.goal?.by || lastDayOfYearKey())}. Log readings as you go.`;
+                    }
+                    return "Track a number toward a target — e.g. reduce weight 86 → 83 kg. Log a reading anytime.";
+                  })()}
+                </div>
+              )}
+            </>
           ) : (
-            <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>
-              {(() => {
-                const u = form.goalUnit.trim(); const cnt = parseInt(form.goalCount,10);
-                if (u && cnt >= 1) {
-                  const pl = (n) => `${n} ${u}${n===1?"":"s"}`;
-                  return `${cnt} milestones: ${pl(1)} → ${pl(cnt)}. Tick each off by ${longDateLabel(initial.goal?.by || lastDayOfYearKey())}.`;
-                }
-                return "A simple milestone ladder — e.g. book · 12 gives you 1 book → 12 books, due end of year.";
-              })()}
-            </div>
+            <>
+              <div style={{ display:"flex", alignItems:"flex-end", gap:8 }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Unit</div>
+                  <input id={ids.goalUnit} style={{ ...S.input, marginTop:0, ...(submitted && !goalValid ? { borderColor:T.red } : {}) }} value={form.goalUnit} onChange={e=>set("goalUnit", e.target.value)} placeholder="e.g. book" maxLength={16} aria-label="Goal unit name" />
+                </div>
+                <div style={{ width:96, flexShrink:0 }}>
+                  <div style={{ fontSize:10.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Target</div>
+                  <input id={ids.goalCount} style={{ ...S.input, marginTop:0, ...(submitted && !goalValid ? { borderColor:T.red } : {}) }} type="number" min="1" inputMode="numeric" value={form.goalCount} onChange={e=>set("goalCount", e.target.value.replace(/[^\d]/g,""))} placeholder="e.g. 12" aria-label="Target number of units" />
+                </div>
+              </div>
+              {submitted && !goalValid ? (
+                <div role="alert" style={{ fontSize:11.5, color:T.red, fontWeight:700, marginTop:5 }}>Set a unit and a target — e.g. book · 12.</div>
+              ) : (
+                <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>
+                  {(() => {
+                    const u = form.goalUnit.trim(); const cnt = parseInt(form.goalCount,10);
+                    if (u && cnt >= 1) {
+                      const pl = (n) => `${n} ${u}${n===1?"":"s"}`;
+                      return `${cnt} milestones: ${pl(1)} → ${pl(cnt)}. Tick each off by ${longDateLabel(initial.goal?.by || lastDayOfYearKey())}.`;
+                    }
+                    return "A simple milestone ladder — e.g. book · 12 gives you 1 book → 12 books, due end of year.";
+                  })()}
+                </div>
+              )}
+            </>
           )}
         </>
       )}
@@ -1717,16 +1827,20 @@ export default function App() {
   // read). doneCount = goalLog.length. Old habits used a numeric `goalDone`; we
   // seed the log from it once so their count carries over.
   const seedLog = (h) => h.goalLog || (h.goalDone || []).map(() => ({ name: "", at: "" }));
-  const addGoalEntry = useCallback((identityId, habitId, name) => {
+  // entry is a name string (checklist) or { value } (a numeric reading for target).
+  const addGoalEntry = useCallback((identityId, habitId, entry) => {
     setIdentities(prev => prev.map(ident =>
       ident.id !== identityId ? ident : {
         ...ident,
         habits: ident.habits.map(h => {
           if (h.id !== habitId) return h;
-          const cap = h.goal?.count || 0;
           const log = seedLog(h);
-          if (cap && log.length >= cap) return h;                    // don't exceed the target
-          return { ...h, goalLog: [...log, { name: (name || "").trim().slice(0, 60), at: getTodayKey() }] };
+          const isTarget = h.goal?.type === "target";
+          if (!isTarget && h.goal?.count && log.length >= h.goal.count) return h;  // checklist cap
+          const item = (entry && typeof entry === "object" && "value" in entry)
+            ? { value: Number(entry.value), at: getTodayKey() }
+            : { name: String(entry || "").trim().slice(0, 60), at: getTodayKey() };
+          return { ...h, goalLog: [...log, item] };
         }),
       }
     ));
@@ -2126,17 +2240,25 @@ export default function App() {
   // ── CRUD: Habits ──
   // A daily target only applies to good habits; store it as a number (>1) or drop it.
   const cleanTarget = (kind, target) => (kind !== "bad" && Math.round(Number(target)) > 1 ? Math.round(Number(target)) : 0);
-  const cleanGoal = (kind, goalUnit, goalCount, existingBy) => {
+  const cleanGoal = (kind, f, existingBy) => {
     if (kind === "bad") return null;
-    const u = (goalUnit || "").trim();
-    const c = Math.max(0, parseInt(goalCount, 10) || 0);
+    const u = (f.goalUnit || "").trim();
+    if (!u) return null;
     // Deadline defaults to the last day of this year; keep an existing one on edit.
-    return (u && c >= 1) ? { unit: u.slice(0, 16), count: c, by: existingBy || lastDayOfYearKey() } : null;
+    const by = existingBy || lastDayOfYearKey();
+    if (f.goalType === "target") {
+      const start = parseFloat(f.goalStart), target = parseFloat(f.goalTarget);
+      if (!isFinite(start) || !isFinite(target) || start === target) return null;
+      return { type: "target", unit: u.slice(0, 16), start, target, by };
+    }
+    const c = Math.max(0, parseInt(f.goalCount, 10) || 0);
+    return c >= 1 ? { type: "checklist", unit: u.slice(0, 16), count: c, by } : null;
   };
 
-  const addHabit = ({ label, trigger, attractive, easy, starter, satisfying, time, location, icon, identityId, frequency, kind, target, unit, goalUnit, goalCount }) => {
+  const addHabit = (f) => {
+    const { label, trigger, attractive, easy, starter, satisfying, time, location, icon, identityId, frequency, kind, target, unit } = f;
     const tgt = cleanTarget(kind, target);
-    const goal = cleanGoal(kind, goalUnit, goalCount);
+    const goal = cleanGoal(kind, f);
     setIdentities(prev => prev.map(ident =>
       ident.id !== identityId ? ident :
       { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: kind || "good", frequency: frequency || DEFAULT_FREQUENCY, target: tgt, unit: tgt ? (unit || "").trim() : "", goal, createdAt: getTodayKey() }] }
@@ -2144,14 +2266,15 @@ export default function App() {
     setModal(null);
   };
 
-  const updateHabit = ({ label, trigger, attractive, easy, starter, satisfying, time, location, icon, identityId: newIdentityId, frequency, kind, target, unit, goalUnit, goalCount }) => {
+  const updateHabit = (f) => {
+    const { label, trigger, attractive, easy, starter, satisfying, time, location, icon, identityId: newIdentityId, frequency, kind, target, unit } = f;
     const { identityId: oldIdentityId, habitId } = modalCtx;
     const freq = frequency || DEFAULT_FREQUENCY;
     const k = kind || "good";
     const tgt = cleanTarget(k, target);
     const uni = tgt ? (unit || "").trim() : "";
     const existingBy = identities.find(i => i.id === oldIdentityId)?.habits.find(h => h.id === habitId)?.goal?.by;
-    const goal = cleanGoal(k, goalUnit, goalCount, existingBy);
+    const goal = cleanGoal(k, f, existingBy);
     if (newIdentityId === oldIdentityId) {
       setIdentities(prev => prev.map(ident =>
         ident.id !== oldIdentityId ? ident :
@@ -3492,7 +3615,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             )}
           </div>
           {/* Right — a personal goal ladder if set, otherwise the streak milestone. */}
-          {habit.goal ? <GoalProgress goal={habit.goal} goalLog={habit.goalLog} goalDone={habit.goalDone} onOpen={() => setGoalModalOpen(true)} /> : <MilestoneProgress streak={streak} />}
+          {habit.goal ? <GoalProgress habit={habit} onOpen={() => setGoalModalOpen(true)} /> : <MilestoneProgress streak={streak} />}
           </div>
 
           {/* Proof row — metrics (votes · streak · consistency) on the left, the 7-day
