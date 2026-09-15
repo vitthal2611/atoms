@@ -244,6 +244,59 @@ function GoalProgress({ goal, votes = 0 }) {
   );
 }
 
+// ─── GOAL PROGRESS MODAL — the full goal ladder, reachable from the card menu ──
+// Always available (even after the habit is checked for the day), unlike the
+// inline card element which only shows in the pending coaching panel.
+function GoalProgressModal({ habit, allData = {}, onClose }) {
+  const goal = habit.goal || { unit: "unit", per: 1, count: 1 };
+  const votes = useMemo(
+    () => Object.entries(allData).reduce((n, [k, day]) => n + (day && day[habit.id] === true && isScheduledOn(habit.frequency, k) ? 1 : 0), 0),
+    [allData, habit.id, habit.frequency]
+  );
+  const per = Math.max(1, goal.per || 1);
+  const count = Math.max(1, goal.count || 1);
+  const unit = goal.unit || "unit";
+  const need = per * count;
+  const capped = Math.min(votes, need);
+  const doneUnits = Math.floor(capped / per);
+  const complete = doneUnits >= count;
+  const inUnit = capped % per;
+  const frac = complete ? 1 : inUnit / per;
+  const remain = complete ? 0 : per - inUnit;
+  const nextNum = Math.min(doneUnits + 1, count);
+  const gold = "#B07B1E";
+  const pl = (n) => `${n} ${unit}${n === 1 ? "" : "s"}`;
+  return (
+    <Modal title="Goal progress" onClose={onClose}>
+      <div style={{ padding: "0 20px 20px" }}>
+        <div style={{ textAlign: "center", marginBottom: 12 }}>
+          <div style={{ fontSize: 34, lineHeight: 1 }} aria-hidden="true">{complete ? "🏆" : "🎯"}</div>
+          <div style={{ fontSize: 22, fontWeight: 900, color: gold, marginTop: 4 }}>{doneUnits}/{count} {unit}{count === 1 ? "" : "s"}</div>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: T.muted, marginTop: 2 }}>{votes} check-ins · {complete ? "goal reached 🎉" : `${remain} more for ${pl(nextNum)}`}</div>
+        </div>
+        <div style={{ height: 8, borderRadius: 8, background: "#EBE0C6", overflow: "hidden", marginBottom: 16 }}>
+          <div style={{ width: `${Math.round(frac * 100)}%`, height: "100%", background: "#F59E0B", borderRadius: 8 }} />
+        </div>
+        <div style={{ display: "grid", gap: 6 }}>
+          {Array.from({ length: count }, (_, i) => i + 1).map(n => {
+            const done = doneUnits >= n;
+            const isNext = !complete && n === nextNum;
+            return (
+              <div key={n} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 10,
+                background: done ? "#FBF0DA" : isNext ? T.surf2 : "transparent",
+                border: `1px solid ${done ? "#F6DFB0" : isNext ? T.border : "transparent"}`, opacity: done || isNext ? 1 : 0.55 }}>
+                <span aria-hidden="true" style={{ fontSize: 16, width: 20, textAlign: "center" }}>{done ? "✅" : isNext ? "🎯" : "▫️"}</span>
+                <span style={{ flex: 1, fontSize: 14, fontWeight: isNext ? 900 : 700, color: done ? gold : isNext ? T.text : T.muted }}>{pl(n)}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 800, color: T.muted, fontVariantNumeric: "tabular-nums" }}>{n * per} check-ins</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 
 function to24h(timeStr) {
   if (!timeStr) return timeStr;
@@ -2836,6 +2889,7 @@ function NotesJournalModal({ habit, identity, allData = {}, habitNotes = {}, onS
 function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHabit, onReview, habitNotes = {}, allData = {}, setHabitNote }) {
   const [open, setOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
+  const [goalOpen, setGoalOpen] = useState(false);
   const menuItem = {
     display: "flex", alignItems: "center", gap: 10, width: "100%",
     padding: "13px 8px", background: "transparent", border: "none",
@@ -2858,6 +2912,11 @@ function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHab
       {open && (
         <Modal title={habit.label} onClose={() => setOpen(false)}>
           <div style={{ padding: "0 20px 16px" }}>
+            {habit.goal && (
+              <button onClick={() => { setOpen(false); setGoalOpen(true); }} style={menuItem}>
+                <Ic name="star" size={15} color={T.gold} /> Goal progress
+              </button>
+            )}
             <button onClick={() => { setOpen(false); setNotesOpen(true); }} style={menuItem}>
               <Ic name="info" size={15} color={identity.colorDim || T.text2} /> Notes &amp; history
             </button>
@@ -2889,6 +2948,7 @@ function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHab
           onClose={() => setNotesOpen(false)}
         />
       )}
+      {goalOpen && <GoalProgressModal habit={habit} allData={allData} onClose={() => setGoalOpen(false)} />}
     </>
   );
 }
