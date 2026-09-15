@@ -3391,8 +3391,11 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
   // Tapping the ring/action: quantity habits add one (or undo to zero when done);
   // simple habits just toggle done.
   const activate = () => {
+    const wasChecked = checked;
     if (isQty && adjustCount) adjustCount(habit.id, target, checked ? -target : 1);
     else toggle(habit.id, habit.frequency, identity);
+    // Just checked it off (not unchecking) and it has a goal → prompt to log progress.
+    if (!wasChecked && habit.goal && onAddGoalEntry) setGoalModalOpen(true);
   };
 
   // One cue line above the label: trigger · time · location · frequency.
