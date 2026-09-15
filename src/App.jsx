@@ -301,7 +301,8 @@ function GoalProgress({ habit, onOpen }) {
 // ─── GOAL PROGRESS MODAL — the full goal ladder, reachable from the card menu ──
 // Always available (even after the habit is checked for the day), unlike the
 // inline card element which only shows in the pending coaching panel.
-function GoalProgressModal({ habit, identity, ops = {}, onClose }) {
+function GoalProgressModal({ habit, identity, ops = {}, onLogged, onClose }) {
+  const afterLog = () => { if (onLogged) onLogged(); onClose(); };
   const goal = habit.goal || { type: "checklist", unit: "unit", count: 1 };
   const st = goalStats(habit);
   const unit = goal.unit || "unit";
@@ -328,7 +329,7 @@ function GoalProgressModal({ habit, identity, ops = {}, onClose }) {
       ops.addEntry(identity.id, habit.id, input);
     }
     setInput("");
-    onClose();   // close the sheet once an entry is recorded
+    afterLog();   // close (and confirm the check-in) once an entry is recorded
   };
   const deadlineChip = goal.by && (() => {
     const left = daysUntil(goal.by);
@@ -384,13 +385,13 @@ function GoalProgressModal({ habit, identity, ops = {}, onClose }) {
             itemName={itemName} setItemName={setItemName} itemSize={itemSize} setItemSize={setItemSize}
             input={input} setInput={setInput}
             onStart={() => { ops.startItem(identity.id, habit.id, itemName, itemSize || st.size); setItemName(""); setItemSize(""); }}
-            onLog={(v) => { ops.logItem(identity.id, habit.id, v); onClose(); }}
+            onLog={(v) => { ops.logItem(identity.id, habit.id, v); afterLog(); }}
             onUndo={() => ops.undoLog(identity.id, habit.id)}
-            onFinish={() => { ops.finishItem(identity.id, habit.id); onClose(); }}
+            onFinish={() => { ops.finishItem(identity.id, habit.id); afterLog(); }}
             onRemoveItem={(idx) => ops.removeItem(identity.id, habit.id, idx)} />
         ) : isMonthlyTotal ? (
           <MonthlyTotalBody st={st} unit={unit} gold={gold} canEdit={canEdit} input={input} setInput={setInput}
-            onLog={(v) => { if (!isFinite(v)) return; ops.addEntry(identity.id, habit.id, { value: v }); onClose(); }}
+            onLog={(v) => { if (!isFinite(v)) return; ops.addEntry(identity.id, habit.id, { value: v }); afterLog(); }}
             onRemove={(i) => ops.removeEntry(identity.id, habit.id, i)} />
         ) : (
         <>
@@ -3871,11 +3872,11 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
   // simple habits just toggle done.
   const activate = () => {
     const wasChecked = checked;
-    if (isQty && adjustCount) adjustCount(habit.id, target, checked ? -target : 1);
-    else toggle(habit.id, habit.frequency, identity);
-    // Just checked it off (not unchecking) and it has a goal → prompt to log progress.
-    // Handled by the parent (this row unmounts as it moves to Completed).
-    if (!wasChecked && habit.goal && goalOps && onCheckedWithGoal) onCheckedWithGoal();
+    if (isQty && adjustCount) { adjustCount(habit.id, target, checked ? -target : 1); return; }
+    // Checking a goal habit: open the log first — the check-in is only committed
+    // when the user actually records progress (see onCheckedWithGoal → onLogged).
+    if (!wasChecked && habit.goal && goalOps && onCheckedWithGoal) { onCheckedWithGoal(); return; }
+    toggle(habit.id, habit.frequency, identity);
   };
 
   // One cue line above the label: trigger · time · location · frequency.
@@ -5339,7 +5340,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                   onEdit={() => openEditHabit(identity.id, habit)}
                   menu={<RowMenu habit={habit} identity={identity} missed={todayData[habit.id] === "miss"} onMiss={markMiss} openEditHabit={openEditHabit} openDeleteHabit={openDeleteHabit} onReview={openReviewFor} habitNotes={habitNotes} allData={allData} setHabitNote={setHabitNote} goalOps={goalOps} />}
                   goalOps={goalOps}
-                  onCheckedWithGoal={() => setGoalPrompt({ identityId: identity.id, habitId: habit.id })}
+                  onCheckedWithGoal={() => setGoalPrompt({ identityId: identity.id, habitId: habit.id, pending: true })}
                   habit={habit}
                   identity={identity}
                   checked={todayData[habit.id] === true}
@@ -5532,7 +5533,12 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
         const gi = identities.find(i => i.id === goalPrompt.identityId);
         const gh = gi?.habits.find(h => h.id === goalPrompt.habitId);
         if (!gh || !gh.goal) return null;
-        return <GoalProgressModal habit={gh} identity={gi} ops={goalOps} onClose={() => setGoalPrompt(null)} />;
+        // On a pending check-in, logging progress commits the check (moves it to
+        // Completed). Closing without logging leaves the habit un-checked.
+        const onLogged = goalPrompt.pending && todayData[gh.id] !== true
+          ? () => toggle(gh.id, gh.frequency, gi)
+          : undefined;
+        return <GoalProgressModal habit={gh} identity={gi} ops={goalOps} onLogged={onLogged} onClose={() => setGoalPrompt(null)} />;
       })()}
     </div>
   );
