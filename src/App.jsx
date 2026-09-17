@@ -1272,16 +1272,12 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const breaking = form.kind === "bad";
   // Progress goal is required for build habits (bad habits don't have one).
-  const goalValid = breaking
-    || (form.goalType === "monthlytotal"
-        ? (form.goalUnit.trim().length > 0 && parseFloat(form.goalTarget) > 0)
-    :  form.goalType === "reading"
-        ? (parseInt(form.goalPerMonth,10) >= 1)
-    :  form.goalType === "target"
-        ? (form.goalUnit.trim().length > 0 && isFinite(parseFloat(form.goalStart)) && isFinite(parseFloat(form.goalTarget)) && parseFloat(form.goalStart) !== parseFloat(form.goalTarget))
-    :  form.goalType === "monthly"
-        ? (form.goalUnit.trim().length > 0 && form.goalSubUnit.trim().length > 0 && parseInt(form.goalPerMonth,10) >= 1 && parseInt(form.goalSize,10) >= 1)
-        : (form.goalUnit.trim().length > 0 && parseInt(form.goalCount,10) >= 1));
+  // The progress goal is OPTIONAL — a habit with no number is a valid consistency
+  // habit (identity + streak + never-miss-twice). Only a *partly* filled goal is
+  // invalid, so we don't silently drop half-entered numbers.
+  const goalBlank  = form.goalUnit.trim().length === 0 && form.goalTarget.trim().length === 0;
+  const goalFilled = form.goalUnit.trim().length > 0 && parseFloat(form.goalTarget) > 0;
+  const goalValid  = breaking || goalBlank || goalFilled;
   const valid = form.label.trim().length > 0 && form.identityId && goalValid;
 
   // Cue suggestions for the combobox — pick one or type a custom cue.
@@ -1534,7 +1530,8 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
           build habits so every habit shows visible, climbing progress. */}
       {!breaking && (
         <>
-          <label style={{ ...S.fieldLabel, marginTop:18 }}>Monthly goal <span style={{ fontWeight:600, color:T.muted }}>— accumulate a total each month</span></label>
+          <label style={{ ...S.fieldLabel, marginTop:18 }}>Monthly goal <span style={{ fontWeight:600, color:T.muted }}>(optional)</span></label>
+          <div style={{ fontSize:11, color:T.muted, marginTop:-4, marginBottom:8, lineHeight:1.4 }}>Leave blank to just build the habit — you'll still get streaks and “never miss twice.” Add a number only if it truly helps (e.g. walk 90 km/month).</div>
 
           {form.goalType === "monthlytotal" ? (
             <>
@@ -1553,13 +1550,13 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
                 </div>
               </div>
               {submitted && !goalValid ? (
-                <div role="alert" style={{ fontSize:11.5, color:T.red, fontWeight:700, marginTop:5 }}>Set a unit and a monthly total — e.g. km · 90.</div>
+                <div role="alert" style={{ fontSize:11.5, color:T.red, fontWeight:700, marginTop:5 }}>Add both a unit and a monthly total (e.g. km · 90) — or clear both to skip the goal.</div>
               ) : (
                 <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>
                   {(() => {
                     const u = form.goalUnit.trim(); const t = parseFloat(form.goalTarget); const dy = parseFloat(form.goalDaily);
-                    if (u && isFinite(t) && t > 0) return `Accumulate ${fmtNum(t)} ${u} each month${isFinite(dy)&&dy>0?`, ~${fmtNum(dy)} ${u}/day`:""}. Log daily; resets on the 1st with a pace nudge.`;
-                    return "Add up a measure toward a monthly total — e.g. walk 90 km/month at ~3 km/day.";
+                    if (u && isFinite(t) && t > 0) return `Accumulate ${fmtNum(t)} ${u} each month${isFinite(dy)&&dy>0?`, ~${fmtNum(dy)} ${u}/day`:""}. Log daily; resets on the 1st.`;
+                    return "";
                   })()}
                 </div>
               )}
@@ -3870,10 +3867,10 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
   const activate = () => {
     const wasChecked = checked;
     if (isQty && adjustCount) { adjustCount(habit.id, target, checked ? -target : 1); return; }
-    // Checking a goal habit: open the log first — the check-in is only committed
-    // when the user actually records progress (see onCheckedWithGoal → onLogged).
-    if (!wasChecked && habit.goal && goalOps && onCheckedWithGoal) { onCheckedWithGoal(); return; }
+    // One tap = the vote, always (Atomic Habits: make it easy — showing up counts).
     toggle(habit.id, habit.frequency, identity);
+    // If it has a goal, offer the log as a convenience *after* — never a gate.
+    if (!wasChecked && habit.goal && goalOps && onCheckedWithGoal) onCheckedWithGoal();
   };
 
   // One cue line above the label: trigger · time · location · frequency.
@@ -5628,12 +5625,9 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
         const gi = identities.find(i => i.id === goalPrompt.identityId);
         const gh = gi?.habits.find(h => h.id === goalPrompt.habitId);
         if (!gh || !gh.goal) return null;
-        // On a pending check-in, logging progress commits the check (moves it to
-        // Completed). Closing without logging leaves the habit un-checked.
-        const onLogged = goalPrompt.pending && todayData[gh.id] !== true
-          ? () => toggle(gh.id, gh.frequency, gi)
-          : undefined;
-        return <GoalProgressModal habit={gh} identity={gi} ops={goalOps} onLogged={onLogged} onClose={() => setGoalPrompt(null)} />;
+        // The habit is already checked in (one tap = the vote). This sheet just
+        // lets you optionally log goal progress; closing it changes nothing.
+        return <GoalProgressModal habit={gh} identity={gi} ops={goalOps} onClose={() => setGoalPrompt(null)} />;
       })()}
     </div>
   );
