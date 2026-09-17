@@ -198,10 +198,11 @@ function goalStats(habit) {
     const entries = log.map((e, i) => ({ ...e, _i: i })).filter(e => e && e.value != null && isFinite(Number(e.value)));
     const monthEntries = entries.filter(e => (e.at || "").slice(0, 7) === gMonthKey);
     const monthSum = monthEntries.reduce((s, e) => s + Number(e.value), 0);
+    const allTime = entries.reduce((s, e) => s + Number(e.value), 0);   // permanent evidence — never resets
     const complete = monthSum >= target;
     const monthShort = new Date(gMonthKey + "-01T00:00").toLocaleDateString(navigator.language || undefined, { month: "short" });
     const uPl = (n) => `${unit}${Math.abs(n) === 1 ? "" : "s"}`;
-    return { type: "monthlytotal", unit, log: monthEntries, target, monthSum, complete, daily: Number(g.daily) || 0, monthKey: gMonthKey,
+    return { type: "monthlytotal", unit, log: monthEntries, target, monthSum, allTime, complete, daily: Number(g.daily) || 0, monthKey: gMonthKey,
       frac: Math.min(1, monthSum / target),
       headline: `${fmtNum(monthSum)}/${fmtNum(target)} ${uPl(target)} · ${monthShort}`,
       remainLabel: complete ? "done" : `${fmtNum(target - monthSum)} ${uPl(target - monthSum)} to go` };
@@ -578,7 +579,9 @@ function MonthlyTotalBody({ st, unit, gold, canEdit, input, setInput, onLog, onR
           ))}
         </div>
       )}
-      <div style={{ fontSize: 10.5, color: T.muted, fontWeight: 700, marginTop: 10, textAlign: "center" }}>Resets to 0/{fmtNum(st.target)} {uPl(st.target)} on the 1st.</div>
+      <div style={{ fontSize: 10.5, color: T.muted, fontWeight: 700, marginTop: 10, textAlign: "center" }}>
+        Resets to 0/{fmtNum(st.target)} {uPl(st.target)} on the 1st{st.allTime > st.monthSum ? <> · <span style={{ color: gold }}>all-time {fmtNum(st.allTime)} {uPl(st.allTime)}</span></> : null}.
+      </div>
     </div>
   );
 }
@@ -1248,6 +1251,7 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     easy:       initial.easy       || "",
     starter:    initial.starter    || "",
     satisfying: initial.satisfying || "",
+    stakes:     initial.stakes     || "",
     time:       initial.time       || "",
     location:   initial.location   || "",
     icon:       initial.icon       || "",
@@ -1302,6 +1306,7 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     easy:       fId + "-easy",
     starter:    fId + "-starter",
     satisfying: fId + "-satisfying",
+    stakes:     fId + "-stakes",
     time:       fId + "-time",
     location:   fId + "-location",
     target:     fId + "-target",
@@ -1723,18 +1728,29 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
       <div style={{ display:"flex", gap:10, marginTop:22 }}>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:7 }}><span aria-hidden="true" style={lawNum("#534AB7")}>2</span><span style={{ fontSize:12, fontWeight:800, color:"#534AB7" }}>{breaking ? "Unattractive" : "Attractive"}</span><span style={{ marginLeft:"auto" }}>{suggestBtn("attractive")}</span></div>
-          <input id={ids.attractive} aria-label={breaking ? "Make it unattractive — highlight the cost" : "Make it attractive — pair it with something you enjoy"} style={{ ...S.input, marginTop:0 }} value={form.attractive} onChange={e=>set("attractive",e.target.value)} placeholder={breaking ? "The real cost…" : "Pair with…"} maxLength={140} />
+          <input id={ids.attractive} aria-label={breaking ? "Make it unattractive — highlight the cost" : "Make it attractive — bundle it with something you enjoy"} style={{ ...S.input, marginTop:0 }} value={form.attractive} onChange={e=>set("attractive",e.target.value)} placeholder={breaking ? "The real cost…" : "Only while I… (e.g. my podcast)"} maxLength={140} />
         </div>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:7 }}><span aria-hidden="true" style={lawNum("#0F6E56")}>3</span><span style={{ fontSize:12, fontWeight:800, color:"#0F6E56" }}>{breaking ? "Difficult" : "Easy"}</span><span style={{ marginLeft:"auto" }}>{suggestBtn("easy")}</span></div>
-          <input id={ids.easy} aria-label={breaking ? "Make it difficult — add friction" : "Make it easy — set up the environment"} style={{ ...S.input, marginTop:0 }} value={form.easy} onChange={e=>set("easy",e.target.value)} placeholder={breaking ? "Add friction" : "Set up the space"} maxLength={140} />
+          <input id={ids.easy} aria-label={breaking ? "Make it difficult — add friction" : "Make it easy — set up the environment"} style={{ ...S.input, marginTop:0 }} value={form.easy} onChange={e=>set("easy",e.target.value)} placeholder={breaking ? "Add friction" : "Prep tonight… e.g. shoes by door"} maxLength={140} />
         </div>
       </div>
+      {!breaking && <div style={{ fontSize:10.5, color:T.muted, marginTop:5, lineHeight:1.4 }}>Attractive = <b>temptation bundling</b> (do it only alongside a treat). Easy = <b>prep your environment</b> so starting is effortless.</div>}
 
       {/* Law 4 · satisfying (build) / unsatisfying — accountability (break) */}
       <div style={lawHead}><span aria-hidden="true" style={lawNum("#854F0B")}>4</span><span style={lawTxt("#854F0B")}>{breaking ? "Make it unsatisfying" : "Make it satisfying"}</span><span style={{ marginLeft:"auto" }}>{suggestBtn("satisfying")}</span></div>
       <input id={ids.satisfying} aria-label={breaking ? "Accountability or a cost for slipping" : "Immediate reward after the habit"} style={{ ...S.input, marginTop:10 }} value={form.satisfying} onChange={e=>set("satisfying",e.target.value)} placeholder={breaking ? "A cost for slipping… e.g. tell a friend" : "Reward right after… e.g. a square of chocolate"} maxLength={140} />
-      <div style={{ display:"flex", alignItems:"center", gap:9, marginTop:10, background:T.bg, borderRadius:10, padding:"9px 11px" }}>
+
+      {/* Commitment device — a self-set stake, shown when you slip (make skipping unsatisfying). */}
+      {!breaking && (
+        <>
+          <label htmlFor={ids.stakes} style={{ ...S.fieldLabel, marginTop:16 }}>If I skip <span style={{ fontWeight:600, color:T.muted }}>(optional stake)</span></label>
+          <input id={ids.stakes} style={{ ...S.input, marginTop:0 }} value={form.stakes} onChange={e=>set("stakes",e.target.value)} placeholder="e.g. I owe ₹200 to charity · I tell Sarah" maxLength={100} />
+          <div style={{ fontSize:10.5, color:T.muted, marginTop:5 }}>A stake you set for yourself — shown the moment you miss, to make skipping cost something.</div>
+        </>
+      )}
+
+      <div style={{ display:"flex", alignItems:"center", gap:9, marginTop:12, background:T.bg, borderRadius:10, padding:"9px 11px" }}>
         <Ic name="check" size={15} color="#0F6E56" />
         <span style={{ flex:1, fontSize:12, color:T.text2, lineHeight:1.4 }}><span style={{ fontWeight:800, color:T.text }}>Never miss twice</span> — {breaking ? "one slip is a mistake; two starts the habit again." : "miss once and we nudge you the next day."}</span>
       </div>
@@ -2800,18 +2816,18 @@ export default function App() {
   };
 
   const addHabit = (f) => {
-    const { label, trigger, attractive, easy, starter, satisfying, time, location, icon, identityId, frequency, kind, target, unit } = f;
+    const { label, trigger, attractive, easy, starter, satisfying, stakes, time, location, icon, identityId, frequency, kind, target, unit } = f;
     const tgt = cleanTarget(kind, target);
     const goal = cleanGoal(kind, f);
     setIdentities(prev => prev.map(ident =>
       ident.id !== identityId ? ident :
-      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: kind || "good", frequency: frequency || DEFAULT_FREQUENCY, target: tgt, unit: tgt ? (unit || "").trim() : "", goal, createdAt: getTodayKey() }] }
+      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, attractive, easy, starter, satisfying, stakes, time, location, icon: icon || "", kind: kind || "good", frequency: frequency || DEFAULT_FREQUENCY, target: tgt, unit: tgt ? (unit || "").trim() : "", goal, createdAt: getTodayKey() }] }
     ));
     setModal(null);
   };
 
   const updateHabit = (f) => {
-    const { label, trigger, attractive, easy, starter, satisfying, time, location, icon, identityId: newIdentityId, frequency, kind, target, unit } = f;
+    const { label, trigger, attractive, easy, starter, satisfying, stakes, time, location, icon, identityId: newIdentityId, frequency, kind, target, unit } = f;
     const { identityId: oldIdentityId, habitId } = modalCtx;
     const freq = frequency || DEFAULT_FREQUENCY;
     const k = kind || "good";
@@ -2826,14 +2842,14 @@ export default function App() {
     if (newIdentityId === oldIdentityId) {
       setIdentities(prev => prev.map(ident =>
         ident.id !== oldIdentityId ? ident :
-        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni, goal, ...logPatch }) }
+        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, attractive, easy, starter, satisfying, stakes, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni, goal, ...logPatch }) }
       ));
     } else {
       setIdentities(prev => {
         const habitData = prev.find(i => i.id === oldIdentityId)?.habits.find(h => h.id === habitId);
         return prev.map(ident => {
           if (ident.id === oldIdentityId) return { ...ident, habits: ident.habits.filter(h => h.id !== habitId) };
-          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, attractive, easy, starter, satisfying, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni, goal, ...logPatch }] };
+          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, attractive, easy, starter, satisfying, stakes, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni, goal, ...logPatch }] };
           return ident;
         });
       });
@@ -3875,8 +3891,16 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
     if (isQty && adjustCount) { adjustCount(habit.id, target, checked ? -target : 1); return; }
     // One tap = the vote, always (Atomic Habits: make it easy — showing up counts).
     toggle(habit.id, habit.frequency, identity);
-    // If it has a goal, offer the log as a convenience *after* — never a gate.
-    if (!wasChecked && habit.goal && goalOps && onCheckedWithGoal) onCheckedWithGoal();
+    if (!wasChecked && habit.goal && goalOps) {
+      const g = habit.goal;
+      // Monthly-total with a daily default → auto-log it so the check-in and the
+      // goal never diverge. Otherwise offer the log sheet (never a gate).
+      if (g.type === "monthlytotal" && g.daily > 0 && goalOps.addEntry) {
+        goalOps.addEntry(identity.id, habit.id, { value: g.daily });
+      } else if (onCheckedWithGoal) {
+        onCheckedWithGoal();
+      }
+    }
   };
 
   // One cue line above the label: trigger · time · location · frequency.
@@ -4044,8 +4068,17 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
         {/* Never-miss-twice nudge — this habit was missed yesterday */}
         {warnMissedYesterday && !checked && !missed && (
-          <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 9, marginLeft: 0, fontSize:12, fontWeight: 800, color: "#C0392B" }}>
-            <Ic name="warn" size={13} color="#C0392B" /> Missed yesterday — never miss twice!
+          <div style={{ marginTop: 9 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize:12, fontWeight: 800, color: "#C0392B" }}>
+              <Ic name="warn" size={13} color="#C0392B" /> Missed yesterday — never miss twice!
+            </div>
+            {habit.stakes && <div style={{ fontSize:11.5, fontWeight:700, color:T.text2, marginTop:3 }}>Your stake: <span style={{ color:"#C0392B" }}>{habit.stakes}</span></div>}
+          </div>
+        )}
+        {/* The self-set stake, shown the moment this habit is marked missed. */}
+        {missed && habit.stakes && (
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:9, background:"#FCE9F0", border:"1px solid #F3B6CE", borderRadius:9, padding:"7px 10px", fontSize:12, fontWeight:700, color:"#8A3A5E" }}>
+            <span aria-hidden="true">⚖️</span> Stake: {habit.stakes}
           </div>
         )}
 
