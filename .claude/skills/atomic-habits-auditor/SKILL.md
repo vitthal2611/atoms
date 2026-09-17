@@ -6,8 +6,9 @@ description: >-
   and missing principles — identity-based habits, the habit loop, the Four Laws
   (and inversions), systems over goals, environment design, implementation
   intentions, habit stacking, the Two-Minute Rule, tracking, never-miss-twice,
-  streaks, gamification, motion vs action, the Goldilocks Rule, and the Plateau
-  of Latent Potential. Use whenever the user asks for an "Atomic Habits audit",
+  streaks, gamification, motion vs action, the Goldilocks Rule, the Plateau of
+  Latent Potential, reflection and review, commitment devices / accountability,
+  and compounding (marginal gains). Use whenever the user asks for an "Atomic Habits audit",
   to review features / flows / data model / code for Atomic Habits compliance,
   to check whether a change is faithful to the book, or to find behavioral
   contradictions. Outputs a structured audit (status + severity + prioritized
@@ -352,6 +353,57 @@ Do not interpret lack of visible results as lack of progress. Where appropriate,
 
 ---
 
+## 24A. REFLECTION & REVIEW AUDIT
+
+Atomic Habits (Ch. 20) prescribes periodic **reflection and review** — habits must be revisited so they keep serving the user rather than becoming mindless or drifting off course ("the downside of creating good habits" is doing them unconsciously; review is the correction).
+
+Audit whether the product supports:
+
+- A recurring **review ritual** (weekly / monthly) with a reliable cue of its own — a review that is never cued rarely happens.
+- **Reflection per habit** — a lightweight note on how it's going, why a slip happened.
+- Using review output to **adjust** the habit (schedule, cue, difficulty) rather than only record it.
+- Distinguishing "keep / adjust / drop" — mastery is habits *plus* deliberate refinement.
+
+### Flag:
+
+- Tracking with no review
+- Review that only shows numbers, never prompts an adjustment
+- A review feature with no cue (so it never runs)
+
+---
+
+## 24B. COMMITMENT DEVICE / ACCOUNTABILITY AUDIT
+
+Two of the strongest satisfaction/consequence tools in Atomic Habits are the **commitment device** (a choice made now that locks in better behavior later) and the **accountability partner / habit contract** (make it *satisfying* to stay on track and *unsatisfying* to skip, because someone is watching).
+
+Audit:
+
+- Can the user set a **stake / cost** for skipping (make it unsatisfying)?
+- Is there any **social accountability** — a partner, a shared commitment, a witnessed contract?
+- Are consequences **immediate** (felt now), not just abstract future outcomes?
+
+Note: social accountability requires sharing data with another person — audit whether it exists, but treat *how* it is implemented (privacy, sharing model) as a product decision, not an automatic requirement. Mark ⚪ NOT APPLICABLE if the product is deliberately single-user, but still note the missing lever.
+
+---
+
+## 24C. COMPOUNDING / MARGINAL GAINS AUDIT
+
+The book's foundational idea is the **aggregation of marginal gains** — 1% better, compounding over time; "habits are the compound interest of self-improvement."
+
+Audit whether the product:
+
+- Makes **small wins feel meaningful** (a single check-in matters).
+- Shows **accumulation over time** (evidence that compounds), not only today's status or a resetting scoreboard.
+- Avoids framing that implies a single day is trivial or that progress resets to zero.
+
+### Flag:
+
+- Only "today" is visible; no sense of accumulation
+- Progress that resets and erases the felt compounding
+- All-or-nothing framing that discards small wins
+
+---
+
 ## 25. CONTRADICTION ENGINE (MANDATORY)
 
 Search for contradictions between features.
@@ -438,6 +490,12 @@ Never silently modify core behavioral mechanics. For every significant problem e
 
 When code is available, inspect: UI, UX flows, state, data model, habit creation, habit completion, tracking, streaks, rewards, notifications, recovery, dashboard, goal logic, identity logic, gamification. A visually beautiful application can still fail the audit.
 
+**Trace the full habit lifecycle in the code, not the marketing copy** — read the actual implementation of each stage and judge the behavior it produces:
+
+Identity definition → habit creation form (how many fields, what's required) → cue / reminder logic → the completion handler (how many taps, what it requires) → tracking + streak computation → reward / feedback on completion → miss + recovery handling → review / reflection → how evidence accumulates over time.
+
+Verify claims against code: if the UI says "make it easy" but the completion handler requires extra input, that is a 🔴 contradiction regardless of the copy. Confirm every finding with the actual state change, not the label.
+
 ---
 
 ## 31. DATA MODEL AUDIT
@@ -464,7 +522,7 @@ The objective is NOT maximum features. The objective is better behavior through 
 
 ## 34. FINAL QUALITY GATE
 
-Before completing every audit, verify each area was evaluated: Identity · Outcomes vs processes vs identity · Systems vs goals · Cue · Craving · Response · Reward · Make it Obvious · Make it Attractive · Make it Easy · Make it Satisfying · Environment · Implementation intention · Habit stacking · Two-Minute Rule · Tracking · Never miss twice · Recovery · Streaks · Gamification · Bad habits where applicable · Motion vs action · Appropriate challenge · Outcome vs behavior feedback · Cross-feature contradictions · User friction · Evidence vs assumption.
+Before completing every audit, verify each area was evaluated: Identity · Outcomes vs processes vs identity · Systems vs goals · Cue · Craving · Response · Reward · Make it Obvious · Make it Attractive · Make it Easy · Make it Satisfying · Environment · Implementation intention · Habit stacking · Two-Minute Rule · Tracking · Never miss twice · Recovery · Streaks · Gamification · Bad habits where applicable · Motion vs action · Appropriate challenge · Outcome vs behavior feedback · Reflection & review · Commitment device / accountability · Compounding / marginal gains · Cross-feature contradictions · User friction · Evidence vs assumption.
 
 If any important area has not been evaluated, continue the audit.
 
