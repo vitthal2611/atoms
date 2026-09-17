@@ -2347,10 +2347,16 @@ export default function App() {
     patchHabit(identityId, habitId, h => ({ ...h, goalItems: (h.goalItems || []).filter((_, i) => i !== idx) }));
   }, []);
 
+  // 2-minute rule scaling: once a habit is automatic, nudge to grow it (once).
+  const ackGrow = useCallback((identityId, habitId) => {
+    patchHabit(identityId, habitId, h => ({ ...h, growAckAt: getTodayKey() }));
+  }, []);
+
   const goalOps = useMemo(() => ({
     addEntry: addGoalEntry, removeEntry: removeGoalEntry,
     startItem: startGoalItem, logItem: logGoalItem, finishItem: finishGoalItem, undoLog: undoGoalLog, removeItem: removeGoalItem,
-  }), [addGoalEntry, removeGoalEntry, startGoalItem, logGoalItem, finishGoalItem, undoGoalLog, removeGoalItem]);
+    ackGrow,
+  }), [addGoalEntry, removeGoalEntry, startGoalItem, logGoalItem, finishGoalItem, undoGoalLog, removeGoalItem, ackGrow]);
 
   // Daily reflection note per habit — a short "what did I do today" for later review.
   const setHabitNote = useCallback((dateKey, habitId, text) => {
@@ -4162,6 +4168,28 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           {/* Right — a personal goal ladder if set, otherwise the streak milestone. */}
           {habit.goal ? <GoalProgress habit={habit} onOpen={() => setGoalModalOpen(true)} /> : <MilestoneProgress streak={streak} />}
           </div>
+
+          {/* 2-minute rule scaling — once it's automatic, nudge to grow it (once). */}
+          {(() => {
+            const g1 = (habit.starter || "").trim().toLowerCase().replace(/[.!]+$/, "");
+            const g2 = (habit.label || "").trim().toLowerCase().replace(/[.!]+$/, "");
+            const grow = !breaking && habit.starter && g1 && g1 !== g2 && streak >= 21 && !habit.growAckAt && onEdit;
+            if (!grow) return null;
+            const ack = () => goalOps && goalOps.ackGrow && goalOps.ackGrow(identity.id, habit.id);
+            return (
+              <div style={{ display:"flex", alignItems:"center", gap:9, marginTop:10, background:"#EAF3DE", border:"1px solid #C0DD97", borderRadius:11, padding:"9px 11px" }}>
+                <span aria-hidden="true" style={{ fontSize:16, flexShrink:0 }}>🌱</span>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:12.5, fontWeight:800, color:"#3B6D11" }}>{streak} days in — it's automatic now</div>
+                  <div style={{ fontSize:11.5, color:T.text2, marginTop:1, lineHeight:1.4 }}>The 2-minute rule got you here. Ready to make it a little bigger?</div>
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:5, flexShrink:0 }}>
+                  <button type="button" onClick={() => { ack(); onEdit(); }} style={{ fontSize:12, fontWeight:800, color:"#fff", background:"#639922", border:"none", borderRadius:8, padding:"6px 12px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>Grow it</button>
+                  <button type="button" onClick={ack} style={{ fontSize:11, fontWeight:700, color:T.muted, background:"transparent", border:"none", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>Not yet</button>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Proof row — metrics (votes · streak · consistency) on the left, the 7-day
               chain on the right, so all the "how am I doing" signals sit together. */}
