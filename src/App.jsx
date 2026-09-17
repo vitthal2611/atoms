@@ -201,7 +201,7 @@ function goalStats(habit) {
     const allTime = entries.reduce((s, e) => s + Number(e.value), 0);   // permanent evidence — never resets
     const complete = monthSum >= target;
     const monthShort = new Date(gMonthKey + "-01T00:00").toLocaleDateString(navigator.language || undefined, { month: "short" });
-    const uPl = (n) => `${unit}${Math.abs(n) === 1 ? "" : "s"}`;
+    const uPl = (n) => `${unit}${Math.abs(n) === 1 || /s$/i.test(unit) ? "" : "s"}`;
     return { type: "monthlytotal", unit, log: monthEntries, target, monthSum, allTime, complete, daily: Number(g.daily) || 0, monthKey: gMonthKey,
       frac: Math.min(1, monthSum / target),
       headline: `${fmtNum(monthSum)}/${fmtNum(target)} ${uPl(target)} · ${monthShort}`,
@@ -536,7 +536,7 @@ function MonthlyTotalBody({ st, unit, gold, canEdit, input, setInput, onLog, onR
   const remaining = Math.max(0, st.target - st.monthSum);
   const perDay = st.complete ? 0 : remaining / Math.max(1, daysLeft);
   const quick = st.daily || (Math.round((st.target / 30) * 10) / 10);
-  const uPl = (n) => `${unit}${Math.abs(n) === 1 ? "" : "s"}`;
+  const uPl = (n) => `${unit}${Math.abs(n) === 1 || /s$/i.test(unit) ? "" : "s"}`;
   const addCustom = () => { const v = parseFloat(input); if (isFinite(v) && v > 0) { onLog(v); setInput(""); } };
   return (
     <div>
@@ -1273,6 +1273,10 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     goalMonthly: initial.goal?.monthlyTarget ? String(initial.goal.monthlyTarget) : "", // monthly pace for checklist/target/amount
   });
   const [submitted, setSubmitted] = useState(false);
+  // Keep creation easy (make it easy): the Four-Laws refinements + goal + stake
+  // start collapsed for new habits; open when editing one that already has them.
+  const [advancedOpen, setAdvancedOpen] = useState(() =>
+    !!(initial.attractive || initial.easy || initial.satisfying || initial.stakes || initial.goal));
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const breaking = form.kind === "bad";
   // Progress goal is required for build habits (bad habits don't have one).
@@ -1530,9 +1534,17 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
       <label style={S.fieldLabel}>Frequency</label>
       <FrequencyPicker value={form.frequency} onChange={v=>set("frequency",v)} />
 
-      {/* Progress goal — a personal milestone ladder that fills as you check in
-          (e.g. every 20 reading sessions = 1 book, up to 10 books). Required for
-          build habits so every habit shows visible, climbing progress. */}
+      {/* Make it easy: the fast path is identity + action + cue + time. The Four
+          Laws, a goal, and a stake are optional refinements, collapsed by default. */}
+      {!advancedOpen && (
+        <button type="button" onClick={() => setAdvancedOpen(true)}
+          style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:7, width:"100%", marginTop:20, padding:"12px", borderRadius:12, cursor:"pointer", fontFamily:"inherit", fontSize:13, fontWeight:800, color:T.primary, background:T.primary+"0d", border:`1px dashed ${T.primary}55`, WebkitTapHighlightColor:"transparent" }}>
+          <span aria-hidden="true">＋</span> Design it with the Four Laws <span style={{ fontWeight:600, color:T.muted }}>(optional)</span>
+        </button>
+      )}
+
+      {advancedOpen && (<>
+      {/* Progress goal — optional monthly total; blank = a pure consistency habit. */}
       {!breaking && (
         <>
           <label style={{ ...S.fieldLabel, marginTop:18 }}>Monthly goal <span style={{ fontWeight:600, color:T.muted }}>(optional)</span></label>
@@ -1749,6 +1761,7 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
           <div style={{ fontSize:10.5, color:T.muted, marginTop:5 }}>A stake you set for yourself — shown the moment you miss, to make skipping cost something.</div>
         </>
       )}
+      </>)}
 
       <div style={{ display:"flex", alignItems:"center", gap:9, marginTop:12, background:T.bg, borderRadius:10, padding:"9px 11px" }}>
         <Ic name="check" size={15} color="#0F6E56" />
