@@ -192,6 +192,20 @@ function dateToKey(d) {
     String(d.getDate()).padStart(2, "0");
 }
 function getTodayKey() { return dateToKey(new Date()); }
+// Normalize a "7:30 am"-style time to 24h "07:30" for display; passes through if already 24h.
+function to24h(timeStr) {
+  if (!timeStr) return timeStr;
+  const t = timeStr.toLowerCase().trim();
+  if (!t.includes("am") && !t.includes("pm")) return timeStr;
+  const match = t.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/);
+  if (!match) return timeStr;
+  let h = parseInt(match[1]);
+  const m = match[2] || "00";
+  const period = match[3];
+  if (period === "pm" && h !== 12) h += 12;
+  if (period === "am" && h === 12) h = 0;
+  return `${String(h).padStart(2,"0")}:${m}`;
+}
 // Last day of the year (default goal deadline) for the given date's year.
 function lastDayOfYearKey(ref = new Date()) { return `${ref.getFullYear()}-12-31`; }
 // "31 Dec 2026" style label for a YYYY-MM-DD key.
