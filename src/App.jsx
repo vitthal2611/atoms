@@ -1316,10 +1316,8 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
   // The progress goal is OPTIONAL — a habit with no number is a valid consistency
   // habit (identity + streak + never-miss-twice). Only a *partly* filled goal is
   // invalid, so we don't silently drop half-entered numbers.
-  const goalBlank  = form.goalUnit.trim().length === 0 && form.goalTarget.trim().length === 0;
-  const goalFilled = form.goalUnit.trim().length > 0 && parseFloat(form.goalTarget) > 0;
-  const goalValid  = breaking || goalBlank || goalFilled;
-  const valid = form.label.trim().length > 0 && form.identityId && goalValid;
+  const goalValid  = true;   // Goals removed — no goal validation.
+  const valid = form.label.trim().length > 0 && form.identityId;
 
   // Cue suggestions for the combobox — pick one or type a custom cue.
   const cueOptions = breaking
@@ -1500,13 +1498,6 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
         </div>
       )}
 
-      {/* Draft with James Clear — fills the empty fields below */}
-      <button type="button" onClick={draftWithJames} disabled={aiLoading}
-        style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:7, width:"100%", marginTop:12, padding:"10px 14px", borderRadius:10, border:`1px solid ${T.primary}55`, background:T.primary+"0F", color:T.primary, fontFamily:"inherit", fontSize:13, fontWeight:800, cursor: aiLoading?"default":"pointer", opacity: aiLoading?0.7:1, WebkitTapHighlightColor:"transparent" }}>
-        <Ic name="spark" size={15} color={T.primary} /> {aiLoading ? "Drafting…" : "Draft with James Clear"}
-      </button>
-      <div style={{ fontSize:11, color:T.muted, textAlign:"center", marginTop:5 }}>Fills the empty fields below — or tap <Ic name="spark" size={10} color={T.primary} /> on any field for a single suggestion.</div>
-      {aiErr && <div role="alert" style={{ fontSize:12, color:T.red, textAlign:"center", marginTop:6 }}>{aiErr}</div>}
 
       {/* Law 1 · obvious (build) / invisible (break) */}
       <div style={lawHead}><span aria-hidden="true" style={lawNum(T.primary)}>1</span><span style={lawTxt(T.primary)}>{breaking ? "Make it invisible" : "Make it obvious"}</span></div>
@@ -1579,8 +1570,7 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
       )}
 
       {advancedOpen && (<>
-      {/* Progress goal — optional monthly total; blank = a pure consistency habit. */}
-      {!breaking && (
+      {false && !breaking && (
         <>
           <label style={{ ...S.fieldLabel, marginTop:18 }}>Monthly goal <span style={{ fontWeight:600, color:T.muted }}>(optional)</span></label>
           <div style={{ fontSize:11, color:T.muted, marginTop:-4, marginBottom:8, lineHeight:1.4 }}>Leave blank to just build the habit — you'll still get streaks and “never miss twice.” Add a number only if it truly helps (e.g. walk 90 km/month).</div>
@@ -2836,7 +2826,8 @@ export default function App() {
   // ── CRUD: Habits ──
   // A daily target only applies to good habits; store it as a number (>1) or drop it.
   const cleanTarget = (kind, target) => (kind !== "bad" && Math.round(Number(target)) > 1 ? Math.round(Number(target)) : 0);
-  const cleanGoal = (kind, f, existingBy) => {
+  const cleanGoal = () => null;   // Goals removed — every habit is a pure consistency habit.
+  const _cleanGoalUnused = (kind, f, existingBy) => {
     if (kind === "bad") return null;
     // Reading presets its own unit/sub-unit, so it doesn't need a unit field.
     if (f.goalType === "reading") {
@@ -3705,11 +3696,6 @@ function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHab
       {open && (
         <Modal title={habit.label} onClose={() => setOpen(false)}>
           <div style={{ padding: "0 20px 16px" }}>
-            {habit.goal && (
-              <button onClick={() => { setOpen(false); setGoalOpen(true); }} style={menuItem}>
-                <Ic name="star" size={15} color={T.gold} /> Goal progress
-              </button>
-            )}
             {habit.partnerEmail && (
               <a href={partnerMailto(habit, "update", { votes: Object.values(allData).filter(day => day && day[habit.id] === true).length })}
                 onClick={() => setOpen(false)} style={{ ...menuItem, textDecoration:"none" }}>
@@ -3975,16 +3961,6 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
     if (isQty && adjustCount) { adjustCount(habit.id, target, checked ? -target : 1); return; }
     // One tap = the vote, always (Atomic Habits: make it easy — showing up counts).
     toggle(habit.id, habit.frequency, identity);
-    if (!wasChecked && habit.goal && goalOps) {
-      const g = habit.goal;
-      // Monthly-total with a daily default → auto-log it so the check-in and the
-      // goal never diverge. Otherwise offer the log sheet (never a gate).
-      if (g.type === "monthlytotal" && g.daily > 0 && goalOps.addEntry) {
-        goalOps.addEntry(identity.id, habit.id, { value: g.daily });
-      } else if (onCheckedWithGoal) {
-        onCheckedWithGoal();
-      }
-    }
   };
 
   // One cue line above the label: trigger · time · location · frequency.
@@ -4326,7 +4302,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             )}
           </div>
           {/* Right — a personal goal ladder if set, otherwise the streak milestone. */}
-          {habit.goal ? <GoalProgress habit={habit} onOpen={() => setGoalModalOpen(true)} /> : <MilestoneProgress streak={streak} />}
+          <MilestoneProgress streak={streak} />
           </div>
 
           {/* 2-minute rule scaling — once it's automatic, nudge to grow it (once). */}
@@ -4351,25 +4327,6 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
                 <div style={{ display:"flex", flexDirection:"column", gap:5, flexShrink:0 }}>
                   <button type="button" onClick={() => { ack(); onEdit(); }} style={{ fontSize:12, fontWeight:800, color:"#fff", background:"#639922", border:"none", borderRadius:8, padding:"6px 12px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>Grow it</button>
                   <button type="button" onClick={ack} style={{ fontSize:11, fontWeight:700, color:T.muted, background:"transparent", border:"none", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>Not yet</button>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Plateau of Latent Potential — when the behavior is sticking but the outcome
-              number has barely moved, reassure that progress is compounding out of sight. */}
-          {(() => {
-            if (breaking || !habit.goal || habit.growAckAt) return null;
-            const gs = goalStats(habit);
-            if (!gs || gs.complete) return null;
-            const behavingWell = streak >= 14 || (rate >= 70 && rs.due >= 14);
-            const outcomeFlat = typeof gs.frac === "number" && gs.frac < 0.34;
-            if (!behavingWell || !outcomeFlat) return null;
-            return (
-              <div style={{ display:"flex", alignItems:"center", gap:9, marginTop:10, background:"#EEF4FB", border:`1px solid ${T.primary}33`, borderRadius:11, padding:"9px 11px" }}>
-                <span aria-hidden="true" style={{ fontSize:15, flexShrink:0 }}>📈</span>
-                <div style={{ fontSize:11.5, color:T.text2, lineHeight:1.45 }}>
-                  <b style={{ color:T.primary }}>You're showing up — that's the win.</b> The number lags the work. Keep casting votes; results compound after the plateau.
                 </div>
               </div>
             );
