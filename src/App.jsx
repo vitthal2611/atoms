@@ -34,6 +34,7 @@ function checkInsRef(uid)    { return doc(_db, "users", uid, "atomicHabits", "ch
 function dailyTasksRef(uid)  { return doc(_db, "users", uid, "atomicHabits", "dailyTasks"); }
 function habitNotesRef(uid)  { return doc(_db, "users", uid, "atomicHabits", "habitNotes"); }
 function reviewsRef(uid)     { return doc(_db, "users", uid, "atomicHabits", "reviews"); }
+function settingsRef(uid)    { return doc(_db, "users", uid, "atomicHabits", "settings"); }
 // A stable per-device id so re-enabling on the same device updates one doc
 // (rather than piling up dead tokens). Tokens live in a per-user subcollection
 // so EVERY device the user enables receives reminders, not just the last one.
@@ -810,7 +811,7 @@ function saveCustomCues(list) {
 }
 
 // ─── HABIT FORM ───────────────────────────────────────────────────────────────
-function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
+function HabitForm({ initial={}, identities, cueSettings={ custom: [], dismissed: [] }, onSave, onCancel, mode="add" }) {
   const [form, setForm] = useState({
     label:      initial.label      || "",
     trigger:    initial.trigger    || "",
@@ -841,9 +842,9 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
   // is an optional refinement — the streak and never-miss-twice do the rest.
   const valid = form.label.trim().length > 0 && form.identityId;
 
-  // Cue lists curated in Manage → read once when the form opens (managed elsewhere now).
-  const dismissedCues = useMemo(() => new Set(loadDismissedCues()), []);
-  const customCues    = useMemo(() => loadCustomCues(), []);
+  // Cue lists curated in Manage (synced via Firestore).
+  const dismissedCues = new Set(cueSettings.dismissed || []);
+  const customCues    = cueSettings.custom || [];
 
   // Habit stacking: every existing habit's ACTION becomes a cue you can stack onto
   // ("After I walk, I will …"). A habit can't stack on itself.
@@ -1220,6 +1221,7 @@ export default function App() {
   const [dailyTasks,   setDailyTasks]  = useState({});       // { [dateKey]: [{id, text, done}] }
   const [habitNotes,   setHabitNotes]  = useState({});       // { [dateKey]: { [habitId]: "note" } } — daily reflection per habit
   const [reviews,      setReviews]     = useState({});       // { [weekStartKey]: { at, pct, done, flagged:[habitId], focus, note } } — weekly reviews
+  const [cueSettings,  setCueSettings] = useState({ custom: [], dismissed: [] }); // synced cue suggestions (added / removed)
   const [reviewOpenWk, setReviewOpenWk]= useState(null);     // week-start key of the open Weekly Review, or null
 
   // Modal states
@@ -1311,6 +1313,9 @@ export default function App() {
   const rvDirty   = useRef(false);
   const rvTimer   = useRef(null);
   const isFirstRv = useRef(true);
+  const stDirty   = useRef(false);
+  const stTimer   = useRef(null);
+  const isFirstSt = useRef(true);
   const latestRef = useRef({});   // most recent state, for the unload-flush closure
 
   // ── Streak cache — avoids 400-iteration loop per habit on every render ──
@@ -1338,6 +1343,7 @@ export default function App() {
       isFirstDt.current = true;
       isFirstHn.current = true;
       isFirstRv.current = true;
+      isFirstSt.current = true;
       hasLoadedRef.current = false;
       didBackfillRef.current = false;
       streakCacheRef.current = {};
@@ -1345,12 +1351,13 @@ export default function App() {
       if (u) {
         setDataLoading(true);
         try {
-          const [idSnap, ciSnap, dtSnap, hnSnap, rvSnap] = await Promise.all([
+          const [idSnap, ciSnap, dtSnap, hnSnap, rvSnap, stSnap] = await Promise.all([
             getDoc(identitiesRef(u.uid)),
             getDoc(checkInsRef(u.uid)),
             getDoc(dailyTasksRef(u.uid)),
             getDoc(habitNotesRef(u.uid)),
             getDoc(reviewsRef(u.uid)),
+            getDoc(settingsRef(u.uid)),
           ]);
           // Re-arm each first-run guard when applying fetched data, so the load
           // itself doesn't echo straight back to Firestore as a spurious save
@@ -1382,6 +1389,20 @@ export default function App() {
             const pruned = Object.fromEntries(Object.entries(raw).filter(([k]) => k >= cutoffKey));
             isFirstRv.current = true;
             setReviews(pruned);
+          }
+          // Cue suggestions: use the synced doc if present; otherwise migrate this
+          // device's localStorage cues to Firestore (isFirstSt stays false so it saves).
+          if (stSnap.exists()) {
+            const raw = stSnap.data().data || {};
+            isFirstSt.current = true;
+            setCueSettings({ custom: raw.custom || [], dismissed: raw.dismissed || [] });
+          } else {
+            const lsCustom = loadCustomCues();
+            const lsDismissed = loadDismissedCues();
+            if (lsCustom.length || lsDismissed.length) {
+              isFirstSt.current = false;   // persist the migration
+              setCueSettings({ custom: lsCustom, dismissed: lsDismissed });
+            }
           }
           hasLoadedRef.current = true;
         } catch (err) {
@@ -1469,21 +1490,37 @@ export default function App() {
     }, 500);
   }, [reviews, user]);
 
+  useEffect(() => {
+    if (!user || isFirstSt.current) { isFirstSt.current = false; return; }
+    if (!hasLoadedRef.current) return;
+    stDirty.current = true;
+    clearTimeout(stTimer.current);
+    stTimer.current = setTimeout(() => {
+      setSyncing(true);
+      setSaveError(false);
+      setDoc(settingsRef(user.uid), { data: cueSettings })
+        .then(() => { stDirty.current = false; })
+        .catch(err => { console.error("Settings save failed:", err); setSaveError(true); })
+        .finally(() => setSyncing(false));
+    }, 500);
+  }, [cueSettings, user]);
+
   // Keep the latest state handy for the unload-flush closure (which is created once).
-  latestRef.current = { user, identities, data, dailyTasks, habitNotes, reviews };
+  latestRef.current = { user, identities, data, dailyTasks, habitNotes, reviews, cueSettings };
 
   // Flush any pending debounced save the instant the tab is hidden or the page is
   // being unloaded (refresh, close, app backgrounded), so a quick refresh can't
   // roll a recent change back. Fire-and-forget — we can't await during unload.
   useEffect(() => {
     const flush = () => {
-      const { user, identities, data, dailyTasks, habitNotes, reviews } = latestRef.current;
+      const { user, identities, data, dailyTasks, habitNotes, reviews, cueSettings } = latestRef.current;
       if (!user || !hasLoadedRef.current) return;
       if (idDirty.current) { clearTimeout(idTimer.current); idDirty.current = false; setDoc(identitiesRef(user.uid), { data: identities }).catch(() => {}); }
       if (ciDirty.current) { clearTimeout(ciTimer.current); ciDirty.current = false; setDoc(checkInsRef(user.uid), { data }).catch(() => {}); }
       if (dtDirty.current) { clearTimeout(dtTimer.current); dtDirty.current = false; setDoc(dailyTasksRef(user.uid), { data: dailyTasks }).catch(() => {}); }
       if (hnDirty.current) { clearTimeout(hnTimer.current); hnDirty.current = false; setDoc(habitNotesRef(user.uid), { data: habitNotes }).catch(() => {}); }
       if (rvDirty.current) { clearTimeout(rvTimer.current); rvDirty.current = false; setDoc(reviewsRef(user.uid), { data: reviews }).catch(() => {}); }
+      if (stDirty.current) { clearTimeout(stTimer.current); stDirty.current = false; setDoc(settingsRef(user.uid), { data: cueSettings }).catch(() => {}); }
     };
     const onVisibility = () => { if (document.visibilityState === "hidden") flush(); };
     document.addEventListener("visibilitychange", onVisibility);
@@ -2222,12 +2259,12 @@ export default function App() {
         <Modal title="Add New Habit" onClose={()=>setModal(null)}>
           <HabitForm
             initial={modalCtx?.defaultIdentityId ? { identityId: modalCtx.defaultIdentityId } : {}}
-            identities={identities} onSave={addHabit} onCancel={()=>setModal(null)} mode="add" />
+            identities={identities} cueSettings={cueSettings} onSave={addHabit} onCancel={()=>setModal(null)} mode="add" />
         </Modal>
       )}
       {modal==="editHabit" && modalCtx && (
         <Modal title="Edit Habit" onClose={()=>setModal(null)}>
-          <HabitForm initial={{ ...modalCtx.habit, identityId: modalCtx.identityId }} identities={identities} onSave={updateHabit} onCancel={()=>setModal(null)} mode="edit" />
+          <HabitForm initial={{ ...modalCtx.habit, identityId: modalCtx.identityId }} identities={identities} cueSettings={cueSettings} onSave={updateHabit} onCancel={()=>setModal(null)} mode="edit" />
         </Modal>
       )}
       {modal==="addIdentity" && (
@@ -2409,6 +2446,8 @@ export default function App() {
             notifStatus={notifStatus}
             notifBusy={notifBusy}
             onEnableReminders={handleEnableReminders}
+            cueSettings={cueSettings}
+            onChangeCueSettings={setCueSettings}
           />
         )}
       </main>
@@ -2498,23 +2537,22 @@ export default function App() {
 
 // ─── MANAGE VIEW ──────────────────────────────────────────────────────────────
 // ─── CUE SUGGESTIONS SETTINGS (Manage tab) — remove/restore cue suggestions ────
-function CueSettings() {
-  const [dismissed, setDismissed] = useState(() => loadDismissedCues());
-  const [custom, setCustom] = useState(() => loadCustomCues());
+function CueSettings({ settings = { custom: [], dismissed: [] }, onChange }) {
   const [draft, setDraft] = useState("");
+  const dismissed = settings.dismissed || [];
+  const custom = settings.custom || [];
   const dset = new Set(dismissed);
-  const update = (list) => { setDismissed(list); saveDismissedCues(list); };
-  const dismiss = (c) => update([...new Set([...dismissed, c])]);
-  const restore = (c) => update(dismissed.filter(x => x !== c));
-  const updateCustom = (list) => { setCustom(list); saveCustomCues(list); };
+  const patch = (next) => onChange && onChange(prev => ({ ...(prev || {}), ...next }));
+  const dismiss = (c) => patch({ dismissed: [...new Set([...dismissed, c])] });
+  const restore = (c) => patch({ dismissed: dismissed.filter(x => x !== c) });
   const addCustom = () => {
     const c = draft.trim().slice(0, 60);
-    if (!c) return;
+    if (!c) { setDraft(""); return; }
     const exists = [...BASE_GOOD_CUES, ...BASE_BAD_CUES, ...custom].some(x => x.toLowerCase() === c.toLowerCase());
-    if (!exists) updateCustom([...custom, c]);
+    if (!exists) patch({ custom: [...custom, c] });
     setDraft("");
   };
-  const removeCustom = (c) => updateCustom(custom.filter(x => x !== c));
+  const removeCustom = (c) => patch({ custom: custom.filter(x => x !== c) });
   const groups = [
     { title: "Everyday cues (good habits)", cues: BASE_GOOD_CUES },
     { title: "Temptation cues (breaking habits)", cues: BASE_BAD_CUES },
@@ -2571,7 +2609,7 @@ function CueSettings() {
   );
 }
 
-const ManageView = memo(function ManageView({ identities, onAddHabit, onEditHabit, onDeleteHabit, onAddIdentity, onEditIdentity, onDeleteIdentity, userName, userEmail, onSignOut, notifStatus, notifBusy, onEnableReminders }) {
+const ManageView = memo(function ManageView({ identities, onAddHabit, onEditHabit, onDeleteHabit, onAddIdentity, onEditIdentity, onDeleteIdentity, userName, userEmail, onSignOut, notifStatus, notifBusy, onEnableReminders, cueSettings, onChangeCueSettings }) {
   return (
     <div style={S.content}>
 
@@ -2631,7 +2669,7 @@ const ManageView = memo(function ManageView({ identities, onAddHabit, onEditHabi
 
       <button onClick={onAddIdentity} style={S.addIdentityBtn}>+ Add New Identity</button>
 
-      <CueSettings />
+      <CueSettings settings={cueSettings} onChange={onChangeCueSettings} />
 
       {/* Account & settings — sign out + reminders live here, keeping the header clean */}
       <div style={{ ...S.card, marginTop:18 }}>
