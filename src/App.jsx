@@ -362,6 +362,8 @@ function GoalProgressModal({ habit, identity, ops = {}, onLogged, onClose }) {
               : (st.complete ? "goal reached 🎉" : `${st.count - st.done} to go`)}
           </div>
           {deadlineChip}
+          {/* Systems over goals: the number is the scoreboard — showing up is the system. */}
+          <div style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginTop: 8 }}>Your system: <span style={{ color: T.text2 }}>{shortLabel(habit.label)} · {getFreqLabel(habit.frequency)}</span> — the number is just the scoreboard.</div>
         </div>
         <div style={{ height: 8, borderRadius: 8, background: "#EBE0C6", overflow: "hidden", marginBottom: st.month ? 10 : 14 }}>
           <div style={{ width: `${Math.round(st.frac * 100)}%`, height: "100%", background: "#F59E0B", borderRadius: 8 }} />
@@ -700,6 +702,18 @@ function longDateLabel(key) {
 // Whole days from today (key) until a target key; negative if past.
 function daysUntil(targetKey, fromKey = getTodayKey()) {
   return Math.round((new Date(targetKey + "T00:00") - new Date(fromKey + "T00:00")) / 86400000);
+}
+// Habit stacking: resolve the cue text to an exact anchor habit id (a stable
+// link that survives a rename of either habit's wording), else "".
+function anchorHabitId(trigger, identities, selfId) {
+  const t = (trigger || "").toLowerCase();
+  if (!t) return "";
+  for (const idn of identities) for (const h of idn.habits || []) {
+    if (h.id === selfId) continue;
+    const lbl = (h.label || "").trim().toLowerCase();
+    if (lbl.length >= 3 && t.includes(lbl)) return h.id;
+  }
+  return "";
 }
 // Accountability partner: a mailto: link the user's own mail app sends. Nothing
 // is sent automatically — the user chose the recipient and taps send themselves.
@@ -2282,6 +2296,20 @@ export default function App() {
     justCheckedTimerRef.current = setTimeout(()=>setJustChecked(null),3400);
     // Check-in celebration popup intentionally disabled — a check-in shows only
     // the inline row reward (justChecked), no full-screen popup message.
+    // Habit stacking (after-habit cue): when you complete a habit, notify any
+    // pending habit stacked on it. Best-effort, only if notifications are on.
+    if (!wasChecked && selectedDate === getTodayKey()) {
+      try {
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+          const today = getTodayKey();
+          for (const idn of (latestRef.current?.identities || [])) for (const h of idn.habits || []) {
+            if (h.anchorId === habitId && isScheduledOn(h.frequency, today) && dataRef.current[today]?.[h.id] == null) {
+              new Notification(`Ready now: ${h.label}`, { body: "You just finished the habit it follows — do this next.", icon: "/icon-192.png", tag: `stack-${h.id}`, renotify: true });
+            }
+          }
+        }
+      } catch {}
+    }
   }, [selectedDate]);
 
   // ── Quantity habits — bump the day's count toward the target. Storing `true`
@@ -2410,12 +2438,17 @@ export default function App() {
   const ackGrow = useCallback((identityId, habitId) => {
     patchHabit(identityId, habitId, h => ({ ...h, growAckAt: getTodayKey() }));
   }, []);
+  // Optional one-tap miss reason (never-miss-twice recovery: understand the slip).
+  const logMissReason = useCallback((identityId, habitId, reason) => {
+    const at = getTodayKey();
+    patchHabit(identityId, habitId, h => ({ ...h, missLog: [...(h.missLog || []).filter(m => m.at !== at), { at, reason }] }));
+  }, []);
 
   const goalOps = useMemo(() => ({
     addEntry: addGoalEntry, removeEntry: removeGoalEntry,
     startItem: startGoalItem, logItem: logGoalItem, finishItem: finishGoalItem, undoLog: undoGoalLog, removeItem: removeGoalItem,
-    ackGrow,
-  }), [addGoalEntry, removeGoalEntry, startGoalItem, logGoalItem, finishGoalItem, undoGoalLog, removeGoalItem, ackGrow]);
+    ackGrow, logMissReason,
+  }), [addGoalEntry, removeGoalEntry, startGoalItem, logGoalItem, finishGoalItem, undoGoalLog, removeGoalItem, ackGrow, logMissReason]);
 
   // Daily reflection note per habit — a short "what did I do today" for later review.
   const setHabitNote = useCallback((dateKey, habitId, text) => {
@@ -2864,7 +2897,7 @@ export default function App() {
     const goal = cleanGoal(kind, f);
     setIdentities(prev => prev.map(ident =>
       ident.id !== identityId ? ident :
-      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, attractive, easy, starter, satisfying, stakes, partnerName, partnerEmail, time, location, icon: icon || "", kind: kind || "good", frequency: frequency || DEFAULT_FREQUENCY, target: tgt, unit: tgt ? (unit || "").trim() : "", goal, createdAt: getTodayKey() }] }
+      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, attractive, easy, starter, satisfying, stakes, partnerName, partnerEmail, time, location, icon: icon || "", kind: kind || "good", frequency: frequency || DEFAULT_FREQUENCY, target: tgt, unit: tgt ? (unit || "").trim() : "", goal, anchorId: anchorHabitId(trigger, identities, ""), createdAt: getTodayKey() }] }
     ));
     setModal(null);
   };
@@ -2885,14 +2918,14 @@ export default function App() {
     if (newIdentityId === oldIdentityId) {
       setIdentities(prev => prev.map(ident =>
         ident.id !== oldIdentityId ? ident :
-        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, attractive, easy, starter, satisfying, stakes, partnerName, partnerEmail, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni, goal, ...logPatch }) }
+        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, attractive, easy, starter, satisfying, stakes, partnerName, partnerEmail, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni, goal, anchorId: anchorHabitId(trigger, identities, habitId), ...logPatch }) }
       ));
     } else {
       setIdentities(prev => {
         const habitData = prev.find(i => i.id === oldIdentityId)?.habits.find(h => h.id === habitId);
         return prev.map(ident => {
           if (ident.id === oldIdentityId) return { ...ident, habits: ident.habits.filter(h => h.id !== habitId) };
-          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, attractive, easy, starter, satisfying, stakes, partnerName, partnerEmail, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni, goal, ...logPatch }] };
+          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, attractive, easy, starter, satisfying, stakes, partnerName, partnerEmail, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni, goal, anchorId: anchorHabitId(trigger, identities, habitId), ...logPatch }] };
           return ident;
         });
       });
@@ -3929,6 +3962,8 @@ function VotesBadge({ habit, allData, votes, total, color, isBad }) {
 function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, adjustCount, count = 0, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, goalOps, onCheckedWithGoal, readyAnchor = null, active = false }) {
   const next = getNextMilestone(streak);
   const [goalModalOpen, setGoalModalOpen] = useState(false);
+  // Environment prep tick (Law 3) — a per-day, per-device convenience in localStorage.
+  const [prepped, setPrepped] = useState(() => { try { return localStorage.getItem(`atoms:prep:${habit.id}:${getTodayKey()}`) === "1"; } catch { return false; } });
   // Quantity habits: a target amount (e.g. 8 glasses) counted up per day.
   const target = habit.target > 1 ? Math.round(habit.target) : 0;
   const isQty = target > 0;
@@ -4029,10 +4064,13 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         )}
         {/* Environment design (Law 3) — make the prep an actionable, visible cue. */}
         {!checked && !missed && !breaking && habit.easy && (
-          <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:8, background:"#F1F5F9", border:`1px solid ${T.border}`, borderRadius:9, padding:"6px 10px" }}>
-            <span aria-hidden="true" style={{ fontSize:13 }}>🧰</span>
-            <span style={{ fontSize:11.5, fontWeight:700, color:T.text2 }}>Prep: {habit.easy}</span>
-          </div>
+          <button type="button" onClick={() => { const v = !prepped; setPrepped(v); try { localStorage.setItem(`atoms:prep:${habit.id}:${getTodayKey()}`, v ? "1" : "0"); } catch {} }}
+            aria-pressed={prepped} aria-label={prepped ? "Prepped — tap to undo" : `Mark prepped: ${habit.easy}`}
+            style={{ display:"flex", alignItems:"center", gap:7, width:"100%", textAlign:"left", marginBottom:8, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
+              background: prepped ? "#E1F5EE" : "#F1F5F9", border:`1px solid ${prepped ? "#9FE1CB" : T.border}`, borderRadius:9, padding:"6px 10px" }}>
+            <span aria-hidden="true" style={{ flexShrink:0, width:16, height:16, borderRadius:5, display:"flex", alignItems:"center", justifyContent:"center", background: prepped ? "#0F9D74" : "transparent", border:`1.5px solid ${prepped ? "#0F9D74" : T.border2}` }}>{prepped && <Ic name="check" size={11} color="#fff" />}</span>
+            <span style={{ fontSize:11.5, fontWeight:700, color: prepped ? "#085041" : T.text2, textDecoration: prepped ? "line-through" : "none" }}>{prepped ? "Prepped" : "Prep"}: {habit.easy}</span>
+          </button>
         )}
         {/* ── Trigger → Action flow. Step 1: the cue's emoji is a node with a rail
               that drops into the check-in ring below. Only when pending + a trigger. ── */}
@@ -4148,6 +4186,21 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             )}
           </div>
         )}
+        {/* Optional one-tap miss reason — understand the slip (never miss twice). */}
+        {missed && goalOps && goalOps.logMissReason && (() => {
+          const today = getTodayKey();
+          const logged = (habit.missLog || []).find(m => m.at === today);
+          if (logged) return <div style={{ fontSize:11.5, fontWeight:700, color:T.muted, marginTop:7 }}>Why: <span style={{ color:T.text2 }}>{logged.reason}</span></div>;
+          return (
+            <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", marginTop:8 }}>
+              <span style={{ fontSize:11, fontWeight:700, color:T.muted }}>Why? (optional)</span>
+              {["Forgot","No time","Too hard","Away","Unwell"].map(r => (
+                <button key={r} type="button" onClick={() => goalOps.logMissReason(identity.id, habit.id, r)}
+                  style={{ fontSize:11, fontWeight:700, color:T.text2, background:T.surf2, border:`1px solid ${T.border}`, borderRadius:20, padding:"3px 9px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>{r}</button>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* Payoff the moment it's checked — message → identity vote → reward → streak */}
         {checked && (() => {
@@ -5544,6 +5597,13 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
               // Habit stacking: if this habit's cue anchors to another habit that's
               // already done today, it's "ready now" — surface that link.
               const readyAnchor = (() => {
+                // Prefer the exact stored anchor id; fall back to cue-text match.
+                if (habit.anchorId) {
+                  for (const idn of identities) for (const h2 of idn.habits) {
+                    if (h2.id === habit.anchorId) return todayData[h2.id] === true ? h2.label : null;
+                  }
+                  return null;
+                }
                 const t = (habit.trigger || "").toLowerCase();
                 if (!t) return null;
                 for (const idn of identities) for (const h2 of idn.habits) {
