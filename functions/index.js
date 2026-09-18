@@ -88,20 +88,18 @@ exports.sendHabitReminders = onSchedule(
           const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
           const idName = String(identity.label || "who you're becoming").trim();
           const cue  = habit.trigger ? `After ${lower(habit.trigger)}` : "";
-          let title, body;
+          // Title = the action name itself, so the notification says exactly which
+          // habit to do — the same for good and breaking habits.
+          const title = cap(label);
+          let body;
           if (breaking) {
-            // Breaking a habit = Make it INVISIBLE: never name the temptation in the
-            // push (that just re-cues it). Lead with the identity; point to the
-            // replacement action, not the thing to resist.
-            title = `A vote for ${idName}`;
-            body  = habit.starter
+            body = habit.starter
               ? `If tempted: ${habit.starter}.`
               : `Let the urge pass — you've got this.`;
           } else {
             // Make it Attractive: lead with the reason to act (the identity vote) so
             // it survives lock-screen truncation; keep only the cue, drop the rest.
-            title = cap(label);
-            body  = cue
+            body = cue
               ? `A vote for ${idName} · ${cue}`
               : habit.starter
                 ? `A vote for ${idName} · Just 2 min: ${habit.starter}`
@@ -115,7 +113,9 @@ exports.sendHabitReminders = onSchedule(
             // a notification payload, so the SW's onBackgroundMessage won't double it.
             await admin.messaging().send({
               token,
-              data: { habitId: String(habit.id) },
+              // Title/body also go in data: when the app is backgrounded the service
+              // worker renders from payload.data (else it falls back to "Habit reminder").
+              data: { habitId: String(habit.id), title, body, link: "https://budgetbuddy-9d7da.web.app/" },
               webpush: {
                 headers: { Urgency: "high", TTL: "300" },
                 notification: {
