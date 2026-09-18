@@ -9,6 +9,22 @@
   "orientation": "portrait-primary",
   "lang": "en",
   "categories": ["health", "lifestyle", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Today's habits",
+      "short_name": "Today",
+      "description": "Jump straight to today's habits and check one off",
+      "url": "/?view=today",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Focus mode",
+      "short_name": "Focus",
+      "description": "Do your pending habits one at a time",
+      "url": "/?view=focus",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
   "icons": [
     {
       "src": "/icon-192.png",

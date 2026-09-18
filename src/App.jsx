@@ -1053,6 +1053,14 @@ function HabitForm({ initial={}, identities, cueSettings={ custom: [], dismissed
           <input id={ids.location} style={S.input} value={form.location} onChange={e=>set("location",e.target.value)} placeholder="e.g. Kitchen" maxLength={50} />
         </div>
       </div>
+      {/* Implementation intention (Make it Obvious): a habit needs a real trigger —
+          a time or an "After [cue]". Nudge, don't block (keep creation easy). */}
+      {!breaking && !form.time.trim() && !form.trigger.trim() && (
+        <div style={{ display:"flex", alignItems:"flex-start", gap:7, marginTop:8, background:"#FFF7E8", border:`1px solid ${T.gold}55`, borderRadius:9, padding:"8px 10px" }}>
+          <span aria-hidden="true" style={{ fontSize:14, flexShrink:0 }}>💡</span>
+          <span style={{ fontSize:11.5, fontWeight:600, color:"#7A5A12", lineHeight:1.4 }}>Give it a trigger: set a <b>time</b> or an <b>“After …” cue</b> so this habit is impossible to miss. “I will {form.label.trim() || "[habit]"} at [time] / after [cue].”</span>
+        </div>
+      )}
       <label style={S.fieldLabel}>Frequency</label>
       <FrequencyPicker value={form.frequency} onChange={v=>set("frequency",v)} />
 
@@ -1204,7 +1212,11 @@ export default function App() {
   const [dataLoading,  setDataLoading] = useState(false);   // true while Firestore fetch is in-flight
   const [identities,   setIdentities]  = useState([]);
   const [data,         setData]        = useState({});
-  const [view,         setView]        = useState("today");
+  const [view,         setView]        = useState(() => {
+    // Honor a PWA app-shortcut deep link (?view=today|focus|manage).
+    try { const v = new URLSearchParams(location.search).get("view"); if (["today","focus","manage"].includes(v)) return v; } catch {}
+    return "today";
+  });
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
   const [justChecked,  setJustChecked]  = useState(null);
   const [syncing,      setSyncing]     = useState(false);
@@ -1221,7 +1233,7 @@ export default function App() {
   const [dailyTasks,   setDailyTasks]  = useState({});       // { [dateKey]: [{id, text, done}] }
   const [habitNotes,   setHabitNotes]  = useState({});       // { [dateKey]: { [habitId]: "note" } } — daily reflection per habit
   const [reviews,      setReviews]     = useState({});       // { [weekStartKey]: { at, pct, done, flagged:[habitId], focus, note } } — weekly reviews
-  const [cueSettings,  setCueSettings] = useState({ custom: [], dismissed: [] }); // synced cue suggestions (added / removed)
+  const [cueSettings,  setCueSettings] = useState({ custom: [], dismissed: [], scorecard: [] }); // synced settings: cue suggestions + habit scorecard
   const [reviewOpenWk, setReviewOpenWk]= useState(null);     // week-start key of the open Weekly Review, or null
 
   // Modal states
@@ -1395,7 +1407,7 @@ export default function App() {
           if (stSnap.exists()) {
             const raw = stSnap.data().data || {};
             isFirstSt.current = true;
-            setCueSettings({ custom: raw.custom || [], dismissed: raw.dismissed || [] });
+            setCueSettings({ custom: raw.custom || [], dismissed: raw.dismissed || [], scorecard: raw.scorecard || [] });
           } else {
             const lsCustom = loadCustomCues();
             const lsDismissed = loadDismissedCues();
@@ -2434,6 +2446,7 @@ export default function App() {
         {view==="manage"  && (
           <ManageView
             identities={liveIdentities}
+            allData={data}
             onAddHabit={openAddHabit}
             onEditHabit={openEditHabit}
             onDeleteHabit={openDeleteHabit}
@@ -2536,6 +2549,63 @@ export default function App() {
 }
 
 // ─── MANAGE VIEW ──────────────────────────────────────────────────────────────
+// ─── HABIT SCORECARD (Manage tab) — audit the current day: + good / − bad / = ──
+const SCORE_META = {
+  "+": { c: "#0F9D74", bg: "#E1F5EE", bd: "#9FE1CB", label: "good" },
+  "-": { c: "#B4402A", bg: "#FBE9E4", bd: "#F3B6A6", label: "bad" },
+  "=": { c: "#5F6E7A", bg: "#EEF2F6", bd: "#D6E1EA", label: "neutral" },
+};
+function ScorecardSettings({ settings = {}, onChange }) {
+  const list = settings.scorecard || [];
+  const [text, setText] = useState("");
+  const [sign, setSign] = useState("=");
+  const patch = (next) => onChange && onChange(prev => ({ ...(prev || {}), ...next }));
+  const add = () => { const t = text.trim().slice(0, 80); if (!t) { setText(""); return; } patch({ scorecard: [...list, { text: t, sign }] }); setText(""); };
+  const cycle = (i) => { const order = ["+", "=", "-"]; patch({ scorecard: list.map((it, idx) => idx === i ? { ...it, sign: order[(order.indexOf(it.sign) + 1) % 3] } : it) }); };
+  const remove = (i) => patch({ scorecard: list.filter((_, idx) => idx !== i) });
+  return (
+    <div style={{ ...S.card, marginTop:18 }}>
+      <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.08em", textTransform:"uppercase", color:T.muted, marginBottom:6 }}>Habit scorecard</div>
+      <div style={{ fontSize:12, color:T.muted, marginBottom:14, lineHeight:1.45 }}>
+        Awareness comes before change. List what you already do in a day and tag each — <b style={{color:SCORE_META["+"].c}}>＋ good</b>, <b style={{color:SCORE_META["-"].c}}>－ bad</b>, <b style={{color:SCORE_META["="].c}}>＝ neutral</b>. Tap a tag to change it. Turn a <b style={{color:SCORE_META["-"].c}}>－</b> into a habit to break.
+      </div>
+      <div style={{ display:"flex", gap:6, marginBottom:8 }}>
+        {["+","=","-"].map(s => (
+          <button key={s} type="button" onClick={()=>setSign(s)} aria-pressed={sign===s} aria-label={`Tag as ${SCORE_META[s].label}`}
+            style={{ width:38, height:40, borderRadius:10, fontSize:18, fontWeight:900, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
+              border:`2px solid ${sign===s ? SCORE_META[s].c : T.border}`, background: sign===s ? SCORE_META[s].bg : "transparent", color: SCORE_META[s].c }}>
+            {s === "+" ? "＋" : s === "-" ? "－" : "＝"}
+          </button>
+        ))}
+        <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); add(); } }}
+          placeholder="e.g. Check phone in bed" maxLength={80} aria-label="Daily behavior"
+          style={{ ...S.input, marginTop:0, flex:1, minWidth:0 }} />
+        <button type="button" onClick={add} disabled={!text.trim()}
+          style={{ flexShrink:0, padding:"0 16px", borderRadius:10, border:"none", background: text.trim() ? T.primary : T.surf2, color: text.trim() ? "#fff" : T.muted, fontSize:14, fontWeight:800, cursor: text.trim() ? "pointer" : "default", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>Add</button>
+      </div>
+      {list.length > 0 && (
+        <div style={{ display:"flex", flexDirection:"column", gap:6, marginTop:4 }}>
+          {list.map((it, i) => {
+            const m = SCORE_META[it.sign] || SCORE_META["="];
+            return (
+              <div key={i} style={{ display:"flex", alignItems:"center", gap:9, padding:"7px 4px", borderBottom:`1px solid ${T.surf2}` }}>
+                <button type="button" onClick={()=>cycle(i)} aria-label={`${it.text} — ${m.label}, tap to change`}
+                  style={{ flexShrink:0, width:26, height:26, borderRadius:8, fontSize:15, fontWeight:900, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
+                    border:`1.5px solid ${m.bd}`, background:m.bg, color:m.c, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  {it.sign === "+" ? "＋" : it.sign === "-" ? "－" : "＝"}
+                </button>
+                <span style={{ flex:1, minWidth:0, fontSize:13, fontWeight:600, color:T.text }}>{it.text}</span>
+                <button type="button" onClick={()=>remove(i)} aria-label={`Remove "${it.text}"`}
+                  style={{ flexShrink:0, padding:"4px 8px", fontSize:15, lineHeight:1, color:T.muted, background:"transparent", border:"none", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>×</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── CUE SUGGESTIONS SETTINGS (Manage tab) — remove/restore cue suggestions ────
 function CueSettings({ settings = { custom: [], dismissed: [] }, onChange }) {
   const [draft, setDraft] = useState("");
@@ -2609,7 +2679,51 @@ function CueSettings({ settings = { custom: [], dismissed: [] }, onChange }) {
   );
 }
 
-const ManageView = memo(function ManageView({ identities, onAddHabit, onEditHabit, onDeleteHabit, onAddIdentity, onEditIdentity, onDeleteIdentity, userName, userEmail, onSignOut, notifStatus, notifBusy, onEnableReminders, cueSettings, onChangeCueSettings }) {
+// ─── INTEGRITY REPORT — this month's votes per identity (deliberate review) ────
+function MonthReport({ identities, allData = {} }) {
+  const monthKey = getTodayKey().slice(0, 7);
+  const monthName = new Date(monthKey + "-01T00:00").toLocaleDateString(navigator.language || undefined, { month: "long", year: "numeric" });
+  const rows = (identities || []).map(idn => {
+    const votes = (idn.habits || []).reduce((n, h) =>
+      n + Object.entries(allData).filter(([k, day]) => k.slice(0, 7) === monthKey && day && day[h.id] === true).length, 0);
+    return { label: idn.label, icon: idn.icon, color: idn.color, votes };
+  }).filter(r => r.votes > 0).sort((a, b) => b.votes - a.votes);
+  const total = rows.reduce((n, r) => n + r.votes, 0);
+  const max = rows.length ? rows[0].votes : 0;
+  return (
+    <div style={{ ...S.card, marginTop:18 }}>
+      <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.08em", textTransform:"uppercase", color:T.muted, marginBottom:6 }}>Integrity report · {monthName}</div>
+      {total === 0 ? (
+        <div style={{ fontSize:12.5, color:T.muted, lineHeight:1.5 }}>No votes yet this month. Every check-in is a vote for who you're becoming — cast your first today.</div>
+      ) : (
+        <>
+          <div style={{ fontSize:13, color:T.text2, lineHeight:1.5, marginBottom:12 }}>
+            You've cast <b style={{ color:T.text }}>{total} vote{total !== 1 ? "s" : ""}</b> this month — evidence of who you're becoming.
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:9 }}>
+            {rows.map(r => (
+              <div key={r.label}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                  <span aria-hidden="true" style={{ fontSize:15 }}>{r.icon}</span>
+                  <span style={{ flex:1, minWidth:0, fontSize:12.5, fontWeight:700, color:T.text }}>{shortLabel(r.label)}</span>
+                  <span style={{ fontSize:12.5, fontWeight:900, color:r.color, fontVariantNumeric:"tabular-nums" }}>{r.votes}</span>
+                </div>
+                <div style={{ height:7, borderRadius:20, background:T.surf2, overflow:"hidden" }}>
+                  <div style={{ height:"100%", width:`${max ? Math.round((r.votes / max) * 100) : 0}%`, background:r.color, borderRadius:20 }} />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize:11.5, fontStyle:"italic", color:T.muted, marginTop:13, lineHeight:1.5 }}>
+            Ask yourself: is this who I want to become? Adjust the system, not the goal — then keep the votes coming.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+const ManageView = memo(function ManageView({ identities, allData, onAddHabit, onEditHabit, onDeleteHabit, onAddIdentity, onEditIdentity, onDeleteIdentity, userName, userEmail, onSignOut, notifStatus, notifBusy, onEnableReminders, cueSettings, onChangeCueSettings }) {
   return (
     <div style={S.content}>
 
@@ -2668,6 +2782,10 @@ const ManageView = memo(function ManageView({ identities, onAddHabit, onEditHabi
       ))}
 
       <button onClick={onAddIdentity} style={S.addIdentityBtn}>+ Add New Identity</button>
+
+      <MonthReport identities={identities} allData={allData} />
+
+      <ScorecardSettings settings={cueSettings} onChange={onChangeCueSettings} />
 
       <CueSettings settings={cueSettings} onChange={onChangeCueSettings} />
 
@@ -3436,14 +3554,26 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         </div>
 
         {/* Never-miss-twice nudge — this habit was missed yesterday */}
-        {warnMissedYesterday && !checked && !missed && (
+        {warnMissedYesterday && !checked && !missed && (() => {
+          // Never miss twice: on the day after a miss, halve the friction — offer the
+          // 2-minute version as the comeback so getting back is effortless.
+          const norm = s => (s || "").trim().toLowerCase().replace(/[.!]+$/, "");
+          const hasStarter = !breaking && habit.starter && norm(habit.starter) !== norm(habit.label);
+          return (
           <div style={{ marginTop: 9 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize:12, fontWeight: 800, color: "#C0392B" }}>
               <Ic name="warn" size={13} color="#C0392B" /> Missed yesterday — never miss twice!
             </div>
             {habit.stakes && <div style={{ fontSize:11.5, fontWeight:700, color:T.text2, marginTop:3 }}>Your stake: <span style={{ color:"#C0392B" }}>{habit.stakes}</span></div>}
+            {hasStarter && (
+              <button type="button" onClick={() => toggle(habit.id, habit.frequency, identity)} aria-label={`Get back on track with the two-minute version: ${habit.starter}`}
+                style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:7, width:"100%", marginTop:8, padding:"9px 12px", borderRadius:10, border:"1px solid #9FE1CB", background:"#E1F5EE", color:"#085041", fontSize:13, fontWeight:800, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
+                <Ic name="clock" size={14} color="#085041" /> Just do the 2-minute version: {habit.starter}
+              </button>
+            )}
           </div>
-        )}
+          );
+        })()}
         {/* The self-set stake + accountability, shown the moment this is missed. */}
         {missed && (habit.stakes || habit.partnerEmail) && (
           <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginTop:9, background:"#FCE9F0", border:"1px solid #F3B6CE", borderRadius:9, padding:"7px 10px" }}>
@@ -3524,6 +3654,14 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               ) : null
             )}
 
+            {/* Temptation bundle (Premack): the paired treat is earned now — done first, treat second. */}
+            {!breaking && habit.attractive && (
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:9, fontSize:12, fontWeight:700, color:"#534AB7" }}>
+                <span aria-hidden="true" style={{ fontSize:14 }}>🎧</span>
+                <span style={{ minWidth:0 }}>Earned — enjoy it now: <span style={{ fontWeight:800 }}>{habit.attractive.replace(/^only\s+while\s+i\s*/i, "").replace(/^while\s+i\s*/i, "")}</span></span>
+              </div>
+            )}
+
             {/* Streak + votes — quiet evidence */}
             <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:11 }}>
               <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:12, fontWeight:900, color: breaking ? "#3B6D11" : "#C2751A", background: breaking ? "#EAF3DE" : "#FBF0DA", borderRadius:20, padding:"3px 10px" }}>
@@ -3557,6 +3695,23 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         return (
         <div style={{ background:T.bg, borderTop:`1px solid ${T.surf2}`, padding:"9px 14px 11px" }}
           aria-label={`${votes} of ${total} ${breaking ? "days clean" : "days kept"} toward ${shortLabel(identity.label)}, ${pct} percent${streak > 0 ? `, ${streak} ${breaking ? "days clean streak" : "day streak"}` : ""}`}>
+
+          {/* Commitment device (stake shown upfront, not just on a miss) + contract
+              witness — the accountability is visible before you act, not after. */}
+          {(habit.stakes || habit.partnerName) && (
+            <div style={{ display:"flex", flexWrap:"wrap", gap:7, marginBottom:9 }}>
+              {habit.stakes && (
+                <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11.5, fontWeight:700, color:"#8A3A5E", background:"#FCE9F0", border:"1px solid #F3B6CE", borderRadius:20, padding:"3px 10px" }}>
+                  <span aria-hidden="true">🔒</span> On the line: {habit.stakes}
+                </span>
+              )}
+              {habit.partnerName && (
+                <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11.5, fontWeight:700, color:"#3B6D11", background:"#EAF3DE", border:"1px solid #C0DD97", borderRadius:20, padding:"3px 10px" }}>
+                  <span aria-hidden="true">🤝</span> Witnessed by {shortLabel(habit.partnerName)}
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Laws (icon chips) + the 7-day chain */}
           <div style={{ display:"flex", alignItems:"center", gap:14 }}>
@@ -3604,18 +3759,22 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             const g2 = (habit.label || "").trim().toLowerCase().replace(/[.!]+$/, "");
             // Goldilocks: nudge to grow once it's genuinely automatic — a long streak,
             // OR a high 30-day consistency rate (which rewards showing up over an unbroken run).
+            // Goldilocks Rule: raise difficulty once it's automatic — a long streak,
+            // OR ≥85% over the last 30 scheduled days (rewards showing up, not a perfect run).
             const byStreak = streak >= 21;
-            const byRate   = rate >= 90 && rs.due >= 14;
+            const byRate   = rate >= 85 && rs.due >= 14;
             const grow = !breaking && habit.starter && g1 && g1 !== g2 && (byStreak || byRate) && !habit.growAckAt && onEdit;
             if (!grow) return null;
             const ack = () => habitOps && habitOps.ackGrow && habitOps.ackGrow(identity.id, habit.id);
             const growHead = byStreak ? `${streak} days in — it's automatic now` : `${rate}% consistent — it's automatic now`;
+            // A concrete next step: grow the 2-minute starter toward the full action.
+            const growStep = `Grow "${habit.starter}" → "${habit.label}", or add a little more.`;
             return (
               <div style={{ display:"flex", alignItems:"center", gap:9, marginTop:10, background:"#EAF3DE", border:"1px solid #C0DD97", borderRadius:11, padding:"9px 11px" }}>
                 <span aria-hidden="true" style={{ fontSize:16, flexShrink:0 }}>🌱</span>
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontSize:12.5, fontWeight:800, color:"#3B6D11" }}>{growHead}</div>
-                  <div style={{ fontSize:11.5, color:T.text2, marginTop:1, lineHeight:1.4 }}>The 2-minute rule got you here. Ready to make it a little bigger?</div>
+                  <div style={{ fontSize:11.5, color:T.text2, marginTop:1, lineHeight:1.4 }}>{growStep}</div>
                 </div>
                 <div style={{ display:"flex", flexDirection:"column", gap:5, flexShrink:0 }}>
                   <button type="button" onClick={() => { ack(); onEdit(); }} style={{ fontSize:12, fontWeight:800, color:"#fff", background:"#639922", border:"none", borderRadius:8, padding:"6px 12px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>Grow it</button>
