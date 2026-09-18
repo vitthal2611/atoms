@@ -94,6 +94,9 @@ exports.sendHabitReminders = onSchedule(
           const when = [habit.time, habit.location].filter(Boolean).join(" · ");
           const cue  = habit.trigger ? `After ${lower(habit.trigger)}` : "";
           const lead = [cue, when].filter(Boolean).join(" · ");
+          // Environment design: if an easy-prep tweak is set, surface it so the reminder
+          // helps the user set the scene, not just remember the task.
+          const prep = habit.easy ? `Prep: ${lower(habit.easy)}` : "";
           let body;
           if (breaking) {
             body = habit.starter
@@ -101,8 +104,8 @@ exports.sendHabitReminders = onSchedule(
               : `Let the urge pass — one vote for ${idName}.`;
           } else {
             const vote = `a vote for ${idName}`;
-            body = lead
-              ? `${lead} · ${vote}`
+            body = [lead, prep].filter(Boolean).join(" · ")
+              ? `${[lead, prep].filter(Boolean).join(" · ")} · ${vote}`
               : habit.starter
                 ? `Just 2 minutes: ${habit.starter} · ${vote}`
                 : `Show up today — ${vote}.`;

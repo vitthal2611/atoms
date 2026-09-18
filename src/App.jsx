@@ -4333,19 +4333,43 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           {(() => {
             const g1 = (habit.starter || "").trim().toLowerCase().replace(/[.!]+$/, "");
             const g2 = (habit.label || "").trim().toLowerCase().replace(/[.!]+$/, "");
-            const grow = !breaking && habit.starter && g1 && g1 !== g2 && streak >= 21 && !habit.growAckAt && onEdit;
+            // Goldilocks: nudge to grow once it's genuinely automatic — a long streak,
+            // OR a high 30-day consistency rate (which rewards showing up over an unbroken run).
+            const byStreak = streak >= 21;
+            const byRate   = rate >= 90 && rs.due >= 14;
+            const grow = !breaking && habit.starter && g1 && g1 !== g2 && (byStreak || byRate) && !habit.growAckAt && onEdit;
             if (!grow) return null;
             const ack = () => goalOps && goalOps.ackGrow && goalOps.ackGrow(identity.id, habit.id);
+            const growHead = byStreak ? `${streak} days in — it's automatic now` : `${rate}% consistent — it's automatic now`;
             return (
               <div style={{ display:"flex", alignItems:"center", gap:9, marginTop:10, background:"#EAF3DE", border:"1px solid #C0DD97", borderRadius:11, padding:"9px 11px" }}>
                 <span aria-hidden="true" style={{ fontSize:16, flexShrink:0 }}>🌱</span>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:12.5, fontWeight:800, color:"#3B6D11" }}>{streak} days in — it's automatic now</div>
+                  <div style={{ fontSize:12.5, fontWeight:800, color:"#3B6D11" }}>{growHead}</div>
                   <div style={{ fontSize:11.5, color:T.text2, marginTop:1, lineHeight:1.4 }}>The 2-minute rule got you here. Ready to make it a little bigger?</div>
                 </div>
                 <div style={{ display:"flex", flexDirection:"column", gap:5, flexShrink:0 }}>
                   <button type="button" onClick={() => { ack(); onEdit(); }} style={{ fontSize:12, fontWeight:800, color:"#fff", background:"#639922", border:"none", borderRadius:8, padding:"6px 12px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>Grow it</button>
                   <button type="button" onClick={ack} style={{ fontSize:11, fontWeight:700, color:T.muted, background:"transparent", border:"none", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>Not yet</button>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Plateau of Latent Potential — when the behavior is sticking but the outcome
+              number has barely moved, reassure that progress is compounding out of sight. */}
+          {(() => {
+            if (breaking || !habit.goal || habit.growAckAt) return null;
+            const gs = goalStats(habit);
+            if (!gs || gs.complete) return null;
+            const behavingWell = streak >= 14 || (rate >= 70 && rs.due >= 14);
+            const outcomeFlat = typeof gs.frac === "number" && gs.frac < 0.34;
+            if (!behavingWell || !outcomeFlat) return null;
+            return (
+              <div style={{ display:"flex", alignItems:"center", gap:9, marginTop:10, background:"#EEF4FB", border:`1px solid ${T.primary}33`, borderRadius:11, padding:"9px 11px" }}>
+                <span aria-hidden="true" style={{ fontSize:15, flexShrink:0 }}>📈</span>
+                <div style={{ fontSize:11.5, color:T.text2, lineHeight:1.45 }}>
+                  <b style={{ color:T.primary }}>You're showing up — that's the win.</b> The number lags the work. Keep casting votes; results compound after the plateau.
                 </div>
               </div>
             );
