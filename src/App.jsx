@@ -2077,8 +2077,13 @@ export default function App() {
   const addIdentity = ({ label, icon, colorIdx }) => {
     const color    = IDENTITY_COLORS[colorIdx];
     const colorDim = IDENTITY_DIMS[colorIdx];
-    setIdentities(prev => [...prev, { id: uid(), label, icon, color, colorDim, habits: [] }]);
-    setModal(null);
+    const newId    = uid();
+    const wasFirst = identities.length === 0;
+    setIdentities(prev => [...prev, { id: newId, label, icon, color, colorDim, habits: [] }]);
+    // First identity → flow straight into adding a habit for it (don't drop the
+    // new person back onto an empty screen to hunt for the add button).
+    if (wasFirst) openAddHabit(newId);
+    else setModal(null);
   };
 
   const updateIdentity = ({ label, icon, colorIdx }) => {
@@ -2252,14 +2257,18 @@ export default function App() {
                     stroke={pct===100?T.gold:T.primary} strokeWidth="5"
                     strokeDasharray={`${(pct/100)*176} 176`} strokeLinecap="round"
                     transform="rotate(-90 34 34)" style={{transition:"stroke-dasharray 0.6s ease"}}/>
-                  <text x="34" y="39" textAnchor="middle" fill={T.text} fontSize="15" fontWeight="800" fontFamily={FONT_DISPLAY} style={{fontVariantNumeric:"tabular-nums"}} aria-hidden="true">
-                    {totalTotal === 0 ? "—" : `${pct}%`}
+                  {/* Lead with votes cast, not a percentage — a partial day is progress, not a grade. */}
+                  <text x="34" y="39" textAnchor="middle" fill={pct===100?T.gold:T.text} fontSize="20" fontWeight="800" fontFamily={FONT_DISPLAY} style={{fontVariantNumeric:"tabular-nums"}} aria-hidden="true">
+                    {totalTotal === 0 ? "—" : totalDone}
                   </text>
                 </svg>
               );
             })()}
             <div style={{...S.ringLabel, fontVariantNumeric:"tabular-nums"}} aria-hidden="true">
-              {totalTotal === 0 ? "none today" : `${totalDone}/${totalTotal} done`}
+              {totalTotal === 0 ? "none today"
+                : totalDone === 0 ? `0 of ${totalTotal}`
+                : totalDone >= totalTotal ? `all ${totalTotal} done 🎉`
+                : `${totalDone} vote${totalDone!==1?"s":""} · ${totalTotal-totalDone} to go`}
             </div>
           </div>
         </div>
@@ -2269,8 +2278,10 @@ export default function App() {
        {view === "today" && (
          <>
            <div style={{ marginTop:10, paddingTop:10, borderTop:`1px solid ${T.border}`, textAlign:"center" }}>
-             <span style={{ fontSize:12.5, fontStyle:"italic", fontWeight:600, color:T.text2, lineHeight:1.45 }}>“Habits are the compound interest of self-improvement.” </span>
-             <span style={{ fontSize:11.5, fontWeight:800, color:T.primary, whiteSpace:"nowrap" }}>— James Clear</span>
+             {(() => { const q = getDailyQuote(); return (<>
+               <span style={{ fontSize:12.5, fontStyle:"italic", fontWeight:600, color:T.text2, lineHeight:1.45 }}>“{q.text}” </span>
+               {q.author && <span style={{ fontSize:11.5, fontWeight:800, color:T.primary, whiteSpace:"nowrap" }}>— {q.author}</span>}
+             </>); })()}
            </div>
            <div style={{ marginTop:10 }}>
              <DayNavigator selectedDate={selectedDate} setSelectedDate={setSelectedDate} todayKey={todayKey} identities={liveIdentities} allData={data} />
@@ -3187,7 +3198,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
         {/* Step 2: the check-in ring + the action (the hero) */}
         <div style={{ display:"flex", alignItems:"center", gap:11, marginTop: (!checked && !missed && cueText) ? 2 : 0 }}>
-          <span style={{ flexShrink:0, width: isQty && !checked && !missed ? 44 : 36, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <span style={{ flexShrink:0, width:44, display:"flex", alignItems:"center", justifyContent:"center" }}>
             {isQty && !checked && !missed ? (
               <CounterRing count={count} target={target} color={C} size={44}
                 onInc={() => adjustCount(habit.id, target, 1)}
@@ -3199,7 +3210,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
                 color={C}
                 streak={streak}
                 next={next}
-                size={36}
+                size={44}
                 onClick={activate}
                 label={checked ? `Uncheck: ${habit.label}` : (breaking ? `Mark clean: ${habit.label}` : `Check: ${habit.label}`)}
               />
@@ -3423,7 +3434,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               </button>
             )}
           </div>
-          {/* Right — the streak milestone (earned badge + progress to the next). */}
+          {/* Right — the streak milestone (anticipation: the next badge to earn). */}
           <MilestoneProgress streak={streak} />
           </div>
 
@@ -3454,41 +3465,6 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             );
           })()}
 
-          {/* Proof row — metrics (votes · streak · consistency) on the left, the 7-day
-              chain on the right, so all the "how am I doing" signals sit together. */}
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, rowGap:8, flexWrap:"wrap", marginTop:10, paddingTop:9, borderTop:`1px solid ${T.surf2}` }}>
-            <span style={{ display:"inline-flex", alignItems:"center", background:"#fff", border:`1px solid ${C}22`, borderRadius:20, padding:"3px 11px", flexShrink:0 }}>
-              <VotesBadge habit={habit} allData={allData} votes={votes} total={voteMax} color={Cd} isBad={breaking} />
-              {streak > 0 && streak !== votes && (
-                <>
-                  <span aria-hidden="true" style={{ width:1, height:12, background:`${C}22`, margin:"0 9px" }} />
-                  <StreakBadge habit={habit} allData={allData} streak={streak} isBad={breaking} bare />
-                </>
-              )}
-              {rs.due > 0 && (
-                <>
-                  <span aria-hidden="true" style={{ width:1, height:12, background:`${C}22`, margin:"0 9px" }} />
-                  <span style={{ fontSize:11.5, fontWeight:900, letterSpacing:"-0.01em", color: rateColor }} aria-label={`${rate} percent consistency over the last 30 scheduled days`}>{rate}%</span>
-                </>
-              )}
-            </span>
-            {Array.isArray(history) && history.length > 0 && (
-              <div style={{ display:"flex", alignItems:"center", gap:5, flexShrink:0, marginLeft:"auto" }} aria-hidden="true">
-                {history.map((d, i) => {
-                  const done = d.status === "done";
-                  const miss = d.status === "miss";
-                  const base = { width:20, height:20, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:900, boxSizing:"border-box", flexShrink:0 };
-                  let s;
-                  if (d.pre || (d.off && d.status === "none")) s = { background:"#fff", border:`1px dashed ${T.border2}`, color:T.border2 };
-                  else if (done) s = { background:doneColor, color:"#fff" };
-                  else if (miss) s = { background:"#FCE9F0", border:"1.5px solid #F3B6CE", color:"#D65A8A" };
-                  else if (d.today) s = { background:"#fff", border:`2px solid ${doneColor}`, color: Cd };
-                  else s = { background:T.surf2, color:T.muted };
-                  return <span key={i} style={{ ...base, ...s }}>{d.letter}</span>;
-                })}
-              </div>
-            )}
-          </div>
         </div>
         );
       })()}
