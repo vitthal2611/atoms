@@ -4009,6 +4009,12 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           <span style={{ flexShrink:0, fontSize:10, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking" : "I am"}</span>
           <IdentityName text={idDisplay} color={Cd} />
         </div>
+        {/* Identity evidence — votes cast for this self compound and never reset. */}
+        {(() => {
+          const idVotes = (identity.habits || []).reduce((n, h) => n + Object.values(allData).filter(d => d && d[h.id] === true).length, 0);
+          if (idVotes < 1) return null;
+          return <span title={`${idVotes} votes cast toward becoming ${shortLabel(identity.label)}`} style={{ flexShrink:0, fontSize:10, fontWeight:800, color: Cd, background: C + "1f", borderRadius:20, padding:"2px 8px", whiteSpace:"nowrap" }}>{idVotes} {breaking ? "clean" : "votes"}</span>;
+        })()}
         {menu}
       </div>
 
@@ -4019,6 +4025,13 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:8, background:"#E1F5EE", border:"1px solid #9FE1CB", borderRadius:9, padding:"6px 10px" }}>
             <span aria-hidden="true" style={{ fontSize:13 }}>▶️</span>
             <span style={{ fontSize:11.5, fontWeight:800, color:"#085041" }}>Ready now — you just finished “{shortLabel(readyAnchor)}”</span>
+          </div>
+        )}
+        {/* Environment design (Law 3) — make the prep an actionable, visible cue. */}
+        {!checked && !missed && !breaking && habit.easy && (
+          <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:8, background:"#F1F5F9", border:`1px solid ${T.border}`, borderRadius:9, padding:"6px 10px" }}>
+            <span aria-hidden="true" style={{ fontSize:13 }}>🧰</span>
+            <span style={{ fontSize:11.5, fontWeight:700, color:T.text2 }}>Prep: {habit.easy}</span>
           </div>
         )}
         {/* ── Trigger → Action flow. Step 1: the cue's emoji is a node with a rail
