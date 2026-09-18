@@ -701,6 +701,23 @@ function longDateLabel(key) {
 function daysUntil(targetKey, fromKey = getTodayKey()) {
   return Math.round((new Date(targetKey + "T00:00") - new Date(fromKey + "T00:00")) / 86400000);
 }
+// Accountability partner: a mailto: link the user's own mail app sends. Nothing
+// is sent automatically — the user chose the recipient and taps send themselves.
+function partnerMailto(habit, kind, info = {}) {
+  const to = habit.partnerEmail || "";
+  const name = (habit.partnerName || "").trim();
+  const hi = name ? `Hi ${name},` : "Hi,";
+  const sig = "\n\n— shared from my Atomic Habits tracker";
+  let subject, body;
+  if (kind === "miss") {
+    subject = `Accountability: I missed "${habit.label}"`;
+    body = `${hi}\n\nI committed to "${habit.label}" and I missed it today.${habit.stakes ? `\nMy stake for skipping: ${habit.stakes}.` : ""}\n\nHold me to it — I'm back on it tomorrow (never miss twice).${sig}`;
+  } else {
+    subject = `Progress on "${habit.label}"`;
+    body = `${hi}\n\nQuick update on "${habit.label}"${info.streak ? ` — ${info.streak}-day streak` : ""}${info.votes ? `, ${info.votes} check-ins so far` : ""}.\n\nThanks for keeping me accountable.${sig}`;
+  }
+  return `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
 // Monday-start of the week containing dateKey; and the 7 day-keys Mon..Sun.
 function weekStartKey(dateKey) {
   const d = new Date(dateKey + "T00:00");
@@ -1252,6 +1269,8 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     starter:    initial.starter    || "",
     satisfying: initial.satisfying || "",
     stakes:     initial.stakes     || "",
+    partnerName:  initial.partnerName  || "",
+    partnerEmail: initial.partnerEmail || "",
     time:       initial.time       || "",
     location:   initial.location   || "",
     icon:       initial.icon       || "",
@@ -1311,6 +1330,8 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     starter:    fId + "-starter",
     satisfying: fId + "-satisfying",
     stakes:     fId + "-stakes",
+    partnerName:  fId + "-partnerName",
+    partnerEmail: fId + "-partnerEmail",
     time:       fId + "-time",
     location:   fId + "-location",
     target:     fId + "-target",
@@ -1759,6 +1780,15 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
           <label htmlFor={ids.stakes} style={{ ...S.fieldLabel, marginTop:16 }}>If I skip <span style={{ fontWeight:600, color:T.muted }}>(optional stake)</span></label>
           <input id={ids.stakes} style={{ ...S.input, marginTop:0 }} value={form.stakes} onChange={e=>set("stakes",e.target.value)} placeholder="e.g. I owe ₹200 to charity · I tell Sarah" maxLength={100} />
           <div style={{ fontSize:10.5, color:T.muted, marginTop:5 }}>A stake you set for yourself — shown the moment you miss, to make skipping cost something.</div>
+
+          {/* Accountability partner — a witness. One-tap email (from your own mail
+              app) when you slip or hit a milestone; nothing is sent automatically. */}
+          <label htmlFor={ids.partnerName} style={{ ...S.fieldLabel, marginTop:16 }}>Accountability partner <span style={{ fontWeight:600, color:T.muted }}>(optional)</span></label>
+          <div style={{ display:"flex", gap:8 }}>
+            <input id={ids.partnerName} style={{ ...S.input, marginTop:0, width:120, flexShrink:0 }} value={form.partnerName} onChange={e=>set("partnerName", e.target.value)} placeholder="Name" maxLength={40} aria-label="Partner name" />
+            <input id={ids.partnerEmail} style={{ ...S.input, marginTop:0, flex:1, minWidth:0 }} type="email" inputMode="email" value={form.partnerEmail} onChange={e=>set("partnerEmail", e.target.value.trim())} placeholder="their@email.com" maxLength={120} aria-label="Partner email" />
+          </div>
+          <div style={{ fontSize:10.5, color:T.muted, marginTop:5 }}>Someone watching makes it stick. You get a one-tap email to them when you slip or hit a milestone — your mail app opens; nothing sends on its own.</div>
         </>
       )}
       </>)}
@@ -2829,18 +2859,18 @@ export default function App() {
   };
 
   const addHabit = (f) => {
-    const { label, trigger, attractive, easy, starter, satisfying, stakes, time, location, icon, identityId, frequency, kind, target, unit } = f;
+    const { label, trigger, attractive, easy, starter, satisfying, stakes, partnerName, partnerEmail, time, location, icon, identityId, frequency, kind, target, unit } = f;
     const tgt = cleanTarget(kind, target);
     const goal = cleanGoal(kind, f);
     setIdentities(prev => prev.map(ident =>
       ident.id !== identityId ? ident :
-      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, attractive, easy, starter, satisfying, stakes, time, location, icon: icon || "", kind: kind || "good", frequency: frequency || DEFAULT_FREQUENCY, target: tgt, unit: tgt ? (unit || "").trim() : "", goal, createdAt: getTodayKey() }] }
+      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, attractive, easy, starter, satisfying, stakes, partnerName, partnerEmail, time, location, icon: icon || "", kind: kind || "good", frequency: frequency || DEFAULT_FREQUENCY, target: tgt, unit: tgt ? (unit || "").trim() : "", goal, createdAt: getTodayKey() }] }
     ));
     setModal(null);
   };
 
   const updateHabit = (f) => {
-    const { label, trigger, attractive, easy, starter, satisfying, stakes, time, location, icon, identityId: newIdentityId, frequency, kind, target, unit } = f;
+    const { label, trigger, attractive, easy, starter, satisfying, stakes, partnerName, partnerEmail, time, location, icon, identityId: newIdentityId, frequency, kind, target, unit } = f;
     const { identityId: oldIdentityId, habitId } = modalCtx;
     const freq = frequency || DEFAULT_FREQUENCY;
     const k = kind || "good";
@@ -2855,14 +2885,14 @@ export default function App() {
     if (newIdentityId === oldIdentityId) {
       setIdentities(prev => prev.map(ident =>
         ident.id !== oldIdentityId ? ident :
-        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, attractive, easy, starter, satisfying, stakes, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni, goal, ...logPatch }) }
+        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, attractive, easy, starter, satisfying, stakes, partnerName, partnerEmail, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni, goal, ...logPatch }) }
       ));
     } else {
       setIdentities(prev => {
         const habitData = prev.find(i => i.id === oldIdentityId)?.habits.find(h => h.id === habitId);
         return prev.map(ident => {
           if (ident.id === oldIdentityId) return { ...ident, habits: ident.habits.filter(h => h.id !== habitId) };
-          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, attractive, easy, starter, satisfying, stakes, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni, goal, ...logPatch }] };
+          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, attractive, easy, starter, satisfying, stakes, partnerName, partnerEmail, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni, goal, ...logPatch }] };
           return ident;
         });
       });
@@ -3647,6 +3677,12 @@ function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHab
                 <Ic name="star" size={15} color={T.gold} /> Goal progress
               </button>
             )}
+            {habit.partnerEmail && (
+              <a href={partnerMailto(habit, "update", { votes: Object.values(allData).filter(day => day && day[habit.id] === true).length })}
+                onClick={() => setOpen(false)} style={{ ...menuItem, textDecoration:"none" }}>
+                <Ic name="spark" size={15} color="#D4537E" /> Email {shortLabel(habit.partnerName || "partner")} an update
+              </a>
+            )}
             <button onClick={() => { setOpen(false); setNotesOpen(true); }} style={menuItem}>
               <Ic name="info" size={15} color={identity.colorDim || T.text2} /> Notes &amp; history
             </button>
@@ -4088,10 +4124,15 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             {habit.stakes && <div style={{ fontSize:11.5, fontWeight:700, color:T.text2, marginTop:3 }}>Your stake: <span style={{ color:"#C0392B" }}>{habit.stakes}</span></div>}
           </div>
         )}
-        {/* The self-set stake, shown the moment this habit is marked missed. */}
-        {missed && habit.stakes && (
-          <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:9, background:"#FCE9F0", border:"1px solid #F3B6CE", borderRadius:9, padding:"7px 10px", fontSize:12, fontWeight:700, color:"#8A3A5E" }}>
-            <span aria-hidden="true">⚖️</span> Stake: {habit.stakes}
+        {/* The self-set stake + accountability, shown the moment this is missed. */}
+        {missed && (habit.stakes || habit.partnerEmail) && (
+          <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginTop:9, background:"#FCE9F0", border:"1px solid #F3B6CE", borderRadius:9, padding:"7px 10px" }}>
+            {habit.stakes && <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, fontWeight:700, color:"#8A3A5E" }}><span aria-hidden="true">⚖️</span> Stake: {habit.stakes}</span>}
+            {habit.partnerEmail && (
+              <a href={partnerMailto(habit, "miss")} style={{ marginLeft:"auto", display:"inline-flex", alignItems:"center", gap:5, fontSize:12, fontWeight:800, color:"#fff", background:"#D4537E", borderRadius:8, padding:"6px 11px", textDecoration:"none", WebkitTapHighlightColor:"transparent" }}>
+                <span aria-hidden="true">📧</span> Tell {shortLabel(habit.partnerName || "partner")}
+              </a>
+            )}
           </div>
         )}
 
