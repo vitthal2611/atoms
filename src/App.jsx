@@ -809,13 +809,39 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
   const valid = form.label.trim().length > 0 && form.identityId;
 
   // Cue suggestions for the combobox — pick one or type a custom cue.
-  const cueOptions = breaking
-    ? ["When I get into bed", "When I feel bored", "When I reach for my phone", "When I sit on the couch", "When I feel stressed", "Late at night"]
-    : [
-        "After I wake up", "After I pour my morning coffee", "After I brush my teeth",
-        "After breakfast", "After lunch", "After I get home from work", "After I sit at my desk", "Before bed",
-        ...identities.flatMap(i => (i.habits || []).map(h => h.label)).filter(l => l && l !== initial.label).slice(0, 6).map(l => `After ${l}`),
-      ];
+  // Common everyday anchors (Atomic Habits: stack the new habit onto an existing one).
+  const BASE_GOOD_CUES = [
+    "After I wake up", "After I make my bed", "After I pour my morning coffee",
+    "After I have my tea", "After I brush my teeth", "After I shower",
+    "After breakfast", "After I sit at my desk", "After my first meeting",
+    "After lunch", "After I get home from work", "After I change out of my work clothes",
+    "After I take off my shoes", "After dinner", "After I wash the dishes",
+    "After I put the kids to bed", "After my evening walk", "Before bed",
+  ];
+  const BASE_BAD_CUES = [
+    "When I get into bed", "When I feel bored", "When I reach for my phone",
+    "When I sit on the couch", "When I feel stressed", "When I'm anxious",
+    "When I finish a task", "When I open my laptop", "When I'm procrastinating", "Late at night",
+  ];
+  // Habit stacking: every existing habit's ACTION becomes a cue you can stack onto
+  // ("After I walk, I will …"). A habit can't stack on itself.
+  const selfLabel = (initial.label || form.label || "").trim().toLowerCase();
+  const habitCues = identities
+    .flatMap(i => (i.habits || []))
+    .filter(h => h.id !== initial.id && (h.label || "").trim() && (h.label || "").trim().toLowerCase() !== selfLabel)
+    .map(h => `After ${h.label.trim()}`);
+  // A cue already anchored to another habit is "taken" — one cue → one habit keeps
+  // the stack clean, so hide used cues (but never hide the one this habit already has).
+  const usedCues = new Set(
+    identities
+      .flatMap(i => (i.habits || []))
+      .filter(h => h.id !== initial.id)
+      .map(h => (h.trigger || "").trim())
+      .filter(Boolean)
+  );
+  const cueOptions = [...(breaking ? BASE_BAD_CUES : [...BASE_GOOD_CUES, ...habitCues])]
+    .filter((c, i, arr) => arr.indexOf(c) === i)                 // dedupe
+    .filter(c => c === form.trigger || !usedCues.has(c));        // hide taken cues
   // Trigger picker: a dropdown of common cues + a "type my own" escape hatch.
   const [trigCustom, setTrigCustom] = useState(false);
   const trigIsPreset = cueOptions.includes(form.trigger);
