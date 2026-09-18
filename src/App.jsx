@@ -206,16 +206,6 @@ function to24h(timeStr) {
   if (period === "am" && h === 12) h = 0;
   return `${String(h).padStart(2,"0")}:${m}`;
 }
-// Last day of the year (default goal deadline) for the given date's year.
-function lastDayOfYearKey(ref = new Date()) { return `${ref.getFullYear()}-12-31`; }
-// "31 Dec 2026" style label for a YYYY-MM-DD key.
-function longDateLabel(key) {
-  return new Date(key + "T00:00").toLocaleDateString(navigator.language || undefined, { day: "numeric", month: "short", year: "numeric" });
-}
-// Whole days from today (key) until a target key; negative if past.
-function daysUntil(targetKey, fromKey = getTodayKey()) {
-  return Math.round((new Date(targetKey + "T00:00") - new Date(fromKey + "T00:00")) / 86400000);
-}
 // Habit stacking: resolve the cue text to an exact anchor habit id (a stable
 // link that survives a rename of either habit's wording), else "".
 function anchorHabitId(trigger, identities, selfId) {
@@ -808,17 +798,14 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
     unit:       initial.unit       || "",
   });
   const [submitted, setSubmitted] = useState(false);
-  // Keep creation easy (make it easy): the Four-Laws refinements + goal + stake
-  // start collapsed for new habits; open when editing one that already has them.
+  // Keep creation easy (make it easy): the Four-Laws refinements + stake start
+  // collapsed for new habits; open when editing one that already has them.
   const [advancedOpen, setAdvancedOpen] = useState(() =>
-    !!(initial.attractive || initial.easy || initial.satisfying || initial.stakes || initial.goal));
+    !!(initial.attractive || initial.easy || initial.satisfying || initial.stakes));
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const breaking = form.kind === "bad";
-  // Progress goal is required for build habits (bad habits don't have one).
-  // The progress goal is OPTIONAL — a habit with no number is a valid consistency
-  // habit (identity + streak + never-miss-twice). Only a *partly* filled goal is
-  // invalid, so we don't silently drop half-entered numbers.
-  const goalValid  = true;   // Goals removed — no goal validation.
+  // A habit needs only a name + identity. Everything else (cue, Four Laws, stake)
+  // is an optional refinement — the streak and never-miss-twice do the rest.
   const valid = form.label.trim().length > 0 && form.identityId;
 
   // Cue suggestions for the combobox — pick one or type a custom cue.
@@ -1634,7 +1621,7 @@ export default function App() {
     patchHabit(identityId, habitId, h => ({ ...h, missLog: [...(h.missLog || []).filter(m => m.at !== at), { at, reason }] }));
   }, []);
 
-  const goalOps = useMemo(() => ({
+  const habitOps = useMemo(() => ({
     ackGrow, logMissReason,
   }), [ackGrow, logMissReason]);
 
@@ -2024,15 +2011,13 @@ export default function App() {
   // ── CRUD: Habits ──
   // A daily target only applies to good habits; store it as a number (>1) or drop it.
   const cleanTarget = (kind, target) => (kind !== "bad" && Math.round(Number(target)) > 1 ? Math.round(Number(target)) : 0);
-  const cleanGoal = () => null;   // Goals removed — every habit is a pure consistency habit.
 
   const addHabit = (f) => {
     const { label, trigger, attractive, easy, starter, satisfying, stakes, partnerName, partnerEmail, time, location, icon, identityId, frequency, kind, target, unit } = f;
     const tgt = cleanTarget(kind, target);
-    const goal = cleanGoal(kind, f);
     setIdentities(prev => prev.map(ident =>
       ident.id !== identityId ? ident :
-      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, attractive, easy, starter, satisfying, stakes, partnerName, partnerEmail, time, location, icon: icon || "", kind: kind || "good", frequency: frequency || DEFAULT_FREQUENCY, target: tgt, unit: tgt ? (unit || "").trim() : "", goal, anchorId: anchorHabitId(trigger, identities, ""), createdAt: getTodayKey() }] }
+      { ...ident, habits: [...ident.habits, { id: uid(), label, trigger, attractive, easy, starter, satisfying, stakes, partnerName, partnerEmail, time, location, icon: icon || "", kind: kind || "good", frequency: frequency || DEFAULT_FREQUENCY, target: tgt, unit: tgt ? (unit || "").trim() : "", anchorId: anchorHabitId(trigger, identities, ""), createdAt: getTodayKey() }] }
     ));
     setModal(null);
   };
@@ -2044,23 +2029,19 @@ export default function App() {
     const k = kind || "good";
     const tgt = cleanTarget(k, target);
     const uni = tgt ? (unit || "").trim() : "";
-    const oldHabit = identities.find(i => i.id === oldIdentityId)?.habits.find(h => h.id === habitId);
-    const existingBy = oldHabit?.goal?.by;
-    const goal = cleanGoal(k, f, existingBy);
-    // Switching goal type (or dropping the goal) makes old log entries meaningless.
-    const resetLog = (oldHabit?.goal?.type || "checklist") !== (goal?.type || "checklist");
-    const logPatch = resetLog ? { goalLog: [], goalDone: [], goalItems: [], goalCurrent: null } : {};
+    // Goals removed — strip any legacy goal data left on old habit records.
+    const goalPatch = { goal: null, goalLog: [], goalDone: [], goalItems: [], goalCurrent: null };
     if (newIdentityId === oldIdentityId) {
       setIdentities(prev => prev.map(ident =>
         ident.id !== oldIdentityId ? ident :
-        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, attractive, easy, starter, satisfying, stakes, partnerName, partnerEmail, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni, goal, anchorId: anchorHabitId(trigger, identities, habitId), ...logPatch }) }
+        { ...ident, habits: ident.habits.map(h => h.id !== habitId ? h : { ...h, label, trigger, attractive, easy, starter, satisfying, stakes, partnerName, partnerEmail, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni, anchorId: anchorHabitId(trigger, identities, habitId), ...goalPatch }) }
       ));
     } else {
       setIdentities(prev => {
         const habitData = prev.find(i => i.id === oldIdentityId)?.habits.find(h => h.id === habitId);
         return prev.map(ident => {
           if (ident.id === oldIdentityId) return { ...ident, habits: ident.habits.filter(h => h.id !== habitId) };
-          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, attractive, easy, starter, satisfying, stakes, partnerName, partnerEmail, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni, goal, anchorId: anchorHabitId(trigger, identities, habitId), ...logPatch }] };
+          if (ident.id === newIdentityId) return { ...ident, habits: [...ident.habits, { ...habitData, label, trigger, attractive, easy, starter, satisfying, stakes, partnerName, partnerEmail, time, location, icon: icon || "", kind: k, frequency: freq, target: tgt, unit: uni, anchorId: anchorHabitId(trigger, identities, habitId), ...goalPatch }] };
           return ident;
         });
       });
@@ -2312,7 +2293,7 @@ export default function App() {
             reviews={reviews}
             onOpenWeeklyReview={() => setReviewOpenWk(weekStartKey(todayKey))}
             markMiss={markMiss}
-            goalOps={goalOps}
+            habitOps={habitOps}
             habitNotes={habitNotes}
             setHabitNote={setHabitNote}
             justChecked={justChecked}
@@ -2814,7 +2795,7 @@ function NotesJournalModal({ habit, identity, allData = {}, habitNotes = {}, onS
 }
 
 // ─── ROW MENU — notes / miss / edit / delete behind one ⋯ button ──────────────
-function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHabit, onReview, habitNotes = {}, allData = {}, setHabitNote, goalOps }) {
+function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHabit, onReview, habitNotes = {}, allData = {}, setHabitNote, habitOps }) {
   const [open, setOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const menuItem = {
@@ -3087,7 +3068,7 @@ function VotesBadge({ habit, allData, votes, total, color, isBad }) {
 
 // ─── HABIT ROW ────────────────────────────────────────────────────────────────
 // One habit on the timeline: cue → action → coaching (identity header is above).
-function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, adjustCount, count = 0, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, goalOps, readyAnchor = null, active = false }) {
+function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, adjustCount, count = 0, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, habitOps, readyAnchor = null, active = false }) {
   const next = getNextMilestone(streak);
   // Environment prep tick (Law 3) — a per-day, per-device convenience in localStorage.
   const [prepped, setPrepped] = useState(() => { try { return localStorage.getItem(`atoms:prep:${habit.id}:${getTodayKey()}`) === "1"; } catch { return false; } });
@@ -3304,7 +3285,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           </div>
         )}
         {/* Optional one-tap miss reason — understand the slip (never miss twice). */}
-        {missed && goalOps && goalOps.logMissReason && (() => {
+        {missed && habitOps && habitOps.logMissReason && (() => {
           const today = getTodayKey();
           const logged = (habit.missLog || []).find(m => m.at === today);
           if (logged) return <div style={{ fontSize:11.5, fontWeight:700, color:T.muted, marginTop:7 }}>Why: <span style={{ color:T.text2 }}>{logged.reason}</span></div>;
@@ -3312,7 +3293,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", marginTop:8 }}>
               <span style={{ fontSize:11, fontWeight:700, color:T.muted }}>Why? (optional)</span>
               {["Forgot","No time","Too hard","Away","Unwell"].map(r => (
-                <button key={r} type="button" onClick={() => goalOps.logMissReason(identity.id, habit.id, r)}
+                <button key={r} type="button" onClick={() => habitOps.logMissReason(identity.id, habit.id, r)}
                   style={{ fontSize:11, fontWeight:700, color:T.text2, background:T.surf2, border:`1px solid ${T.border}`, borderRadius:20, padding:"3px 9px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>{r}</button>
               ))}
             </div>
@@ -3442,7 +3423,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               </button>
             )}
           </div>
-          {/* Right — a personal goal ladder if set, otherwise the streak milestone. */}
+          {/* Right — the streak milestone (earned badge + progress to the next). */}
           <MilestoneProgress streak={streak} />
           </div>
 
@@ -3456,7 +3437,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             const byRate   = rate >= 90 && rs.due >= 14;
             const grow = !breaking && habit.starter && g1 && g1 !== g2 && (byStreak || byRate) && !habit.growAckAt && onEdit;
             if (!grow) return null;
-            const ack = () => goalOps && goalOps.ackGrow && goalOps.ackGrow(identity.id, habit.id);
+            const ack = () => habitOps && habitOps.ackGrow && habitOps.ackGrow(identity.id, habit.id);
             const growHead = byStreak ? `${streak} days in — it's automatic now` : `${rate}% consistent — it's automatic now`;
             return (
               <div style={{ display:"flex", alignItems:"center", gap:9, marginTop:10, background:"#EAF3DE", border:"1px solid #C0DD97", borderRadius:11, padding:"9px 11px" }}>
@@ -4567,7 +4548,7 @@ const FocusView = memo(function FocusView({ dailyTasks, selectedDate, setSelecte
 });
 
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
-const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, adjustCount, markMiss, goalOps, habitNotes, setHabitNote, justChecked, getStreakForHabit, openEditHabit, openDeleteHabit, openReviewFor, setModal, openAddHabit, openAddIdentity, onOpenFocus, reviews, onOpenWeeklyReview, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, addFocusTask, toggleTask, deleteTask, editTask, toggleStar, toggleFocus, deferTask, reviewTarget, onOpenReview, onDismissReview }) {
+const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, adjustCount, markMiss, habitOps, habitNotes, setHabitNote, justChecked, getStreakForHabit, openEditHabit, openDeleteHabit, openReviewFor, setModal, openAddHabit, openAddIdentity, onOpenFocus, reviews, onOpenWeeklyReview, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, addFocusTask, toggleTask, deleteTask, editTask, toggleStar, toggleFocus, deferTask, reviewTarget, onOpenReview, onDismissReview }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
   const [matrixExpanded, setMatrixExpanded] = useState(false);
@@ -4754,8 +4735,8 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                   active={habit.id === firstPendingId}
                   streakBadge={streakBadge}
                   onEdit={() => openEditHabit(identity.id, habit)}
-                  menu={<RowMenu habit={habit} identity={identity} missed={todayData[habit.id] === "miss"} onMiss={markMiss} openEditHabit={openEditHabit} openDeleteHabit={openDeleteHabit} onReview={openReviewFor} habitNotes={habitNotes} allData={allData} setHabitNote={setHabitNote} goalOps={goalOps} />}
-                  goalOps={goalOps}
+                  menu={<RowMenu habit={habit} identity={identity} missed={todayData[habit.id] === "miss"} onMiss={markMiss} openEditHabit={openEditHabit} openDeleteHabit={openDeleteHabit} onReview={openReviewFor} habitNotes={habitNotes} allData={allData} setHabitNote={setHabitNote} habitOps={habitOps} />}
+                  habitOps={habitOps}
                   readyAnchor={readyAnchor}
                   habit={habit}
                   identity={identity}
