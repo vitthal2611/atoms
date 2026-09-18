@@ -776,6 +776,39 @@ function FrequencyPicker({ value, onChange }) {
   );
 }
 
+// ─── CUE SUGGESTIONS ──────────────────────────────────────────────────────────
+// Common everyday anchors (Atomic Habits: stack the new habit onto an existing
+// one). The cue is always an "After [something]" anchor — so no "Before …".
+const BASE_GOOD_CUES = [
+  "After I wake up", "After I make my bed", "After I pour my morning coffee",
+  "After I have my tea", "After I brush my teeth", "After I shower",
+  "After breakfast", "After I sit at my desk", "After my first meeting",
+  "After lunch", "After I get home from work", "After I change out of my work clothes",
+  "After I take off my shoes", "After dinner", "After I wash the dishes",
+  "After I put the kids to bed", "After my evening walk",
+];
+const BASE_BAD_CUES = [
+  "When I get into bed", "When I feel bored", "When I reach for my phone",
+  "When I sit on the couch", "When I feel stressed", "When I'm anxious",
+  "When I finish a task", "When I open my laptop", "When I'm procrastinating", "Late at night",
+];
+// Cues the user removed from the suggestion list (per-device convenience).
+const CUE_STORE_KEY = "atoms:dismissedCues";
+function loadDismissedCues() {
+  try { return JSON.parse(localStorage.getItem(CUE_STORE_KEY) || "[]"); } catch { return []; }
+}
+function saveDismissedCues(list) {
+  try { localStorage.setItem(CUE_STORE_KEY, JSON.stringify(list)); } catch {}
+}
+// Extra cues the user added themselves (via Manage → Cue suggestions).
+const CUSTOM_CUE_KEY = "atoms:customCues";
+function loadCustomCues() {
+  try { return JSON.parse(localStorage.getItem(CUSTOM_CUE_KEY) || "[]"); } catch { return []; }
+}
+function saveCustomCues(list) {
+  try { localStorage.setItem(CUSTOM_CUE_KEY, JSON.stringify(list)); } catch {}
+}
+
 // ─── HABIT FORM ───────────────────────────────────────────────────────────────
 function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
   const [form, setForm] = useState({
@@ -808,21 +841,10 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
   // is an optional refinement — the streak and never-miss-twice do the rest.
   const valid = form.label.trim().length > 0 && form.identityId;
 
-  // Cue suggestions for the combobox — pick one or type a custom cue.
-  // Common everyday anchors (Atomic Habits: stack the new habit onto an existing one).
-  const BASE_GOOD_CUES = [
-    "After I wake up", "After I make my bed", "After I pour my morning coffee",
-    "After I have my tea", "After I brush my teeth", "After I shower",
-    "After breakfast", "After I sit at my desk", "After my first meeting",
-    "After lunch", "After I get home from work", "After I change out of my work clothes",
-    "After I take off my shoes", "After dinner", "After I wash the dishes",
-    "After I put the kids to bed", "After my evening walk", "Before bed",
-  ];
-  const BASE_BAD_CUES = [
-    "When I get into bed", "When I feel bored", "When I reach for my phone",
-    "When I sit on the couch", "When I feel stressed", "When I'm anxious",
-    "When I finish a task", "When I open my laptop", "When I'm procrastinating", "Late at night",
-  ];
+  // Cue lists curated in Manage → read once when the form opens (managed elsewhere now).
+  const dismissedCues = useMemo(() => new Set(loadDismissedCues()), []);
+  const customCues    = useMemo(() => loadCustomCues(), []);
+
   // Habit stacking: every existing habit's ACTION becomes a cue you can stack onto
   // ("After I walk, I will …"). A habit can't stack on itself.
   const selfLabel = (initial.label || form.label || "").trim().toLowerCase();
@@ -839,9 +861,9 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
       .map(h => (h.trigger || "").trim())
       .filter(Boolean)
   );
-  const cueOptions = [...(breaking ? BASE_BAD_CUES : [...BASE_GOOD_CUES, ...habitCues])]
-    .filter((c, i, arr) => arr.indexOf(c) === i)                 // dedupe
-    .filter(c => c === form.trigger || !usedCues.has(c));        // hide taken cues
+  const cueOptions = [...(breaking ? BASE_BAD_CUES : [...BASE_GOOD_CUES, ...customCues, ...habitCues])]
+    .filter((c, i, arr) => arr.indexOf(c) === i)                              // dedupe
+    .filter(c => c === form.trigger || (!usedCues.has(c) && !dismissedCues.has(c))); // hide taken/removed
   // Trigger picker: a dropdown of common cues + a "type my own" escape hatch.
   const [trigCustom, setTrigCustom] = useState(false);
   const trigIsPreset = cueOptions.includes(form.trigger);
@@ -980,7 +1002,8 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
         <label htmlFor={ids.trigger + "-select"} style={S.fieldLabel}>{breaking ? "When are you tempted? (cue)" : "After what? (cue)"}</label>
         {suggestBtn("trigger")}
       </div>
-      {/* Dropdown of common cues; "Type my own…" reveals a free-text field */}
+      {/* Dropdown of common cues; "Type my own…" reveals a free-text field.
+          Removing a cue you never use lives in Manage → Cue suggestions. */}
       <select id={ids.trigger + "-select"}
         value={showTrigInput ? "__custom__" : (form.trigger || "")}
         onChange={e => {
@@ -994,11 +1017,8 @@ function HabitForm({ initial={}, identities, onSave, onCancel, mode="add" }) {
         <option value="__custom__">✍️ Type my own…</option>
       </select>
       {showTrigInput && (
-        <input id={ids.trigger} list={ids.trigger + "-list"} style={{ ...S.input, marginTop:8 }} value={form.trigger} onChange={e=>set("trigger",e.target.value)} placeholder={breaking ? "e.g. When I get into bed" : "e.g. After I pour my morning coffee"} maxLength={120} autoFocus />
+        <input id={ids.trigger} style={{ ...S.input, marginTop:8 }} value={form.trigger} onChange={e=>set("trigger",e.target.value)} placeholder={breaking ? "e.g. When I get into bed" : "e.g. After I pour my morning coffee"} maxLength={120} autoFocus />
       )}
-      <datalist id={ids.trigger + "-list"}>
-        {cueOptions.map(o => <option key={o} value={o} />)}
-      </datalist>
       <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>Pick a common cue, or “Type my own”.</div>
 
       {/* Cue icon — auto-picked from the trigger words; tap any to override */}
@@ -2477,6 +2497,80 @@ export default function App() {
 }
 
 // ─── MANAGE VIEW ──────────────────────────────────────────────────────────────
+// ─── CUE SUGGESTIONS SETTINGS (Manage tab) — remove/restore cue suggestions ────
+function CueSettings() {
+  const [dismissed, setDismissed] = useState(() => loadDismissedCues());
+  const [custom, setCustom] = useState(() => loadCustomCues());
+  const [draft, setDraft] = useState("");
+  const dset = new Set(dismissed);
+  const update = (list) => { setDismissed(list); saveDismissedCues(list); };
+  const dismiss = (c) => update([...new Set([...dismissed, c])]);
+  const restore = (c) => update(dismissed.filter(x => x !== c));
+  const updateCustom = (list) => { setCustom(list); saveCustomCues(list); };
+  const addCustom = () => {
+    const c = draft.trim().slice(0, 60);
+    if (!c) return;
+    const exists = [...BASE_GOOD_CUES, ...BASE_BAD_CUES, ...custom].some(x => x.toLowerCase() === c.toLowerCase());
+    if (!exists) updateCustom([...custom, c]);
+    setDraft("");
+  };
+  const removeCustom = (c) => updateCustom(custom.filter(x => x !== c));
+  const groups = [
+    { title: "Everyday cues (good habits)", cues: BASE_GOOD_CUES },
+    { title: "Temptation cues (breaking habits)", cues: BASE_BAD_CUES },
+  ];
+  const removedCount = BASE_GOOD_CUES.concat(BASE_BAD_CUES).filter(c => dset.has(c)).length;
+  return (
+    <div style={{ ...S.card, marginTop:18 }}>
+      <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.08em", textTransform:"uppercase", color:T.muted, marginBottom:6 }}>Cue suggestions</div>
+      <div style={{ fontSize:12, color:T.muted, marginBottom:14, lineHeight:1.45 }}>
+        These appear when you pick a cue while adding a habit. Add your own, or remove any you'll never use — ✕ hides it, ＋ brings it back.{removedCount > 0 ? ` (${removedCount} hidden)` : ""}
+      </div>
+
+      {/* Add your own cue */}
+      <div style={{ fontSize:11.5, fontWeight:800, color:T.text2, marginBottom:8 }}>Add a cue</div>
+      <div style={{ display:"flex", gap:8, marginBottom:8 }}>
+        <input value={draft} onChange={e=>setDraft(e.target.value)}
+          onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); addCustom(); } }}
+          placeholder="e.g. After I water the plants" maxLength={60} aria-label="New cue"
+          style={{ ...S.input, marginTop:0, flex:1, minWidth:0 }} />
+        <button type="button" onClick={addCustom} disabled={!draft.trim()}
+          style={{ flexShrink:0, padding:"0 16px", borderRadius:10, border:"none", background: draft.trim() ? T.primary : T.surf2, color: draft.trim() ? "#fff" : T.muted, fontSize:14, fontWeight:800, cursor: draft.trim() ? "pointer" : "default", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>Add</button>
+      </div>
+      {custom.length > 0 && (
+        <div style={{ display:"flex", flexWrap:"wrap", gap:7, marginBottom:14 }}>
+          {custom.map(c => (
+            <span key={c} style={{ display:"inline-flex", alignItems:"center", borderRadius:20, border:`1px solid ${T.primary}55`, background:T.primary + "10", overflow:"hidden" }}>
+              <span style={{ padding:"5px 3px 5px 11px", fontSize:12, fontWeight:700, color:T.primary }}>{c}</span>
+              <button type="button" onClick={() => removeCustom(c)} aria-label={`Delete your cue "${c}"`}
+                style={{ padding:"5px 9px 5px 4px", fontSize:14, lineHeight:1, color:T.primary, background:"transparent", border:"none", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {groups.map(g => (
+        <div key={g.title} style={{ marginBottom:12 }}>
+          <div style={{ fontSize:11.5, fontWeight:800, color:T.text2, marginBottom:8 }}>{g.title}</div>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:7 }}>
+            {g.cues.map(c => {
+              const off = dset.has(c);
+              return (
+                <span key={c} style={{ display:"inline-flex", alignItems:"center", borderRadius:20, border:`1px solid ${off ? T.surf2 : T.border}`, background: off ? T.surf2 : T.surface, opacity: off ? 0.65 : 1, overflow:"hidden" }}>
+                  <span style={{ padding:"5px 3px 5px 11px", fontSize:12, fontWeight:700, color: off ? T.muted : T.text2, textDecoration: off ? "line-through" : "none" }}>{c}</span>
+                  {off
+                    ? <button type="button" onClick={() => restore(c)} aria-label={`Restore the cue "${c}"`} style={{ padding:"5px 10px 5px 4px", fontSize:15, lineHeight:1, fontWeight:800, color:T.primary, background:"transparent", border:"none", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>＋</button>
+                    : <button type="button" onClick={() => dismiss(c)} aria-label={`Remove the cue "${c}" from suggestions`} style={{ padding:"5px 9px 5px 4px", fontSize:14, lineHeight:1, color:T.muted, background:"transparent", border:"none", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>×</button>}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const ManageView = memo(function ManageView({ identities, onAddHabit, onEditHabit, onDeleteHabit, onAddIdentity, onEditIdentity, onDeleteIdentity, userName, userEmail, onSignOut, notifStatus, notifBusy, onEnableReminders }) {
   return (
     <div style={S.content}>
@@ -2536,6 +2630,8 @@ const ManageView = memo(function ManageView({ identities, onAddHabit, onEditHabi
       ))}
 
       <button onClick={onAddIdentity} style={S.addIdentityBtn}>+ Add New Identity</button>
+
+      <CueSettings />
 
       {/* Account & settings — sign out + reminders live here, keeping the header clean */}
       <div style={{ ...S.card, marginTop:18 }}>
