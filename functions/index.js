@@ -86,29 +86,26 @@ exports.sendHabitReminders = onSchedule(
           const breaking = habit.kind === "bad";
           const label = String(habit.label || "your habit").trim();
           const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
-          // Title = the action itself, so the notification says exactly what to do.
-          const title = breaking ? `Don't ${lower(label)}` : cap(label);
-          // Body = the cue (when/where) + the identity payoff, so every reminder
-          // says both "do this now" and "this is a vote for who you're becoming".
           const idName = String(identity.label || "who you're becoming").trim();
-          const when = [habit.time, habit.location].filter(Boolean).join(" · ");
           const cue  = habit.trigger ? `After ${lower(habit.trigger)}` : "";
-          const lead = [cue, when].filter(Boolean).join(" · ");
-          // Environment design: if an easy-prep tweak is set, surface it so the reminder
-          // helps the user set the scene, not just remember the task.
-          const prep = habit.easy ? `Prep: ${lower(habit.easy)}` : "";
-          let body;
+          let title, body;
           if (breaking) {
-            body = habit.starter
-              ? `If tempted: ${habit.starter} — one vote for ${idName}.`
-              : `Let the urge pass — one vote for ${idName}.`;
+            // Breaking a habit = Make it INVISIBLE: never name the temptation in the
+            // push (that just re-cues it). Lead with the identity; point to the
+            // replacement action, not the thing to resist.
+            title = `A vote for ${idName}`;
+            body  = habit.starter
+              ? `If tempted: ${habit.starter}.`
+              : `Let the urge pass — you've got this.`;
           } else {
-            const vote = `a vote for ${idName}`;
-            body = [lead, prep].filter(Boolean).join(" · ")
-              ? `${[lead, prep].filter(Boolean).join(" · ")} · ${vote}`
+            // Make it Attractive: lead with the reason to act (the identity vote) so
+            // it survives lock-screen truncation; keep only the cue, drop the rest.
+            title = cap(label);
+            body  = cue
+              ? `A vote for ${idName} · ${cue}`
               : habit.starter
-                ? `Just 2 minutes: ${habit.starter} · ${vote}`
-                : `Show up today — ${vote}.`;
+                ? `A vote for ${idName} · Just 2 min: ${habit.starter}`
+                : `A vote for ${idName} — show up today.`;
           }
 
           try {
