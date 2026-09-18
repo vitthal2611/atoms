@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo, useId, memo, Fragment } from "react";
 import { createPortal } from "react-dom";
 import { initializeApp, getApps } from "firebase/app";
-import { getFirestore, initializeFirestore, doc, getDoc, setDoc } from "firebase/firestore";
+import { getFirestore, initializeFirestore, doc, getDoc, setDoc, collection, query, where, getCountFromServer } from "firebase/firestore";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "firebase/auth";
 import { getMessaging, getToken, isSupported } from "firebase/messaging";
 
@@ -35,6 +35,16 @@ function dailyTasksRef(uid)  { return doc(_db, "users", uid, "atomicHabits", "da
 function habitNotesRef(uid)  { return doc(_db, "users", uid, "atomicHabits", "habitNotes"); }
 function reviewsRef(uid)     { return doc(_db, "users", uid, "atomicHabits", "reviews"); }
 function settingsRef(uid)    { return doc(_db, "users", uid, "atomicHabits", "settings"); }
+// Tribe (anonymous aggregate): one cohort per identity, keyed by its normalized
+// label. A member doc stores ONLY an opaque uid → last-vote date — no names/emails.
+function cohortKey(identityLabel) {
+  return (identityLabel || "")
+    .toLowerCase()
+    .replace(/^i am (a |an |the )?/, "").replace(/^(a |an |the )/, "")
+    .trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "unnamed";
+}
+function cohortMembersCol(key) { return collection(_db, "cohorts", key, "members"); }
+function cohortMemberRef(key, uid) { return doc(_db, "cohorts", key, "members", uid); }
 // A stable per-device id so re-enabling on the same device updates one doc
 // (rather than piling up dead tokens). Tokens live in a per-user subcollection
 // so EVERY device the user enables receives reminders, not just the last one.
@@ -1407,7 +1417,7 @@ export default function App() {
           if (stSnap.exists()) {
             const raw = stSnap.data().data || {};
             isFirstSt.current = true;
-            setCueSettings({ custom: raw.custom || [], dismissed: raw.dismissed || [], scorecard: raw.scorecard || [] });
+            setCueSettings({ custom: raw.custom || [], dismissed: raw.dismissed || [], scorecard: raw.scorecard || [], tribe: !!raw.tribe });
           } else {
             const lsCustom = loadCustomCues();
             const lsDismissed = loadDismissedCues();
@@ -1516,6 +1526,24 @@ export default function App() {
         .finally(() => setSyncing(false));
     }, 500);
   }, [cueSettings, user]);
+
+  // Tribe (anonymous): when opted in, publish only "I showed up today" (an opaque
+  // uid → today's date) to each identity's cohort. Writes once per cohort per day.
+  const cohortWrittenRef = useRef({});
+  useEffect(() => {
+    if (!user || !hasLoadedRef.current || !cueSettings.tribe) return;
+    const today = getTodayKey();
+    for (const idn of identities) {
+      const votedToday = (idn.habits || []).some(h => (data[today] || {})[h.id] === true);
+      if (!votedToday) continue;
+      const key = cohortKey(idn.label);
+      if (cohortWrittenRef.current[key] === today) continue;
+      // Mark on success only, so a failed write retries on the next render.
+      setDoc(cohortMemberRef(key, user.uid), { d: today }, { merge: true })
+        .then(() => { cohortWrittenRef.current[key] = today; })
+        .catch(() => {});
+    }
+  }, [data, identities, user, cueSettings.tribe]);
 
   // Keep the latest state handy for the unload-flush closure (which is created once).
   latestRef.current = { user, identities, data, dailyTasks, habitNotes, reviews, cueSettings };
@@ -2679,6 +2707,67 @@ function CueSettings({ settings = { custom: [], dismissed: [] }, onChange }) {
   );
 }
 
+// ─── TRIBE — anonymous aggregate social proof, one cohort per identity ─────────
+function TribeSettings({ enabled, onToggle, identities = [] }) {
+  const [counts, setCounts] = useState(null);   // { [identityId]: {today,total} | null }
+  useEffect(() => {
+    if (!enabled) { setCounts(null); return; }
+    let alive = true;
+    (async () => {
+      const today = getTodayKey();
+      const next = {};
+      for (const idn of identities) {
+        try {
+          const col = cohortMembersCol(cohortKey(idn.label));
+          const [t, a] = await Promise.all([
+            getCountFromServer(query(col, where("d", "==", today))),
+            getCountFromServer(col),
+          ]);
+          next[idn.id] = { today: t.data().count, total: a.data().count };
+        } catch { next[idn.id] = null; }
+      }
+      if (alive) setCounts(next);
+    })();
+    return () => { alive = false; };
+  }, [enabled, identities]);
+  return (
+    <div style={{ ...S.card, marginTop:18 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+        <span style={{ fontSize:18 }} aria-hidden="true">🏹</span>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:14, fontWeight:700, color:T.text }}>Tribe</div>
+          <div style={{ fontSize:12, color:T.muted, marginTop:1, lineHeight:1.4 }}>See how many people are showing up for the same identity. Anonymous — only totals, never names.</div>
+        </div>
+        <button type="button" role="switch" aria-checked={!!enabled} aria-label="Join the tribe (anonymous)" onClick={() => onToggle && onToggle()}
+          style={{ flexShrink:0, width:46, height:28, borderRadius:20, border:"none", cursor:"pointer", position:"relative", background: enabled ? T.primary : T.border, transition:"background .2s", WebkitTapHighlightColor:"transparent" }}>
+          <span aria-hidden="true" style={{ position:"absolute", top:3, left: enabled ? 21 : 3, width:22, height:22, borderRadius:"50%", background:"#fff", transition:"left .2s", boxShadow:"0 1px 3px #0003" }} />
+        </button>
+      </div>
+      {enabled && (
+        <div style={{ marginTop:13, display:"flex", flexDirection:"column", gap:10 }}>
+          {identities.length === 0 && <div style={{ fontSize:12.5, color:T.muted }}>Add an identity to join its tribe.</div>}
+          {identities.map(idn => {
+            const c = counts && counts[idn.id];
+            return (
+              <div key={idn.id} style={{ display:"flex", alignItems:"center", gap:9, padding:"9px 11px", background:T.surf2, borderRadius:11 }}>
+                <span aria-hidden="true" style={{ fontSize:15 }}>{idn.icon}</span>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:12.5, fontWeight:800, color:T.text }}>{shortLabel(idn.label)}</div>
+                  <div style={{ fontSize:11.5, fontWeight:700, color:T.text2, marginTop:1 }}>
+                    {counts == null ? "…" : c ? `${c.today} showed up today · cohort of ${c.total}` : "—"}
+                  </div>
+                </div>
+                {c && c.today > 0 && <span style={{ flexShrink:0, fontSize:11, fontWeight:800, color:"#fff", background:idn.color, borderRadius:20, padding:"3px 9px" }}>you're in</span>}
+              </div>
+            );
+          })}
+          <div style={{ fontSize:11, color:T.muted, lineHeight:1.45 }}>You join a cohort by checking in — the app shares only that you showed up today, tied to an anonymous id.</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── INTEGRITY REPORT — this month's votes per identity (deliberate review) ────
 function MonthReport({ identities, allData = {} }) {
   const monthKey = getTodayKey().slice(0, 7);
@@ -2784,6 +2873,12 @@ const ManageView = memo(function ManageView({ identities, allData, onAddHabit, o
       <button onClick={onAddIdentity} style={S.addIdentityBtn}>+ Add New Identity</button>
 
       <MonthReport identities={identities} allData={allData} />
+
+      <TribeSettings
+        enabled={!!(cueSettings && cueSettings.tribe)}
+        onToggle={() => onChangeCueSettings && onChangeCueSettings(prev => ({ ...(prev || {}), tribe: !(prev && prev.tribe) }))}
+        identities={identities}
+      />
 
       <ScorecardSettings settings={cueSettings} onChange={onChangeCueSettings} />
 
