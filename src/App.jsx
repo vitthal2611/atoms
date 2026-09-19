@@ -3772,23 +3772,15 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
                   ? <span style={{ color:T.text2 }}>{habit.attractive}</span>
                   : <AddHint label={breaking ? "Add the real cost" : "Add why it's attractive"} /> },
               { icon:"bolt", name:"Response", color:"#0F6E56",
-                content: (<>
-                  {showStarter && (breaking ? (
-                    <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, fontWeight:700, color:"#712B13", background:"#FAECE7", border:"1px solid #F5C4B3", borderRadius:20, padding:"4px 10px", maxWidth:"100%" }}>
-                      <Ic name="warn" size={13} color="#712B13" />
-                      <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>If tempted: {habit.starter}</span>
+                // Plain text like the other two laws — the 2-minute version and the
+                // easy prep, read as one line (no pill; the ring is the tap target).
+                content: (showStarter || habit.easy)
+                  ? <span style={{ color:T.text2 }}>
+                      {showStarter && <>{breaking ? "If tempted: " : "2-min: "}{habit.starter}</>}
+                      {showStarter && habit.easy ? " · " : ""}
+                      {habit.easy}
                     </span>
-                  ) : (
-                    <button onClick={() => toggle(habit.id, habit.frequency, identity)} aria-label={`Do the two-minute version: ${habit.starter}`}
-                      style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, fontWeight:700, color:"#085041", background:"#E1F5EE", border:"1px solid #9FE1CB", borderRadius:20, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", maxWidth:"100%" }}>
-                      <Ic name="clock" size={13} color="#085041" />
-                      <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>2-min: {habit.starter}</span>
-                      <Ic name="check" size={12} color="#085041" />
-                    </button>
-                  ))}
-                  {habit.easy && <span style={{ color:T.text2, marginLeft: showStarter ? 6 : 0 }}>{habit.easy}</span>}
-                  {!showStarter && !habit.easy && <AddHint label={breaking ? "Add friction" : "Add an easy start"} />}
-                </>) },
+                  : <AddHint label={breaking ? "Add friction" : "Add an easy start"} /> },
               { icon:"gift", name:"Reward", color:"#854F0B",
                 content: habit.satisfying
                   ? <span style={{ color:T.text2 }}>{breaking ? "If you slip: " : ""}{habit.satisfying}</span>
