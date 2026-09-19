@@ -4177,13 +4177,12 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
   const add = () => { const t = val.trim(); if (!t) return; onAdd(dateKey, t); setVal(""); };
   const saveEdit = () => { const t = editVal.trim(); if (t) onEdit(dateKey, editingId, t); setEditingId(null); };
 
-  // One task row: a numbered "hero" row inside the Big 3 (num = 1..3), or a plain
-  // backlog row (num = null). Tapping the text opens inline edit; the star picks
-  // the task into the Big 3.
-  const taskRow = (t, num) => {
+  // One task row — the same plain style whether it's in the Big 3 or the backlog;
+  // the star (filled vs outline) is what marks a Big 3 pick. Tapping the text edits.
+  const taskRow = (t) => {
     if (editingId === t.id) {
       return (
-        <div key={t.id} style={{ display:"flex", alignItems:"center", gap:7, padding:"7px 2px", marginBottom: num ? 8 : 0, borderTop: num ? "none" : `1px solid ${T.surf2}` }}>
+        <div key={t.id} style={{ display:"flex", alignItems:"center", gap:7, padding:"7px 2px", borderTop:`1px solid ${T.surf2}` }}>
           <input autoFocus value={editVal} onChange={e=>setEditVal(e.target.value)}
             onKeyDown={e=>{ if(e.key==="Enter") saveEdit(); if(e.key==="Escape") setEditingId(null); }} maxLength={80} aria-label="Edit task"
             style={{ flex:1, minWidth:0, border:`1px solid ${T.border2}`, borderRadius:8, background:T.surface, fontSize:16, color:T.text, outline:"none", fontFamily:"inherit", padding:"6px 9px" }} />
@@ -4193,10 +4192,7 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
       );
     }
     return (
-      <div key={t.id} style={ num
-        ? { display:"flex", alignItems:"center", gap:11, background:T.primary+"12", borderRadius:10, padding:"11px 12px", marginBottom:8 }
-        : { display:"flex", alignItems:"center", gap:11, padding:"9px 2px", borderTop:`1px solid ${T.surf2}` } }>
-        {num && <span aria-hidden="true" style={{ flexShrink:0, width:20, height:20, borderRadius:"50%", background:T.primary, color:"#fff", fontSize:11, fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center" }}>{num}</span>}
+      <div key={t.id} style={{ display:"flex", alignItems:"center", gap:11, padding:"9px 2px", borderTop:`1px solid ${T.surf2}` }}>
         <button onClick={()=>onToggle(dateKey, t.id)} aria-label={`Complete: ${t.text}`}
           style={{ width:19, height:19, borderRadius:"50%", flexShrink:0, boxSizing:"border-box", border:`2px solid ${T.primary}`, background:"transparent", cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent" }} />
         <span onClick={()=>{ if(editable){ setEditingId(t.id); setEditVal(t.text); } }}
@@ -4232,8 +4228,8 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
         </div>
       </div>
 
-      {/* The Big 3 — the tasks you starred, as numbered hero rows */}
-      {big3.map((t, i) => taskRow(t, i + 1))}
+      {/* The Big 3 — the tasks you starred */}
+      {big3.map((t) => taskRow(t))}
 
       {/* No picks yet — prompt to star up to three tasks below */}
       {big3.length === 0 && open.length > 0 && (
@@ -4267,7 +4263,7 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
               <span aria-hidden="true">{restOpen ? "▴" : "▾"}</span>
             </button>
           )}
-          {(restOpen || big3.length === 0) && rest.map(t => taskRow(t, null))}
+          {(restOpen || big3.length === 0) && rest.map(t => taskRow(t))}
         </>
       )}
 
