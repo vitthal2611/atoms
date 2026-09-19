@@ -4202,14 +4202,14 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onSetPriority,
     }
     return (
       <div key={t.id} style={ num
-        ? { display:"flex", alignItems:"center", gap:11, background:G.tagBg, borderRadius:10, padding:"11px 12px", marginBottom:8 }
+        ? { display:"flex", alignItems:"center", gap:11, background:T.primary+"12", borderRadius:10, padding:"11px 12px", marginBottom:8 }
         : { display:"flex", alignItems:"center", gap:11, padding:"9px 2px", borderTop:`1px solid ${T.surf2}` } }>
-        {num && <span aria-hidden="true" style={{ flexShrink:0, width:20, height:20, borderRadius:"50%", background:G.ring, color:"#fff", fontSize:11, fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center" }}>{num}</span>}
+        {num && <span aria-hidden="true" style={{ flexShrink:0, width:20, height:20, borderRadius:"50%", background:T.primary, color:"#fff", fontSize:11, fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center" }}>{num}</span>}
         <button onClick={()=>onToggle(dateKey, t.id)} aria-label={`Complete: ${t.text}`}
           style={{ width:19, height:19, borderRadius:"50%", flexShrink:0, boxSizing:"border-box", border:`2px solid ${G.ring}`, background:"transparent", cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent" }} />
         <span onClick={()=>{ if(editable){ setEditingId(t.id); setEditVal(t.text); } }}
-          style={{ flex:1, minWidth:0, fontSize:14, fontWeight:600, color: num ? G.tagText : T.text, cursor: editable?"text":"default", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.text}</span>
-        {!num && <span aria-hidden="true" style={{ flexShrink:0, fontSize:10, fontWeight:900, color:G.tagText, background:G.tagBg, borderRadius:99, padding:"2px 8px" }}>{G.label}</span>}
+          style={{ flex:1, minWidth:0, fontSize:14, fontWeight:600, color:T.text, cursor: editable?"text":"default", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.text}</span>
+        <span aria-hidden="true" style={{ flexShrink:0, fontSize:10, fontWeight:900, color:G.tagText, background:G.tagBg, borderRadius:99, padding:"2px 8px" }}>{G.label}</span>
       </div>
     );
   };
