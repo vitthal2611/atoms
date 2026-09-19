@@ -4161,81 +4161,83 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onSetPriority,
   const [editingId, setEditingId] = useState(null);
   const [editVal, setEditVal] = useState("");
   const [doneOpen, setDoneOpen] = useState(false);
-  const [showAll, setShowAll] = useState(false);   // by default show only High priority
-  useEffect(() => { setVal(""); setEditingId(null); setShowAll(false); }, [dateKey]);
+  const [restOpen, setRestOpen] = useState(false);   // the tasks beyond the Big 3
+  useEffect(() => { setVal(""); setEditingId(null); setRestOpen(false); }, [dateKey]);
 
   const live = tasks.filter(t => !t.carried);
   const open = live.filter(t => !t.done).slice().sort(byPriority);
   const done = live.filter(t => t.done);
-  const hiddenCount = open.filter(t => priorityOf(t) !== "high").length;   // Med + Low, hidden until "show all"
+  const big3 = open.slice(0, 3);          // the day's commitment — top 3 by priority
+  const rest = open.slice(3);             // everything else, collapsed under "view all"
+  const pct  = live.length ? done.length / live.length : 0;
+  const RC   = 2 * Math.PI * 18;          // ring circumference (r = 18)
   const add = () => { const t = val.trim(); if (!t) return; onAdd(dateKey, t, pri); setVal(""); };
   const saveEdit = () => { const t = editVal.trim(); if (t) onEdit(dateKey, editingId, t); setEditingId(null); };
 
+  // One task row: a numbered "hero" row inside the Big 3 (num = 1..3), or a plain
+  // row in the "view all" list (num = null). Tapping the text opens inline edit,
+  // where priority (H·M·L) and delete live — keeping the rows themselves clean.
+  const taskRow = (t, num) => {
+    const G = PRIORITIES[priorityOf(t)];
+    if (editingId === t.id) {
+      return (
+        <div key={t.id} style={{ display:"flex", alignItems:"center", gap:7, padding:"7px 2px", marginBottom: num ? 8 : 0, borderTop: num ? "none" : `1px solid ${T.surf2}` }}>
+          <input autoFocus value={editVal} onChange={e=>setEditVal(e.target.value)}
+            onKeyDown={e=>{ if(e.key==="Enter") saveEdit(); if(e.key==="Escape") setEditingId(null); }} maxLength={80} aria-label="Edit task"
+            style={{ flex:1, minWidth:0, border:`1px solid ${T.border2}`, borderRadius:8, background:T.surface, fontSize:16, color:T.text, outline:"none", fontFamily:"inherit", padding:"6px 9px" }} />
+          <span style={{ display:"inline-flex", flexShrink:0, border:`1px solid ${T.border}`, borderRadius:8, overflow:"hidden" }} role="group" aria-label="Set priority">
+            {PRIORITY_ORDER.map((pk, i) => {
+              const P = PRIORITIES[pk]; const on = priorityOf(t) === pk;
+              return (
+                <button key={pk} type="button" onClick={()=>onSetPriority(dateKey, t.id, pk)} aria-pressed={on} aria-label={`${P.label} priority`}
+                  style={{ fontSize:10, fontWeight:900, padding:"7px 9px", border:"none", borderLeft: i ? `1px solid ${T.border}` : "none", lineHeight:1, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", background: on ? P.tagBg : "#fff", color: on ? P.tagText : T.muted }}>
+                  {P.label.charAt(0)}
+                </button>
+              );
+            })}
+          </span>
+          <button onClick={()=>{ onDelete(dateKey, t.id); setEditingId(null); }} aria-label="Delete task" style={{ background:"transparent", border:"none", cursor:"pointer", padding:"5px", WebkitTapHighlightColor:"transparent" }}><Ic name="trash" size={16} color={T.red} /></button>
+        </div>
+      );
+    }
+    return (
+      <div key={t.id} style={ num
+        ? { display:"flex", alignItems:"center", gap:11, background:G.tagBg, borderRadius:10, padding:"11px 12px", marginBottom:8 }
+        : { display:"flex", alignItems:"center", gap:11, padding:"9px 2px", borderTop:`1px solid ${T.surf2}` } }>
+        {num && <span aria-hidden="true" style={{ flexShrink:0, width:20, height:20, borderRadius:"50%", background:G.ring, color:"#fff", fontSize:11, fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center" }}>{num}</span>}
+        <button onClick={()=>onToggle(dateKey, t.id)} aria-label={`Complete: ${t.text}`}
+          style={{ width:19, height:19, borderRadius:"50%", flexShrink:0, boxSizing:"border-box", border:`2px solid ${G.ring}`, background:"transparent", cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent" }} />
+        <span onClick={()=>{ if(editable){ setEditingId(t.id); setEditVal(t.text); } }}
+          style={{ flex:1, minWidth:0, fontSize:14, fontWeight:600, color: num ? G.tagText : T.text, cursor: editable?"text":"default", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.text}</span>
+        {!num && <span aria-hidden="true" style={{ flexShrink:0, fontSize:10, fontWeight:900, color:G.tagText, background:G.tagBg, borderRadius:99, padding:"2px 8px" }}>{G.label}</span>}
+      </div>
+    );
+  };
+
   return (
     <div>
-      {/* Header — title + done/total count */}
-      <div style={{ position:"relative", display:"flex", alignItems:"center", justifyContent:"center", marginBottom:12, minHeight:22 }}>
-        <span style={{ fontSize:12, fontWeight:800, letterSpacing:"0.08em", textTransform:"uppercase", color:T.text2 }}>Today's Focus</span>
-        {live.length > 0 && (
-          <span aria-label={`${done.length} of ${live.length} tasks done`} style={{ position:"absolute", right:0, fontSize:12, fontWeight:800, color:T.primary, background:T.primary+"18", borderRadius:20, padding:"2px 9px", fontVariantNumeric:"tabular-nums" }}>
-            {done.length}/{live.length}
-          </span>
-        )}
+      {/* Header — a progress ring + the Big 3 framing */}
+      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:14 }}>
+        <div style={{ position:"relative", width:44, height:44, flexShrink:0 }}>
+          <svg width={44} height={44} viewBox="0 0 44 44" aria-hidden="true">
+            <circle cx={22} cy={22} r={18} fill="none" stroke={T.surf2} strokeWidth={4} />
+            {done.length > 0 && (
+              <circle cx={22} cy={22} r={18} fill="none" stroke={T.primary} strokeWidth={4}
+                strokeDasharray={`${pct * RC} ${RC}`} strokeLinecap="round" transform="rotate(-90 22 22)" style={{ transition:"stroke-dasharray 0.4s ease" }} />
+            )}
+          </svg>
+          <span aria-label={`${done.length} of ${live.length} tasks done`} style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:800, color:T.primary, fontVariantNumeric:"tabular-nums" }}>{done.length}/{live.length}</span>
+        </div>
+        <div style={{ minWidth:0 }}>
+          <div style={{ fontSize:15, fontWeight:800, color:T.text, letterSpacing:"-0.01em" }}>Your Big 3 today</div>
+          <div style={{ fontSize:12, color:T.text2, marginTop:1 }}>The work that actually matters</div>
+        </div>
       </div>
 
+      {/* The Big 3 — the top three open tasks by priority, as numbered hero rows */}
+      {big3.map((t, i) => taskRow(t, i + 1))}
 
-      {/* Open tasks grouped under HIGH / MED / LOW — empty groups are hidden.
-          By default only High shows; Med/Low reveal via "show more" below. */}
-      {PRIORITY_ORDER.map(gk => {
-        const group = open.filter(t => priorityOf(t) === gk);
-        if (group.length === 0) return null;
-        if (!showAll && gk !== "high") return null;
-        const G = PRIORITIES[gk];
-        return (
-          <div key={gk}>
-            <div style={{ display:"flex", alignItems:"center", gap:7, padding:"9px 2px 4px" }}>
-              <span aria-hidden="true" style={{ width:8, height:8, borderRadius:3, background:G.ring }} />
-              <span style={{ fontSize:10, fontWeight:900, letterSpacing:"0.06em", color:G.tagText }}>{G.label.toUpperCase()}</span>
-              <span style={{ fontSize:10, fontWeight:800, color:T.muted, background:T.surf2, borderRadius:20, padding:"1px 7px" }}>{group.length}</span>
-            </div>
-            {group.map(t => (
-              editingId === t.id ? (
-                <div key={t.id} style={{ display:"flex", alignItems:"center", gap:7, padding:"7px 2px", borderTop:`1px solid ${T.surf2}` }}>
-                  <input autoFocus value={editVal} onChange={e=>setEditVal(e.target.value)}
-                    onKeyDown={e=>{ if(e.key==="Enter") saveEdit(); if(e.key==="Escape") setEditingId(null); }} maxLength={80} aria-label="Edit task"
-                    style={{ flex:1, minWidth:0, border:`1px solid ${T.border2}`, borderRadius:8, background:T.surface, fontSize:16, color:T.text, outline:"none", fontFamily:"inherit", padding:"6px 9px" }} />
-                  <button onClick={saveEdit} style={{ background:T.primary, border:"none", borderRadius:8, color:"#fff", fontSize:12, fontWeight:700, padding:"7px 11px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>Save</button>
-                  <button onClick={()=>{ onDelete(dateKey, t.id); setEditingId(null); }} aria-label="Delete task" style={{ background:"transparent", border:"none", cursor:"pointer", padding:"5px", WebkitTapHighlightColor:"transparent" }}><Ic name="trash" size={16} color={T.red} /></button>
-                </div>
-              ) : (
-                <div key={t.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 2px", borderTop:`1px solid ${T.surf2}` }}>
-                  <button onClick={()=>onToggle(dateKey, t.id)} aria-label={`Complete: ${t.text}`}
-                    style={{ width:19, height:19, borderRadius:"50%", flexShrink:0, boxSizing:"border-box", border:`2px solid ${G.ring}`, background:"transparent", cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent" }} />
-                  <span onClick={()=>{ if(editable){ setEditingId(t.id); setEditVal(t.text); } }}
-                    style={{ flex:1, minWidth:0, fontSize:14, fontWeight:600, color:T.text, cursor: editable?"text":"default", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.text}</span>
-                  {/* One-tap priority switch — moves the task to that group */}
-                  <span style={{ display:"inline-flex", flexShrink:0, border:`1px solid ${T.border}`, borderRadius:8, overflow:"hidden" }} role="group" aria-label="Set priority">
-                    {PRIORITY_ORDER.map((pk, i) => {
-                      const P = PRIORITIES[pk]; const on = gk === pk;
-                      return (
-                        <button key={pk} type="button" onClick={()=>{ if(editable && !on) onSetPriority(dateKey, t.id, pk); }} aria-pressed={on} aria-label={`${P.label} priority`}
-                          style={{ fontSize:10, fontWeight:900, padding:"7px 10px", border:"none", borderLeft: i ? `1px solid ${T.border}` : "none", lineHeight:1,
-                            cursor: editable ? "pointer" : "default", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
-                            background: on ? P.tagBg : "#fff", color: on ? P.tagText : T.muted }}>
-                          {P.label.charAt(0)}
-                        </button>
-                      );
-                    })}
-                  </span>
-                </div>
-              )
-            ))}
-          </div>
-        );
-      })}
-
-      {/* Add a task — text + High/Med/Low + add. Sits just below the list, above
-          the show-more toggle, so adding is right where the tasks are. */}
+      {/* Add a task — text + High/Med/Low + add. Sits just below the Big 3. */}
       {editable && (
         <div style={{ display:"flex", alignItems:"center", gap:8, background:T.bg, borderRadius:12, padding:"5px 6px 5px 12px", marginTop:(open.length||done.length)?10:2 }}>
           <input value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter") add(); if(e.key==="Escape") setVal(""); }}
@@ -4260,13 +4262,16 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onSetPriority,
         </div>
       )}
 
-      {/* Show-more toggle — Med/Low stay hidden until the user expands them */}
-      {hiddenCount > 0 && (
-        <button type="button" onClick={() => setShowAll(s => !s)} aria-expanded={showAll}
-          style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, width:"100%", marginTop:8, padding:"9px", background:"transparent", border:"none", cursor:"pointer", fontFamily:"inherit", fontSize:12, fontWeight:800, color:T.primary, WebkitTapHighlightColor:"transparent" }}>
-          {showAll ? "Show less" : `Show ${hiddenCount} more`}
-          <span aria-hidden="true">{showAll ? "▴" : "▾"}</span>
-        </button>
+      {/* Everything beyond the Big 3 — collapsed under "view all" */}
+      {rest.length > 0 && (
+        <>
+          <button type="button" onClick={() => setRestOpen(s => !s)} aria-expanded={restOpen}
+            style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, width:"100%", marginTop:8, padding:"9px", background:"transparent", border:"none", cursor:"pointer", fontFamily:"inherit", fontSize:12, fontWeight:800, color:T.primary, WebkitTapHighlightColor:"transparent" }}>
+            {restOpen ? "Show less" : `${rest.length} more task${rest.length > 1 ? "s" : ""}`}
+            <span aria-hidden="true">{restOpen ? "▴" : "▾"}</span>
+          </button>
+          {restOpen && rest.map(t => taskRow(t, null))}
+        </>
       )}
 
       {open.length === 0 && done.length === 0 && (
