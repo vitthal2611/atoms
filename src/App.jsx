@@ -821,7 +821,7 @@ function saveCustomCues(list) {
 }
 
 // ─── HABIT FORM ───────────────────────────────────────────────────────────────
-function HabitForm({ initial={}, identities, cueSettings={ custom: [], dismissed: [] }, onSave, onCancel, mode="add" }) {
+function HabitForm({ initial={}, identities, cueSettings={ custom: [], dismissed: [] }, onCreateIdentity, onSave, onCancel, mode="add" }) {
   const [form, setForm] = useState({
     label:      initial.label      || "",
     trigger:    initial.trigger    || "",
@@ -842,6 +842,8 @@ function HabitForm({ initial={}, identities, cueSettings={ custom: [], dismissed
     unit:       initial.unit       || "",
   });
   const [submitted, setSubmitted] = useState(false);
+  const [addingIdentity, setAddingIdentity] = useState(false);
+  const [newIdentityLabel, setNewIdentityLabel] = useState("");
   // Keep creation easy (make it easy): the Four-Laws refinements + stake start
   // collapsed for new habits; open when editing one that already has them.
   const [advancedOpen, setAdvancedOpen] = useState(() =>
@@ -967,12 +969,38 @@ function HabitForm({ initial={}, identities, cueSettings={ custom: [], dismissed
         ))}
       </div>
 
-      {/* Identity anchor — who you're becoming (foundation of every check) */}
+      {/* Identity anchor — who you're becoming (foundation of every check).
+          If the right identity isn't listed, "＋ Add a new identity…" creates one
+          inline (no need to leave the habit form). */}
       <label htmlFor={ids.identityId} style={{ ...S.fieldLabel, marginTop:16 }}>You're becoming</label>
-      <select id={ids.identityId} style={S.input} value={form.identityId} onChange={e=>set("identityId",e.target.value)}>
+      <select id={ids.identityId} style={S.input} value={addingIdentity ? "__new__" : form.identityId}
+        onChange={e => {
+          if (e.target.value === "__new__") { if (onCreateIdentity) setAddingIdentity(true); }
+          else { setAddingIdentity(false); set("identityId", e.target.value); }
+        }}>
         {identities.map(i=><option key={i.id} value={i.id}>{i.icon} {i.label}</option>)}
+        {onCreateIdentity && <option value="__new__">＋ Add a new identity…</option>}
       </select>
-      <div style={{ fontSize:12, color:T.muted, fontStyle:"italic", marginTop:6 }}>{breaking ? "Every clean day is a vote for this person." : "Every check is a vote for this person."}</div>
+      {addingIdentity ? (
+        <div style={{ marginTop:8, background:T.surf2, border:`1px solid ${T.border}`, borderRadius:10, padding:"10px 11px" }}>
+          <div style={{ fontSize:11, fontWeight:800, color:T.text2, marginBottom:6 }}>New identity — who does this habit make you?</div>
+          <input value={newIdentityLabel} onChange={e=>setNewIdentityLabel(e.target.value)}
+            onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault();
+              const id = onCreateIdentity(newIdentityLabel); if(id){ set("identityId", id); setAddingIdentity(false); setNewIdentityLabel(""); } } }}
+            placeholder="e.g. a lifelong learner" maxLength={60} autoFocus aria-label="New identity name"
+            style={{ ...S.input, marginTop:0 }} />
+          <div style={{ fontSize:10.5, color:T.muted, marginTop:5, lineHeight:1.4 }}>Present tense — reads as <b style={{color:T.text2}}>"I am {newIdentityLabel.trim() ? shortLabel(newIdentityLabel.trim()) : "…"}"</b>.</div>
+          <div style={{ display:"flex", gap:8, marginTop:9 }}>
+            <button type="button" onClick={() => { const id = onCreateIdentity(newIdentityLabel); if(id){ set("identityId", id); setAddingIdentity(false); setNewIdentityLabel(""); } }}
+              disabled={!newIdentityLabel.trim()}
+              style={{ flex:1, padding:"9px", borderRadius:9, border:"none", background: newIdentityLabel.trim() ? T.primary : T.border, color:"#fff", fontSize:13, fontWeight:800, cursor: newIdentityLabel.trim() ? "pointer" : "default", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>Create &amp; use</button>
+            <button type="button" onClick={() => { setAddingIdentity(false); setNewIdentityLabel(""); }}
+              style={{ flex:"none", padding:"9px 14px", borderRadius:9, border:`1px solid ${T.border}`, background:"transparent", color:T.text2, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ fontSize:12, color:T.muted, fontStyle:"italic", marginTop:6 }}>{breaking ? "Every clean day is a vote for this person." : "Every check is a vote for this person."}</div>
+      )}
 
       {/* The habit + the minimum-effort lever */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginTop:18 }}>
@@ -2209,6 +2237,18 @@ export default function App() {
     else setModal(null);
   };
 
+  // Create an identity inline (from the habit form's dropdown) and return its id,
+  // without touching modals — so the user can add a missing identity in-place.
+  // Plain function (NOT a hook) — it lives after the `if (!user)` early return.
+  const createIdentityInline = (label) => {
+    const clean = (label || "").trim().slice(0, 60);
+    if (!clean) return null;
+    const colorIdx = identities.length % IDENTITY_COLORS.length;
+    const newId = uid();
+    setIdentities(prev => [...prev, { id: newId, label: clean, icon: "🎯", color: IDENTITY_COLORS[colorIdx], colorDim: IDENTITY_DIMS[colorIdx], habits: [] }]);
+    return newId;
+  };
+
   const updateIdentity = ({ label, icon, colorIdx }) => {
     const { identityId } = modalCtx;
     const color    = IDENTITY_COLORS[colorIdx];
@@ -2299,7 +2339,7 @@ export default function App() {
         <Modal title="Add New Habit" onClose={()=>setModal(null)}>
           <HabitForm
             initial={modalCtx?.defaultIdentityId ? { identityId: modalCtx.defaultIdentityId } : {}}
-            identities={identities} cueSettings={cueSettings} onSave={addHabit} onCancel={()=>setModal(null)} mode="add" />
+            identities={identities} cueSettings={cueSettings} onCreateIdentity={createIdentityInline} onSave={addHabit} onCancel={()=>setModal(null)} mode="add" />
         </Modal>
       )}
       {modal==="editHabit" && modalCtx && (
