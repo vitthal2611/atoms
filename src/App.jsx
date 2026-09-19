@@ -1642,6 +1642,8 @@ export default function App() {
 
   // ── Toggle — must be before early returns ──
   const toggle = useCallback((habitId, frequency, identity) => {
+    // No checking in ahead of today — future days are a read-only preview.
+    if (selectedDate > getTodayKey()) return;
     // Read the committed data up front (a ref, always current) — do NOT compute
     // totals inside the setData updater; React may not run it synchronously.
     const cur = dataRef.current;
@@ -1679,6 +1681,7 @@ export default function App() {
   // once the target is reached keeps every done-check (streak/votes/%/calendar)
   // working unchanged; partial progress is stored as a plain number. ──
   const adjustCount = useCallback((habitId, target, delta) => {
+    if (selectedDate > getTodayKey()) return;   // future days are read-only
     const t = Math.max(1, Math.round(target || 1));
     const cur = dataRef.current[selectedDate]?.[habitId];
     const before = cur === true ? t : (typeof cur === "number" ? cur : 0);
@@ -1713,6 +1716,7 @@ export default function App() {
   // ── Mark a habit as missed (tap again to clear) — "miss" breaks the streak
   // and feeds the never-miss-twice warning the next day ──
   const markMiss = useCallback((habitId) => {
+    if (selectedDate > getTodayKey()) return;   // future days are read-only
     setData(prev => {
       const day = prev[selectedDate] || {};
       const next = { ...day };
@@ -2991,7 +2995,7 @@ const Ic = ({ name, size = 13, color = "currentColor", fill = "none", style }) =
 // ─── RING CHECKBOX — the circle IS the milestone bar ──────────────────────────
 // Pending: ring fills with streak/next-milestone progress in the identity color.
 // Checked: solid disc with a check. Missed: red-tinted ring with an x.
-function HabitRing({ checked, missed, color, streak, next, onClick, label, size = 28, active = false }) {
+function HabitRing({ checked, missed, color, streak, next, onClick, label, size = 28, active = false, readOnly = false }) {
   const r = (size / 2) - 2;
   const c = 2 * Math.PI * r;
   const pct = next ? Math.min(1, streak / next.days) : (streak > 0 ? 1 : 0);
@@ -3002,10 +3006,11 @@ function HabitRing({ checked, missed, color, streak, next, onClick, label, size 
       className={"habit-toggle" + (pending && active ? " ring-active" : "")}
       onClick={onClick}
       aria-pressed={checked}
-      aria-label={label}
+      aria-label={readOnly ? `Upcoming: ${label}` : label}
+      aria-disabled={readOnly || undefined}
       style={{
         width: size, height: size, flexShrink: 0, background: "transparent",
-        border: "none", padding: 0, cursor: "pointer",
+        border: "none", padding: 0, cursor: readOnly ? "default" : "pointer",
         display: "flex", alignItems: "center", justifyContent: "center",
         WebkitTapHighlightColor: "transparent",
       }}
@@ -3018,12 +3023,14 @@ function HabitRing({ checked, missed, color, streak, next, onClick, label, size 
           </>
         ) : (
           <>
-            {/* Faint fill so the ring reads as a tappable button, not just an outline */}
-            <circle cx={mid} cy={mid} r={r} fill={missed ? "transparent" : color + "12"} />
-            <circle cx={mid} cy={mid} r={r} fill="none" stroke={missed ? T.red + "44" : T.surf2} strokeWidth="3" />
+            {/* Faint fill so the ring reads as a tappable button, not just an outline.
+                Read-only (future) days use a lighter fill and a dashed ring to read
+                as "upcoming", not "tap me". */}
+            <circle cx={mid} cy={mid} r={r} fill={missed ? "transparent" : color + (readOnly ? "0a" : "12")} />
+            <circle cx={mid} cy={mid} r={r} fill="none" stroke={missed ? T.red + "44" : T.surf2} strokeWidth="3" strokeDasharray={readOnly ? "3 3" : undefined} />
             {/* Ghost check — a faint preview of the tick so a pending ring clearly
-                invites the tap instead of reading as a disabled circle. */}
-            {!missed && (
+                invites the tap. Hidden on read-only days (nothing to tap yet). */}
+            {!missed && !readOnly && (
               <path d={`M${size*0.3} ${size*0.52}l${size*0.13} ${size*0.13} ${size*0.27} -${size*0.27}`} fill="none" stroke={color} strokeOpacity={0.4} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
             )}
             {!missed && pct > 0 && (
@@ -3391,7 +3398,7 @@ function VotesBadge({ habit, allData, votes, total, color, isBad }) {
 
 // ─── HABIT ROW ────────────────────────────────────────────────────────────────
 // One habit on the timeline: cue → action → coaching (identity header is above).
-function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, adjustCount, count = 0, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, habitOps, readyAnchor = null, active = false, stackLabels = null }) {
+function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, adjustCount, count = 0, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, habitOps, readyAnchor = null, active = false, stackLabels = null, readOnly = false }) {
   const next = getNextMilestone(streak);
   // Environment prep tick (Law 3) — a per-day, per-device convenience in localStorage.
   const [prepped, setPrepped] = useState(() => { try { return localStorage.getItem(`atoms:prep:${habit.id}:${getTodayKey()}`) === "1"; } catch { return false; } });
@@ -3402,6 +3409,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
   // Tapping the ring/action: quantity habits add one (or undo to zero when done);
   // simple habits just toggle done.
   const activate = () => {
+    if (readOnly) return;   // future day — preview only, no check-ins
     const wasChecked = checked;
     if (isQty && adjustCount) { adjustCount(habit.id, target, checked ? -target : 1); return; }
     // One tap = the vote, always (Atomic Habits: make it easy — showing up counts).
@@ -3484,7 +3492,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           </div>
         )}
         {/* Environment design (Law 3) — make the prep an actionable, visible cue. */}
-        {!checked && !missed && !breaking && habit.easy && (
+        {!checked && !missed && !breaking && habit.easy && !readOnly && (
           <button type="button" onClick={() => { const v = !prepped; setPrepped(v); try { localStorage.setItem(`atoms:prep:${habit.id}:${getTodayKey()}`, v ? "1" : "0"); } catch {} }}
             aria-pressed={prepped} aria-label={prepped ? "Prepped — tap to undo" : `Mark prepped: ${habit.easy}`}
             style={{ display:"flex", alignItems:"center", gap:7, width:"100%", textAlign:"left", marginBottom:8, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
@@ -3536,7 +3544,8 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
                 streak={streak}
                 next={next}
                 size={44}
-                active={active}
+                active={active && !readOnly}
+                readOnly={readOnly}
                 onClick={activate}
                 label={checked ? `Uncheck: ${habit.label}` : (breaking ? `Mark clean: ${habit.label}` : `Check: ${habit.label}`)}
               />
@@ -3548,7 +3557,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             tabIndex={0}
             onKeyDown={e => { if (e.key === "Enter") activate(); }}
             aria-label={isQty && !checked ? `Add one for ${habit.label}` : checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
-            style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
+            style={{ flex: 1, minWidth: 0, cursor: readOnly ? "default" : "pointer" }}
           >
             {!checked && !missed && cueText && (
               <div style={{ fontSize:10, fontWeight:900, letterSpacing:"0.08em", textTransform:"uppercase", color:C, marginBottom:2 }}>I will</div>
@@ -3968,7 +3977,10 @@ function DayNavigator({ selectedDate, setSelectedDate, todayKey, identities, all
   const minNavDate = useMemo(() => {
     const d = new Date(); d.setDate(d.getDate() - 90); return dateToKey(d);
   }, [todayKey]);
-  const maxNavDate = todayKey;   // no future days — can't check in ahead of today
+  // Look ahead up to 90 days to plan; future days are read-only (check-ins open on the day).
+  const maxNavDate = useMemo(() => {
+    const d = new Date(); d.setDate(d.getDate() + 90); return dateToKey(d);
+  }, [todayKey]);
 
   const isToday = selectedDate === todayKey;
   const canPrev = selectedDate > minNavDate;
@@ -4836,6 +4848,10 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
       : 0,
     [selectedDate, todayKey, scheduledHabits, missedYesterdayIds, todayData]);
 
+  // Looking ahead: future days are a read-only preview — you can see what's
+  // scheduled and plan, but check-ins only open on the day itself.
+  const isFuture = selectedDate > todayKey;
+
   // The Focus card's pill shows the live Big 3 commitment — open stars only.
   // Completed work has left the Big 3 and is counted nowhere here.
   const taskCounts = useMemo(() => {
@@ -4870,6 +4886,17 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
   return (
     <div style={S.content}>
       {/* Day Navigator now lives in the sticky header (stays pinned on scroll) */}
+
+      {/* Looking ahead — a read-only preview of an upcoming day */}
+      {isFuture && (
+        <div style={{ display:"flex", alignItems:"center", gap:11, background:T.accent+"12", border:`1px solid ${T.accent}3a`, borderRadius:14, padding:"11px 14px" }}>
+          <span aria-hidden="true" style={{ fontSize:19 }}>🔭</span>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:14, fontWeight:800, color:T.text, lineHeight:1.3 }}>Looking ahead</div>
+            <div style={{ fontSize:12, color:T.text2, marginTop:2, lineHeight:1.45 }}>Here's what's scheduled for {formatNavDate(selectedDate)}. Check-ins open on the day itself.</div>
+          </div>
+        </div>
+      )}
 
       {/* Never-miss-twice alert — habits missed yesterday and still pending today */}
       {missedWarnCount > 0 && (
@@ -4944,6 +4971,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                     becomes Law 1 in the details. Streak badge + ⋯ menu ride top-right. */}
                 <HabitRow
                   active={habit.id === firstPendingId}
+                  readOnly={isFuture}
                   stackLabels={stackLabels}
                   streakBadge={streakBadge}
                   onEdit={() => openEditHabit(identity.id, habit)}
