@@ -842,7 +842,9 @@ function HabitForm({ initial={}, identities, cueSettings={ custom: [], dismissed
     unit:       initial.unit       || "",
   });
   const [submitted, setSubmitted] = useState(false);
-  const [addingIdentity, setAddingIdentity] = useState(false);
+  // First-run (no identities yet): open the inline identity creator straight away,
+  // so naming the habit and its identity happen together in one flow.
+  const [addingIdentity, setAddingIdentity] = useState(() => (identities?.length || 0) === 0 && !!onCreateIdentity);
   // Keep creation easy (make it easy): the Four-Laws refinements + stake start
   // collapsed for new habits; open when editing one that already has them.
   const [advancedOpen, setAdvancedOpen] = useState(() =>
@@ -5044,12 +5046,12 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
       <div style={{...S.content, alignItems:"center", paddingTop:40, textAlign:"center"}}>
         {/* Day navigator lives in the sticky header now */}
         <div style={{fontSize:52,marginBottom:16}} aria-hidden="true">🌱</div>
-        <div style={{fontSize:20,fontWeight:700,color:T.text,marginBottom:8}}>Start building your identity</div>
+        <div style={{fontSize:20,fontWeight:700,color:T.text,marginBottom:8}}>Create your first habit</div>
         <div style={{fontSize:16,color:T.muted,lineHeight:1.7,maxWidth:280,marginBottom:28}}>
-          Create your first identity — who do you want to become? Then add habits that reinforce it.
+          Name a small habit and who it makes you become — you'll set the identity right inside, as part of the habit.
         </div>
-        <button onClick={openAddIdentity} style={{...S.btnPrimary, width:"100%", maxWidth:280}}>
-          + Create First Identity
+        <button onClick={openAddHabit} style={{...S.btnPrimary, width:"100%", maxWidth:280}}>
+          + Create your first habit
         </button>
         <div style={{...S.footer, width:"100%", marginTop:40}}>
           <span style={S.footerQuote}>"Every action is a vote for the type of person you wish to become."</span>
