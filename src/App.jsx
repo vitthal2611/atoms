@@ -3786,15 +3786,22 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
                   ? <span style={{ color:T.text2 }}>{habit.attractive}</span>
                   : <AddHint label={breaking ? "Add the real cost" : "Add why it's attractive"} /> },
               { icon:"bolt", name:"Response", color:"#0F6E56",
-                // Plain text like the other two laws — the 2-minute version and the
-                // easy prep, read as one line (no pill; the ring is the tap target).
-                content: (showStarter || habit.easy)
-                  ? <span style={{ color:T.text2 }}>
-                      {showStarter && <>{breaking ? "If tempted: " : "2-min: "}{habit.starter}</>}
-                      {showStarter && habit.easy ? " · " : ""}
-                      {habit.easy}
-                    </span>
-                  : <AddHint label={breaking ? "Add friction" : "Add an easy start"} /> },
+                // For good habits the easy/prep already has its own "Prep:" bar at the
+                // top, so show only the 2-minute version here (no duplicate). Bad habits
+                // have no prep bar, so both friction levers can share this line.
+                content: breaking
+                  ? ((showStarter || habit.easy)
+                      ? <span style={{ color:T.text2 }}>
+                          {showStarter && <>If tempted: {habit.starter}</>}
+                          {showStarter && habit.easy ? " · " : ""}
+                          {habit.easy}
+                        </span>
+                      : <AddHint label="Add friction" />)
+                  : (showStarter
+                      ? <span style={{ color:T.text2 }}>2-min: {habit.starter}</span>
+                      : habit.easy
+                      ? <span style={{ color:T.text2 }}>{habit.easy}</span>
+                      : <AddHint label="Add an easy start" />) },
               { icon:"gift", name:"Reward", color:"#854F0B",
                 content: habit.satisfying
                   ? <span style={{ color:T.text2 }}>{breaking ? "If you slip: " : ""}{habit.satisfying}</span>
