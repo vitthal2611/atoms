@@ -4155,9 +4155,8 @@ const byPriority = (a, b) => taskRank(a) - taskRank(b);
 
 // Today's Focus — a prioritized to-do grouped under HIGH / MED / LOW headers.
 // Each task carries a one-tap H·M·L switch to reassign priority; done collapse.
-function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onSetPriority, onEdit, onDelete }) {
+function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDelete, onPin }) {
   const [val, setVal] = useState("");
-  const [pri, setPri] = useState("high");
   const [editingId, setEditingId] = useState(null);
   const [editVal, setEditVal] = useState("");
   const [doneOpen, setDoneOpen] = useState(false);
@@ -4165,37 +4164,30 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onSetPriority,
   useEffect(() => { setVal(""); setEditingId(null); setRestOpen(false); }, [dateKey]);
 
   const live = tasks.filter(t => !t.carried);
-  const open = live.filter(t => !t.done).slice().sort(byPriority);
+  const open = live.filter(t => !t.done);
   const done = live.filter(t => t.done);
-  const big3 = open.slice(0, 3);          // the day's commitment — top 3 by priority
-  const rest = open.slice(3);             // everything else, collapsed under "view all"
+  // The Big 3 are hand-picked: star up to 3 tasks (kept in pick order). Everything
+  // else is the backlog, collapsed under "more tasks".
+  const pinned = open.filter(t => t.focus).sort((a, b) => (a.focusAt || 0) - (b.focusAt || 0));
+  const big3 = pinned.slice(0, 3);
+  const rest = open.filter(t => !big3.includes(t));
+  const focusFull = big3.length >= 3;
   const pct  = live.length ? done.length / live.length : 0;
   const RC   = 2 * Math.PI * 18;          // ring circumference (r = 18)
-  const add = () => { const t = val.trim(); if (!t) return; onAdd(dateKey, t, pri); setVal(""); };
+  const add = () => { const t = val.trim(); if (!t) return; onAdd(dateKey, t); setVal(""); };
   const saveEdit = () => { const t = editVal.trim(); if (t) onEdit(dateKey, editingId, t); setEditingId(null); };
 
   // One task row: a numbered "hero" row inside the Big 3 (num = 1..3), or a plain
-  // row in the "view all" list (num = null). Tapping the text opens inline edit,
-  // where priority (H·M·L) and delete live — keeping the rows themselves clean.
+  // backlog row (num = null). Tapping the text opens inline edit; the star picks
+  // the task into the Big 3.
   const taskRow = (t, num) => {
-    const G = PRIORITIES[priorityOf(t)];
     if (editingId === t.id) {
       return (
         <div key={t.id} style={{ display:"flex", alignItems:"center", gap:7, padding:"7px 2px", marginBottom: num ? 8 : 0, borderTop: num ? "none" : `1px solid ${T.surf2}` }}>
           <input autoFocus value={editVal} onChange={e=>setEditVal(e.target.value)}
             onKeyDown={e=>{ if(e.key==="Enter") saveEdit(); if(e.key==="Escape") setEditingId(null); }} maxLength={80} aria-label="Edit task"
             style={{ flex:1, minWidth:0, border:`1px solid ${T.border2}`, borderRadius:8, background:T.surface, fontSize:16, color:T.text, outline:"none", fontFamily:"inherit", padding:"6px 9px" }} />
-          <span style={{ display:"inline-flex", flexShrink:0, border:`1px solid ${T.border}`, borderRadius:8, overflow:"hidden" }} role="group" aria-label="Set priority">
-            {PRIORITY_ORDER.map((pk, i) => {
-              const P = PRIORITIES[pk]; const on = priorityOf(t) === pk;
-              return (
-                <button key={pk} type="button" onClick={()=>onSetPriority(dateKey, t.id, pk)} aria-pressed={on} aria-label={`${P.label} priority`}
-                  style={{ fontSize:10, fontWeight:900, padding:"7px 9px", border:"none", borderLeft: i ? `1px solid ${T.border}` : "none", lineHeight:1, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", background: on ? P.tagBg : "#fff", color: on ? P.tagText : T.muted }}>
-                  {P.label.charAt(0)}
-                </button>
-              );
-            })}
-          </span>
+          <button onClick={saveEdit} style={{ background:T.primary, border:"none", borderRadius:8, color:"#fff", fontSize:12, fontWeight:700, padding:"7px 11px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>Save</button>
           <button onClick={()=>{ onDelete(dateKey, t.id); setEditingId(null); }} aria-label="Delete task" style={{ background:"transparent", border:"none", cursor:"pointer", padding:"5px", WebkitTapHighlightColor:"transparent" }}><Ic name="trash" size={16} color={T.red} /></button>
         </div>
       );
@@ -4206,10 +4198,16 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onSetPriority,
         : { display:"flex", alignItems:"center", gap:11, padding:"9px 2px", borderTop:`1px solid ${T.surf2}` } }>
         {num && <span aria-hidden="true" style={{ flexShrink:0, width:20, height:20, borderRadius:"50%", background:T.primary, color:"#fff", fontSize:11, fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center" }}>{num}</span>}
         <button onClick={()=>onToggle(dateKey, t.id)} aria-label={`Complete: ${t.text}`}
-          style={{ width:19, height:19, borderRadius:"50%", flexShrink:0, boxSizing:"border-box", border:`2px solid ${G.ring}`, background:"transparent", cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent" }} />
+          style={{ width:19, height:19, borderRadius:"50%", flexShrink:0, boxSizing:"border-box", border:`2px solid ${T.primary}`, background:"transparent", cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent" }} />
         <span onClick={()=>{ if(editable){ setEditingId(t.id); setEditVal(t.text); } }}
           style={{ flex:1, minWidth:0, fontSize:14, fontWeight:600, color:T.text, cursor: editable?"text":"default", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.text}</span>
-        <span aria-hidden="true" style={{ flexShrink:0, fontSize:10, fontWeight:900, color:G.tagText, background:G.tagBg, borderRadius:99, padding:"2px 8px" }}>{G.label}</span>
+        {onPin && editable && (
+          <button onClick={()=>onPin(dateKey, t.id)} aria-pressed={!!t.focus}
+            aria-label={t.focus ? `Remove ${t.text} from your Big 3` : (focusFull ? "Big 3 is full" : `Add ${t.text} to your Big 3`)}
+            style={{ flexShrink:0, background:"transparent", border:"none", padding:2, lineHeight:0, cursor:(t.focus || !focusFull) ? "pointer" : "default", opacity:(t.focus || !focusFull) ? 1 : 0.3, WebkitTapHighlightColor:"transparent" }}>
+            <Ic name="star" size={18} color={STAR_COLOR} fill={t.focus ? STAR_COLOR : "none"} />
+          </button>
+        )}
       </div>
     );
   };
@@ -4234,27 +4232,23 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onSetPriority,
         </div>
       </div>
 
-      {/* The Big 3 — the top three open tasks by priority, as numbered hero rows */}
+      {/* The Big 3 — the tasks you starred, as numbered hero rows */}
       {big3.map((t, i) => taskRow(t, i + 1))}
 
-      {/* Add a task — text + High/Med/Low + add. Sits just below the Big 3. */}
+      {/* No picks yet — prompt to star up to three tasks below */}
+      {big3.length === 0 && open.length > 0 && (
+        <div style={{ display:"flex", alignItems:"center", gap:8, background:T.gold+"14", border:`1px dashed ${T.gold}66`, borderRadius:10, padding:"11px 12px", color:"#7A5A12", fontSize:12.5, fontWeight:700 }}>
+          <Ic name="star" size={15} color={STAR_COLOR} />
+          Tap the star on up to 3 tasks to set your Big 3.
+        </div>
+      )}
+
+      {/* Add a task — text + add. Sits just below the Big 3. */}
       {editable && (
         <div style={{ display:"flex", alignItems:"center", gap:8, background:T.bg, borderRadius:12, padding:"5px 6px 5px 12px", marginTop:(open.length||done.length)?10:2 }}>
           <input value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter") add(); if(e.key==="Escape") setVal(""); }}
             placeholder="Add a task…" maxLength={80} aria-label="New task"
             style={{ flex:1, minWidth:0, border:"none", background:"transparent", fontSize:16, color:T.text, outline:"none", fontFamily:"inherit", padding:"6px 0" }} />
-          <div style={{ display:"flex", gap:3 }} role="group" aria-label="Priority for the new task">
-            {PRIORITY_ORDER.map(k => {
-              const P = PRIORITIES[k]; const on = pri === k;
-              return (
-                <button key={k} type="button" onClick={()=>setPri(k)} aria-pressed={on}
-                  style={{ fontSize:10, fontWeight:800, padding:"4px 7px", borderRadius:7, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
-                    background: on ? P.pillBg : "#fff", color: on ? P.pillText : T.muted, border:`1px solid ${on ? P.pillBorder : T.border}` }}>
-                  {P.label}
-                </button>
-              );
-            })}
-          </div>
           <button type="button" onClick={add} aria-label="Add task"
             style={{ flexShrink:0, width:30, height:30, borderRadius:9, border:"none", background: val.trim()?T.primary:T.border2, color:"#fff", fontSize:18, fontWeight:800, lineHeight:1, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
             <span aria-hidden="true">+</span>
@@ -4262,15 +4256,18 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onSetPriority,
         </div>
       )}
 
-      {/* Everything beyond the Big 3 — collapsed under "view all" */}
+      {/* Everything beyond the Big 3 — collapsed under "more tasks", but always
+          shown while nothing is pinned yet so there's something to pick from. */}
       {rest.length > 0 && (
         <>
-          <button type="button" onClick={() => setRestOpen(s => !s)} aria-expanded={restOpen}
-            style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, width:"100%", marginTop:8, padding:"9px", background:"transparent", border:"none", cursor:"pointer", fontFamily:"inherit", fontSize:12, fontWeight:800, color:T.primary, WebkitTapHighlightColor:"transparent" }}>
-            {restOpen ? "Show less" : `${rest.length} more task${rest.length > 1 ? "s" : ""}`}
-            <span aria-hidden="true">{restOpen ? "▴" : "▾"}</span>
-          </button>
-          {restOpen && rest.map(t => taskRow(t, null))}
+          {big3.length > 0 && (
+            <button type="button" onClick={() => setRestOpen(s => !s)} aria-expanded={restOpen}
+              style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, width:"100%", marginTop:8, padding:"9px", background:"transparent", border:"none", cursor:"pointer", fontFamily:"inherit", fontSize:12, fontWeight:800, color:T.primary, WebkitTapHighlightColor:"transparent" }}>
+              {restOpen ? "Show less" : `${rest.length} more task${rest.length > 1 ? "s" : ""}`}
+              <span aria-hidden="true">{restOpen ? "▴" : "▾"}</span>
+            </button>
+          )}
+          {(restOpen || big3.length === 0) && rest.map(t => taskRow(t, null))}
         </>
       )}
 
@@ -4892,9 +4889,9 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
           editable={selectedDate >= todayKey}
           onAdd={addTask}
           onToggle={toggleTask}
-          onSetPriority={setTaskPriority}
           onEdit={editTask}
           onDelete={deleteTask}
+          onPin={toggleFocus}
         />
       </div>
 
