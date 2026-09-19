@@ -2991,14 +2991,15 @@ const Ic = ({ name, size = 13, color = "currentColor", fill = "none", style }) =
 // ─── RING CHECKBOX — the circle IS the milestone bar ──────────────────────────
 // Pending: ring fills with streak/next-milestone progress in the identity color.
 // Checked: solid disc with a check. Missed: red-tinted ring with an x.
-function HabitRing({ checked, missed, color, streak, next, onClick, label, size = 28 }) {
+function HabitRing({ checked, missed, color, streak, next, onClick, label, size = 28, active = false }) {
   const r = (size / 2) - 2;
   const c = 2 * Math.PI * r;
   const pct = next ? Math.min(1, streak / next.days) : (streak > 0 ? 1 : 0);
   const mid = size / 2;
+  const pending = !checked && !missed;
   return (
     <button
-      className="habit-toggle"
+      className={"habit-toggle" + (pending && active ? " ring-active" : "")}
       onClick={onClick}
       aria-pressed={checked}
       aria-label={label}
@@ -3020,6 +3021,11 @@ function HabitRing({ checked, missed, color, streak, next, onClick, label, size 
             {/* Faint fill so the ring reads as a tappable button, not just an outline */}
             <circle cx={mid} cy={mid} r={r} fill={missed ? "transparent" : color + "12"} />
             <circle cx={mid} cy={mid} r={r} fill="none" stroke={missed ? T.red + "44" : T.surf2} strokeWidth="3" />
+            {/* Ghost check — a faint preview of the tick so a pending ring clearly
+                invites the tap instead of reading as a disabled circle. */}
+            {!missed && (
+              <path d={`M${size*0.3} ${size*0.52}l${size*0.13} ${size*0.13} ${size*0.27} -${size*0.27}`} fill="none" stroke={color} strokeOpacity={0.4} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+            )}
             {!missed && pct > 0 && (
               <circle cx={mid} cy={mid} r={r} fill="none" stroke={color} strokeWidth="3"
                 strokeDasharray={`${pct * c} ${c}`} strokeLinecap="round"
@@ -3530,6 +3536,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
                 streak={streak}
                 next={next}
                 size={44}
+                active={active}
                 onClick={activate}
                 label={checked ? `Uncheck: ${habit.label}` : (breaking ? `Mark clean: ${habit.label}` : `Check: ${habit.label}`)}
               />
@@ -5453,6 +5460,8 @@ html, body, #root { height: 100%; }
 #root ::-webkit-scrollbar { display: none; }
 #root * { scrollbar-width: none; }
 .habit-toggle:active { opacity: 0.7; transform: scale(0.98); }
+/* The next-up habit's ring breathes gently so the eye lands on today's action. */
+@media (prefers-reduced-motion: no-preference) { .ring-active { animation: breathe 2.6s ease-in-out infinite; } }
 .check-pop { animation: pop 0.25s cubic-bezier(0.34,1.56,0.64,1) both; }
 .card-leaving { animation: fadeOut 0.3s ease forwards; }
 .row-leaving { animation: fadeOut 0.35s ease 3s forwards; }
@@ -5463,6 +5472,7 @@ html, body, #root { height: 100%; }
 .pop { animation: pop 0.35s cubic-bezier(0.34,1.56,0.64,1) both; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pop { 0%,100% { transform: scale(1); } 50% { transform: scale(1.18); } }
+@keyframes breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.07); } }
 @keyframes fadeOut { to { opacity: 0; transform: scale(0.95); } }
 @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 @keyframes fadeSlideDown { from { transform: translateX(-50%) translateY(-10px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
