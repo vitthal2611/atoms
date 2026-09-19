@@ -1,0 +1,8 @@
+{
+  "name": "Atomic Habits",
+  "description": "Track your atomic habits and identity-based goals",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

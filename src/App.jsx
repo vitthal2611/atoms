@@ -14,16 +14,27 @@ const _fbConfig = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId:             import.meta.env.VITE_FIREBASE_APP_ID,
 };
-const _fbApp = getApps().length ? getApps()[0] : initializeApp(_fbConfig);
-const _db    = getFirestore(_fbApp);
-const _auth  = getAuth(_fbApp);
-
-function identitiesRef(uid) { return doc(_db, "users", uid, "atomicHabits", "identities"); }
-function checkInsRef(uid)    { return doc(_db, "users", uid, "atomicHabits", "checkIns"); }
-function dailyTasksRef(uid)  { return doc(_db, "users", uid, "atomicHabits", "dailyTasks"); }
-
 // Detect missing env vars early — surfaces a helpful screen instead of cryptic Firebase errors
 const _envMissing = Object.entries(_fbConfig).filter(([, v]) => !v).map(([k]) => k);
+const _hasFirebaseConfig = _envMissing.length === 0;
+
+let _fbApp = null;
+let _db    = null;
+let _auth  = null;
+
+if (_hasFirebaseConfig) {
+  try {
+    _fbApp = getApps().length ? getApps()[0] : initializeApp(_fbConfig);
+    _db    = getFirestore(_fbApp);
+    _auth  = getAuth(_fbApp);
+  } catch (err) {
+    console.warn("Firebase initialization failed:", err);
+  }
+}
+
+function identitiesRef(uid) { return _db ? doc(_db, "users", uid, "atomicHabits", "identities") : null; }
+function checkInsRef(uid)    { return _db ? doc(_db, "users", uid, "atomicHabits", "checkIns") : null; }
+function dailyTasksRef(uid)  { return _db ? doc(_db, "users", uid, "atomicHabits", "dailyTasks") : null; }
 
 // ─── THEME PALETTE — Ocean Depth ─────────────────────────────────────────────
 // Defined early so ALL helpers and components can reference T safely.
@@ -101,6 +112,43 @@ function shortLabel(label) {
 // shape: { cadence:"weekly"|"monthly", days:[0-6], dates:[1-31,32] }
 // days: 0=Mon … 6=Sun  |  dates: 1-31 = day of month, 32 = last day of month
 const DEFAULT_FREQUENCY = { cadence:"weekly", days:[0,1,2,3,4,5,6] };
+
+const DEFAULT_IDENTITIES = [
+  {
+    id: "fit", label: "I am a Fit Person", icon: "🏃", color: "#00C48C", colorDim: "#00291E",
+    habits: [
+      { id: "exercise", label: "Exercise 30 min", trigger: "After morning alarm", time: "06:30", location: "Home / Gym", frequency: DEFAULT_FREQUENCY },
+      { id: "steps", label: "10,000 steps", trigger: "After lunch break", time: "13:00", location: "Office / Park", frequency: DEFAULT_FREQUENCY },
+      { id: "water", label: "Drink 2L water", trigger: "Every time I sit at desk", time: "09:00", location: "Everywhere", frequency: DEFAULT_FREQUENCY },
+      { id: "sleep", label: "Sleep by 10:30 PM", trigger: "Phone on charger outside room", time: "22:00", location: "Bedroom", frequency: DEFAULT_FREQUENCY },
+    ],
+  },
+  {
+    id: "learner", label: "I am a Learner", icon: "📚", color: "#4E7AFF", colorDim: "#0A1A4A",
+    habits: [
+      { id: "read", label: "Read 20 pages", trigger: "After dinner is cleared", time: "21:00", location: "Living room chair", frequency: DEFAULT_FREQUENCY },
+      { id: "skill", label: "1 hr skill building", trigger: "After kids are settled", time: "21:30", location: "Study desk", frequency: DEFAULT_FREQUENCY },
+      { id: "reflect", label: "Daily reflection", trigger: "Before closing laptop", time: "18:00", location: "Work desk", frequency: DEFAULT_FREQUENCY },
+      { id: "podcast", label: "Listen to podcast", trigger: "During morning commute", time: "08:00", location: "Car / Walk", frequency: DEFAULT_FREQUENCY },
+    ],
+  },
+  {
+    id: "parent", label: "I am a Good Parent", icon: "👨‍👧", color: "#FF6B35", colorDim: "#3D1800",
+    habits: [
+      { id: "playtime", label: "Playtime with family", trigger: "When I get home from work", time: "18:30", location: "Living room", frequency: DEFAULT_FREQUENCY },
+      { id: "present", label: "Phone-free family hour", trigger: "Phone goes in drawer", time: "19:00", location: "Home", frequency: DEFAULT_FREQUENCY },
+      { id: "story", label: "Bedtime story", trigger: "After brushing teeth", time: "20:30", location: "Kids room", frequency: DEFAULT_FREQUENCY },
+    ],
+  },
+  {
+    id: "mindful", label: "I am Mindful & Calm", icon: "🧘", color: "#8B5CF6", colorDim: "#1A0047",
+    habits: [
+      { id: "meditate", label: "Meditate 10 min", trigger: "After morning water", time: "07:00", location: "Quiet corner", frequency: DEFAULT_FREQUENCY },
+      { id: "gratitude", label: "Write 3 gratitudes", trigger: "Morning tea", time: "07:30", location: "Kitchen", frequency: DEFAULT_FREQUENCY },
+      { id: "walk", label: "Evening mindful walk", trigger: "After work wrap-up", time: "17:30", location: "Outside", frequency: DEFAULT_FREQUENCY },
+    ],
+  },
+];
 
 function isScheduledOn(frequency, dateKey) {
   const freq = frequency || DEFAULT_FREQUENCY;
@@ -637,6 +685,34 @@ export default function App() {
 
   // ── Auth listener ──
   useEffect(() => {
+    // Check if user previously chose guest mode
+    const isGuest = localStorage.getItem("atomic_is_guest") === "true";
+    if (isGuest) {
+      const u = { uid: "guest", displayName: "Guest", isGuest: true };
+      setUser(u);
+      setDataLoading(true);
+      try {
+        const savedId = localStorage.getItem("atomic_identities");
+        const savedCi = localStorage.getItem("atomic_checkins");
+        const savedDt = localStorage.getItem("atomic_tasks");
+        isFirstId.current = true;
+        setIdentities(savedId ? JSON.parse(savedId) : DEFAULT_IDENTITIES);
+        if (savedCi) { isFirstCi.current = true; setData(JSON.parse(savedCi)); }
+        if (savedDt) { isFirstDt.current = true; setDailyTasks(JSON.parse(savedDt)); }
+        hasLoadedRef.current = true;
+      } catch (e) {
+        console.error("Local storage load failed:", e);
+      } finally {
+        setDataLoading(false);
+      }
+      return;
+    }
+
+    if (!_auth) {
+      setUser(null);
+      return;
+    }
+
     return onAuthStateChanged(_auth, async (u) => {
       isFirstId.current = true;
       isFirstCi.current = true;
@@ -654,7 +730,13 @@ export default function App() {
           ]);
           // Re-arm each first-run guard when applying fetched data, so the load
           // itself doesn't echo straight back to Firestore as a spurious save
-          if (idSnap.exists()) { isFirstId.current = true; setIdentities(idSnap.data().data); }
+          if (idSnap.exists()) {
+            isFirstId.current = true;
+            setIdentities(idSnap.data().data);
+          } else {
+            isFirstId.current = true;
+            setIdentities(DEFAULT_IDENTITIES);
+          }
           // Prune entries older than 366 days to prevent Firestore 1MB doc limit
           const cutoff = new Date();
           cutoff.setDate(cutoff.getDate() - 366);
@@ -685,6 +767,11 @@ export default function App() {
   useEffect(() => {
     if (!user || isFirstId.current) { isFirstId.current = false; return; }
     if (!hasLoadedRef.current) return;
+    if (user.isGuest) {
+      try { localStorage.setItem("atomic_identities", JSON.stringify(identities)); } catch (e) {}
+      return;
+    }
+    if (!_db) return;
     clearTimeout(idTimer.current);
     idTimer.current = setTimeout(() => {
       setSyncing(true);
@@ -698,6 +785,11 @@ export default function App() {
   useEffect(() => {
     if (!user || isFirstCi.current) { isFirstCi.current = false; return; }
     if (!hasLoadedRef.current) return;
+    if (user.isGuest) {
+      try { localStorage.setItem("atomic_checkins", JSON.stringify(data)); } catch (e) {}
+      return;
+    }
+    if (!_db) return;
     clearTimeout(ciTimer.current);
     ciTimer.current = setTimeout(() => {
       setSyncing(true);
@@ -711,6 +803,11 @@ export default function App() {
   useEffect(() => {
     if (!user || isFirstDt.current) { isFirstDt.current = false; return; }
     if (!hasLoadedRef.current) return;
+    if (user.isGuest) {
+      try { localStorage.setItem("atomic_tasks", JSON.stringify(dailyTasks)); } catch (e) {}
+      return;
+    }
+    if (!_db) return;
     clearTimeout(dtTimer.current);
     dtTimer.current = setTimeout(() => {
       setSyncing(true);
@@ -724,6 +821,10 @@ export default function App() {
   // ── Google sign-in ──
   const signIn = async () => {
     if (signingIn) return;
+    if (!_auth) {
+      setSignInError("Firebase authentication is not configured. Please use Guest mode.");
+      return;
+    }
     setSigningIn(true);
     setSignInError(null);
     try {
@@ -732,9 +833,43 @@ export default function App() {
       await signInWithPopup(_auth, provider);
     } catch (e) {
       console.error(e);
-      setSignInError("Sign-in failed. Please try again.");
+      setSignInError("Sign-in failed. In embedded preview iframes, Google popups may be blocked. You can click 'Continue as Guest' below.");
     } finally {
       setSigningIn(false);
+    }
+  };
+
+  const signInAsGuest = () => {
+    localStorage.setItem("atomic_is_guest", "true");
+    const u = { uid: "guest", displayName: "Guest", isGuest: true };
+    setUser(u);
+    setDataLoading(true);
+    try {
+      const savedId = localStorage.getItem("atomic_identities");
+      const savedCi = localStorage.getItem("atomic_checkins");
+      const savedDt = localStorage.getItem("atomic_tasks");
+      isFirstId.current = true;
+      setIdentities(savedId ? JSON.parse(savedId) : DEFAULT_IDENTITIES);
+      if (savedCi) { isFirstCi.current = true; setData(JSON.parse(savedCi)); }
+      if (savedDt) { isFirstDt.current = true; setDailyTasks(JSON.parse(savedDt)); }
+      hasLoadedRef.current = true;
+    } catch (e) {
+      console.error("Local storage load failed:", e);
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    if (user?.isGuest) {
+      localStorage.removeItem("atomic_is_guest");
+      setUser(null);
+      return;
+    }
+    if (_auth) {
+      await fbSignOut(_auth);
+    } else {
+      setUser(null);
     }
   };
 
@@ -958,13 +1093,17 @@ export default function App() {
     return (
       <div style={{ ...S.root, alignItems:"center", justifyContent:"center", padding:32 }}>
         <div style={{ fontSize:40, marginBottom:16 }} aria-hidden="true">⚙️</div>
-        <div style={{ fontSize:18, fontWeight:700, color:T.red, marginBottom:8 }}>Configuration Error</div>
-        <div style={{ fontSize:14, color:T.text2, marginBottom:16, textAlign:"center", lineHeight:1.7 }}>
-          Missing Firebase environment variables. Copy <code>.env.example</code> → <code>.env</code> and fill in your values.
+        <div style={{ fontSize:18, fontWeight:700, color:T.accent, marginBottom:8 }}>Configuration Notice</div>
+        <div style={{ fontSize:14, color:T.text2, marginBottom:16, textAlign:"center", lineHeight:1.7, maxWidth:360 }}>
+          Missing Firebase environment variables in <code>.env</code>. You can configure them or continue in Guest mode with local storage.
         </div>
-        <div style={{ background:T.red+"12", border:`1px solid ${T.red}44`, borderRadius:12, padding:"12px 16px", width:"100%", maxWidth:340 }}>
-          {_envMissing.map(k => <div key={k} style={{ fontSize:13, fontFamily:"monospace", color:T.red, padding:"2px 0" }}>✗ {k}</div>)}
+        <div style={{ background:T.surf2, border:`1px solid ${T.border}`, borderRadius:12, padding:"12px 16px", width:"100%", maxWidth:340, marginBottom:20 }}>
+          {_envMissing.map(k => <div key={k} style={{ fontSize:13, fontFamily:"monospace", color:T.muted, padding:"2px 0" }}>• {k}</div>)}
         </div>
+        <button onClick={signInAsGuest}
+          style={{ ...S.btnPrimary, width:"100%", maxWidth:340, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+          <span>👤</span> Continue as Guest (Offline Mode)
+        </button>
       </div>
     );
   }
@@ -984,29 +1123,35 @@ export default function App() {
           <div style={{ fontFamily:FONT_DISPLAY, fontWeight:800, fontSize:24, color:T.text, textAlign:"center", letterSpacing:"-0.03em" }}>
             Atomic Habits
           </div>
-          <div style={{ fontSize:15, color:T.muted, textAlign:"center", lineHeight:1.6 }}>
-            Sign in with your Google account to sync your habits across devices.
+          <div style={{ fontSize:15, color:T.muted, textAlign:"center", lineHeight:1.6, maxWidth:320 }}>
+            Sign in with your Google account to sync habits to Firebase, or continue as a guest using local storage.
           </div>
           {signInError && (
-            <div role="alert" style={{ fontSize:14, color:T.red, background:T.red+"12", border:`1px solid ${T.red}44`, borderRadius:10, padding:"10px 14px", textAlign:"center", width:"100%", maxWidth:320 }}>
+            <div role="alert" style={{ fontSize:13, color:T.text2, background:T.surf2, border:`1.5px solid ${T.border}`, borderRadius:10, padding:"12px 14px", textAlign:"center", width:"100%", maxWidth:320, lineHeight:1.5 }}>
               {signInError}
             </div>
           )}
-          <button onClick={signIn} disabled={signingIn} aria-busy={signingIn}
-            style={{ width:"100%", maxWidth:320, display:"flex", alignItems:"center", justifyContent:"center", gap:12, fontSize:16, fontWeight:700, padding:"15px 20px", background:"#fff", border:`1.5px solid ${T.border}`, borderRadius:14, color:T.text, cursor: signingIn ? "wait" : "pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", boxShadow:"0 1px 4px #00000010", opacity: signingIn ? 0.65 : 1, transition:"opacity 0.2s" }}>
-            {signingIn
-              ? <><div aria-hidden="true" style={{width:20,height:20,borderRadius:"50%",border:`2px solid ${T.border}`,borderTopColor:T.accent,animation:"spin 0.8s linear infinite",flexShrink:0}}/> Signing in…</>
-              : <>
-                  <svg width="20" height="20" viewBox="0 0 18 18" aria-hidden="true">
-                    <path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 002.38-5.88c0-.57-.05-.66-.15-1.18z"/>
-                    <path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2.01c-.72.48-1.63.76-2.7.76-2.1 0-3.8-1.36-4.42-3.21H1.87v2.09A8 8 0 008.98 17z"/>
-                    <path fill="#FBBC05" d="M4.56 10.6A4.6 4.6 0 014.3 9c0-.56.1-1.1.26-1.6V5.31H1.87A8 8 0 001 9c0 1.3.31 2.52.87 3.6l2.69-2z"/>
-                    <path fill="#EA4335" d="M8.98 3.8c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 008.98 1a8 8 0 00-7.11 4.31l2.69 2.09C5.18 5.16 6.89 3.8 8.98 3.8z"/>
-                  </svg>
-                  Sign in with Google
-                </>
-            }
-          </button>
+          <div style={{ display:"flex", flexDirection:"column", gap:12, width:"100%", maxWidth:320 }}>
+            <button onClick={signIn} disabled={signingIn} aria-busy={signingIn}
+              style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:12, fontSize:16, fontWeight:700, padding:"14px 20px", background:"#fff", border:`1.5px solid ${T.border}`, borderRadius:14, color:T.text, cursor: signingIn ? "wait" : "pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", boxShadow:"0 1px 4px #00000010", opacity: signingIn ? 0.65 : 1, transition:"opacity 0.2s" }}>
+              {signingIn
+                ? <><div aria-hidden="true" style={{width:20,height:20,borderRadius:"50%",border:`2px solid ${T.border}`,borderTopColor:T.accent,animation:"spin 0.8s linear infinite",flexShrink:0}}/> Signing in…</>
+                : <>
+                    <svg width="20" height="20" viewBox="0 0 18 18" aria-hidden="true">
+                      <path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 002.38-5.88c0-.57-.05-.66-.15-1.18z"/>
+                      <path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2.01c-.72.48-1.63.76-2.7.76-2.1 0-3.8-1.36-4.42-3.21H1.87v2.09A8 8 0 008.98 17z"/>
+                      <path fill="#FBBC05" d="M4.56 10.6A4.6 4.6 0 014.3 9c0-.56.1-1.1.26-1.6V5.31H1.87A8 8 0 001 9c0 1.3.31 2.52.87 3.6l2.69-2z"/>
+                      <path fill="#EA4335" d="M8.98 3.8c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 008.98 1a8 8 0 00-7.11 4.31l2.69 2.09C5.18 5.16 6.89 3.8 8.98 3.8z"/>
+                    </svg>
+                    Sign in with Google
+                  </>
+              }
+            </button>
+            <button onClick={signInAsGuest}
+              style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:8, fontSize:15, fontWeight:600, padding:"13px 20px", background:T.surf2, border:`1.5px solid ${T.border}`, borderRadius:14, color:T.text, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
+              <span>👤</span> Continue as Guest (Offline)
+            </button>
+          </div>
         </main>
       </div>
     );
@@ -1243,7 +1388,7 @@ export default function App() {
           )}
         </div>
         <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
-          <button onClick={()=>fbSignOut(_auth)} title={user.email||undefined} style={{ background:"transparent", border:`1px solid ${T.border}`, borderRadius:20, fontSize:12, color:T.muted, padding:"3px 10px", cursor:"pointer", fontFamily:"inherit", maxWidth:120, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+          <button onClick={handleSignOut} title={user.email||undefined} style={{ background:"transparent", border:`1px solid ${T.border}`, borderRadius:20, fontSize:12, color:T.muted, padding:"3px 10px", cursor:"pointer", fontFamily:"inherit", maxWidth:120, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
             {user.displayName ? `${user.displayName.split(" ")[0]} · Sign out` : "Sign out"}
           </button>
           <div style={S.ringWrap}>
