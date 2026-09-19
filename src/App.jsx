@@ -843,7 +843,6 @@ function HabitForm({ initial={}, identities, cueSettings={ custom: [], dismissed
   });
   const [submitted, setSubmitted] = useState(false);
   const [addingIdentity, setAddingIdentity] = useState(false);
-  const [newIdentityLabel, setNewIdentityLabel] = useState("");
   // Keep creation easy (make it easy): the Four-Laws refinements + stake start
   // collapsed for new habits; open when editing one that already has them.
   const [advancedOpen, setAdvancedOpen] = useState(() =>
@@ -982,21 +981,14 @@ function HabitForm({ initial={}, identities, cueSettings={ custom: [], dismissed
         {onCreateIdentity && <option value="__new__">＋ Add a new identity…</option>}
       </select>
       {addingIdentity ? (
-        <div style={{ marginTop:8, background:T.surf2, border:`1px solid ${T.border}`, borderRadius:10, padding:"10px 11px" }}>
-          <div style={{ fontSize:11, fontWeight:800, color:T.text2, marginBottom:6 }}>New identity — who does this habit make you?</div>
-          <input value={newIdentityLabel} onChange={e=>setNewIdentityLabel(e.target.value)}
-            onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault();
-              const id = onCreateIdentity(newIdentityLabel); if(id){ set("identityId", id); setAddingIdentity(false); setNewIdentityLabel(""); } } }}
-            placeholder="e.g. a lifelong learner" maxLength={60} autoFocus aria-label="New identity name"
-            style={{ ...S.input, marginTop:0 }} />
-          <div style={{ fontSize:10.5, color:T.muted, marginTop:5, lineHeight:1.4 }}>Present tense — reads as <b style={{color:T.text2}}>"I am {newIdentityLabel.trim() ? shortLabel(newIdentityLabel.trim()) : "…"}"</b>.</div>
-          <div style={{ display:"flex", gap:8, marginTop:9 }}>
-            <button type="button" onClick={() => { const id = onCreateIdentity(newIdentityLabel); if(id){ set("identityId", id); setAddingIdentity(false); setNewIdentityLabel(""); } }}
-              disabled={!newIdentityLabel.trim()}
-              style={{ flex:1, padding:"9px", borderRadius:9, border:"none", background: newIdentityLabel.trim() ? T.primary : T.border, color:"#fff", fontSize:13, fontWeight:800, cursor: newIdentityLabel.trim() ? "pointer" : "default", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>Create &amp; use</button>
-            <button type="button" onClick={() => { setAddingIdentity(false); setNewIdentityLabel(""); }}
-              style={{ flex:"none", padding:"9px 14px", borderRadius:9, border:`1px solid ${T.border}`, background:"transparent", color:T.text2, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>Cancel</button>
-          </div>
+        <div style={{ marginTop:8, background:T.surf2, border:`1px solid ${T.border}`, borderRadius:12 }}>
+          <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.muted, padding:"11px 20px 0" }}>New identity</div>
+          {/* Reuse the real IdentityForm so this is the exact same UI as adding one directly. */}
+          <IdentityForm
+            mode="add"
+            onSave={(f) => { const id = onCreateIdentity(f); if (id) { set("identityId", id); setAddingIdentity(false); } }}
+            onCancel={() => setAddingIdentity(false)}
+          />
         </div>
       ) : (
         <div style={{ fontSize:12, color:T.muted, fontStyle:"italic", marginTop:6 }}>{breaking ? "Every clean day is a vote for this person." : "Every check is a vote for this person."}</div>
@@ -2237,15 +2229,16 @@ export default function App() {
     else setModal(null);
   };
 
-  // Create an identity inline (from the habit form's dropdown) and return its id,
-  // without touching modals — so the user can add a missing identity in-place.
+  // Create an identity inline (from the habit form) and return its id, without
+  // touching modals — takes the same { label, icon, colorIdx } as the identity
+  // form, so the inline UI matches adding an identity directly.
   // Plain function (NOT a hook) — it lives after the `if (!user)` early return.
-  const createIdentityInline = (label) => {
+  const createIdentityInline = ({ label, icon, colorIdx } = {}) => {
     const clean = (label || "").trim().slice(0, 60);
     if (!clean) return null;
-    const colorIdx = identities.length % IDENTITY_COLORS.length;
+    const ci = Number.isInteger(colorIdx) ? colorIdx : identities.length % IDENTITY_COLORS.length;
     const newId = uid();
-    setIdentities(prev => [...prev, { id: newId, label: clean, icon: "🎯", color: IDENTITY_COLORS[colorIdx], colorDim: IDENTITY_DIMS[colorIdx], habits: [] }]);
+    setIdentities(prev => [...prev, { id: newId, label: clean, icon: icon || "🎯", color: IDENTITY_COLORS[ci], colorDim: IDENTITY_DIMS[ci], habits: [] }]);
     return newId;
   };
 
