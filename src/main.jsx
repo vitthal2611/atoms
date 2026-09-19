@@ -1,6 +1,7 @@
 import { StrictMode, Component } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.jsx'
+import './styles/globals.css'
 
 // Ocean Depth palette — kept in sync with T constant in App.jsx
 const EB = {
