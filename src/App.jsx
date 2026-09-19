@@ -2342,7 +2342,6 @@ export default function App() {
           <h1 style={S.title}>
             {view==="today"
               ? (selectedDate === todayKey ? "Today" : formatNavDate(selectedDate))
-              : view==="focus" ? "Focus"
               : view==="week" ? "This Month"
               : view==="streaks" ? "Streaks"
               : "Manage"}
@@ -2422,7 +2421,6 @@ export default function App() {
             allData={data}
             toggle={toggle}
             adjustCount={adjustCount}
-            onOpenFocus={() => setView("focus")}
             markMiss={markMiss}
             habitOps={habitOps}
             habitNotes={habitNotes}
@@ -2447,25 +2445,13 @@ export default function App() {
             toggleStar={toggleStar}
             toggleFocus={toggleFocus}
             deferTask={deferTask}
+            setTaskPriority={setTaskPriority}
             reviewTarget={reviewTarget && reviewTarget.habit.id !== reviewDismissed ? reviewTarget : null}
             onOpenReview={() => setReviewOpen(true)}
             onDismissReview={() => setReviewDismissed(reviewTarget?.habit.id ?? null)}
           />
         )}
 
-        {view==="focus" && (
-          <FocusView
-            dailyTasks={dailyTasks}
-            selectedDate={selectedDate}
-            setSelectedDate={setSelectedDate}
-            todayKey={todayKey}
-            onAdd={addTask}
-            onToggle={toggleTask}
-            onSetPriority={setTaskPriority}
-            onEdit={editTask}
-            onDelete={deleteTask}
-          />
-        )}
         {view==="week"    && <WeekView data={data} todayKey={todayKey} identities={liveIdentities} onToggleDay={toggleForDate}/>}
         {view==="streaks" && <StreaksView data={data} getStreak={getStreakForHabit} identities={liveIdentities}/>}
         {view==="manage"  && (
@@ -2538,7 +2524,6 @@ export default function App() {
       <nav style={S.bottomNav} aria-label="Main navigation">
         {[
           {id:"today",    icon:"☀️",  label:"Today"},
-          {id:"focus",    icon:"🎯",  label:"Focus"},
           {id:"manage",   icon:"⚙️",  label:"Manage"},
         ].map(t=>(
           <button key={t.id} onClick={()=>{ setView(t.id); if(t.id==="today") setSelectedDate(todayKey); }}
@@ -4777,29 +4762,8 @@ function StreakBadge({ habit, allData, streak, isBad, bare = false }) {
   );
 }
 
-// ─── FOCUS VIEW — the tasks tab (full-screen prioritized to-do) ───────────────
-const FocusView = memo(function FocusView({ dailyTasks, selectedDate, setSelectedDate, todayKey, onAdd, onToggle, onSetPriority, onEdit, onDelete }) {
-  return (
-    <div style={S.content}>
-      <DayNavigator selectedDate={selectedDate} setSelectedDate={setSelectedDate} todayKey={todayKey} />
-      <div style={{ ...S.card, padding:"14px 14px" }}>
-        <SimpleFocus
-          tasks={dailyTasks[selectedDate] || []}
-          dateKey={selectedDate}
-          editable={selectedDate >= todayKey}
-          onAdd={onAdd}
-          onToggle={onToggle}
-          onSetPriority={onSetPriority}
-          onEdit={onEdit}
-          onDelete={onDelete}
-        />
-      </div>
-    </div>
-  );
-});
-
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
-const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, adjustCount, markMiss, habitOps, habitNotes, setHabitNote, justChecked, getStreakForHabit, openEditHabit, openDeleteHabit, openReviewFor, setModal, openAddHabit, openAddIdentity, onOpenFocus, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, addFocusTask, toggleTask, deleteTask, editTask, toggleStar, toggleFocus, deferTask, reviewTarget, onOpenReview, onDismissReview }) {
+const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, adjustCount, markMiss, habitOps, habitNotes, setHabitNote, justChecked, getStreakForHabit, openEditHabit, openDeleteHabit, openReviewFor, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, addFocusTask, toggleTask, deleteTask, editTask, toggleStar, toggleFocus, deferTask, setTaskPriority, reviewTarget, onOpenReview, onDismissReview }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
   const [matrixExpanded, setMatrixExpanded] = useState(false);
@@ -5173,6 +5137,21 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
           )}
         </div>
       )}
+
+      {/* Today's Focus — the Big 3 tasks, brought onto the daily dashboard
+          (the standalone Focus tab has been folded in here). */}
+      <div style={{ ...S.card, padding:"14px 14px", marginTop:12 }}>
+        <SimpleFocus
+          tasks={dailyTasks[selectedDate] || []}
+          dateKey={selectedDate}
+          editable={selectedDate >= todayKey}
+          onAdd={addTask}
+          onToggle={toggleTask}
+          onSetPriority={setTaskPriority}
+          onEdit={editTask}
+          onDelete={deleteTask}
+        />
+      </div>
 
     </div>
   );
