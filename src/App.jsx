@@ -864,7 +864,7 @@ function HabitForm({ initial={}, identities, cueSettings={ custom: [], dismissed
   const habitCues = identities
     .flatMap(i => (i.habits || []))
     .filter(h => h.id !== initial.id && (h.label || "").trim() && (h.label || "").trim().toLowerCase() !== selfLabel)
-    .map(h => `After ${h.label.trim()}`);
+    .map(h => `After I ${h.label.trim()}`);   // a habit's action reads "After I walk"
   // A cue already anchored to another habit is "taken" — one cue → one habit keeps
   // the stack clean, so hide used cues (but never hide the one this habit already has).
   const usedCues = new Set(
@@ -3216,44 +3216,6 @@ function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHab
   );
 }
 
-// ─── LAW CHIP — a small law icon that reveals its coaching on hover / tap ──────
-// Craving / Response / Reward aren't shown in full on the card; the user taps (or
-// hovers) the chip to read that law's detail in a popover — same pattern as the
-// streak badge. `emphasis` gives an unfilled law a faint "add it" look.
-function LawChip({ icon, name, make, color, emphasis = false, compact = false, children }) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState(null);
-  const ref = useRef(null);
-  const W = 236;
-  const show = () => {
-    const r = ref.current?.getBoundingClientRect();
-    if (r) setPos({ top: r.bottom + 6, left: Math.max(8, Math.min(r.left, window.innerWidth - W - 8)) });
-    setOpen(true);
-  };
-  const hide = () => setOpen(false);
-  return (
-    <span ref={ref} style={{ position:"relative", display:"inline-flex" }}
-      onMouseEnter={show} onMouseLeave={hide}
-      onClick={(e) => { e.stopPropagation(); open ? hide() : show(); }}>
-      {compact ? (
-        <span aria-label={`${name}: ${make}`} style={{ width:28, height:28, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", color, background: emphasis ? "transparent" : color + "14", border:`1px ${emphasis ? "dashed" : "solid"} ${color}${emphasis ? "66" : "33"}`, cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
-          <Ic name={icon} size={14} color={color} />
-        </span>
-      ) : (
-      <span aria-label={`${name}: ${make}`} style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11, fontWeight:800, color, background: emphasis ? "transparent" : color + "14", border:`1px ${emphasis ? "dashed" : "solid"} ${color}${emphasis ? "66" : "30"}`, borderRadius:20, padding:"4px 10px", cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
-        <Ic name={icon} size={12} color={color} /> {name}
-      </span>
-      )}
-      {open && pos && (
-        <div role="tooltip" onClick={e => e.stopPropagation()} style={{ position:"fixed", top:pos.top, left:pos.left, zIndex:200, width:W, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 10px 28px rgba(9,45,75,0.2)", padding:"10px 12px" }}>
-          <div style={{ fontSize:9.5, fontWeight:900, letterSpacing:"0.04em", textTransform:"uppercase", color, marginBottom:5 }}>{name} · <span style={{ color:T.muted }}>{make}</span></div>
-          <div style={{ fontSize:12.5, color:T.text2, lineHeight:1.42 }}>{children}</div>
-        </div>
-      )}
-    </span>
-  );
-}
-
 // ─── IDENTITY NAME — one-line, truncates; hover / tap reveals the full statement ─
 function IdentityName({ text, color }) {
   const [open, setOpen] = useState(false);
@@ -3423,7 +3385,7 @@ function VotesBadge({ habit, allData, votes, total, color, isBad }) {
 
 // ─── HABIT ROW ────────────────────────────────────────────────────────────────
 // One habit on the timeline: cue → action → coaching (identity header is above).
-function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, adjustCount, count = 0, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, habitOps, readyAnchor = null, active = false }) {
+function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, adjustCount, count = 0, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, habitOps, readyAnchor = null, active = false, stackLabels = null }) {
   const next = getNextMilestone(streak);
   // Environment prep tick (Law 3) — a per-day, per-device convenience in localStorage.
   const [prepped, setPrepped] = useState(() => { try { return localStorage.getItem(`atoms:prep:${habit.id}:${getTodayKey()}`) === "1"; } catch { return false; } });
@@ -3539,7 +3501,10 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
                   "After" for cues that don't ("breakfast", "lunch"). */}
               {(() => {
                 const startsWithI = /^i\s+/i.test(cueAnchor);
-                const label = startsWithI ? "After I" : "After";
+                // A cue that names another habit's action ("wake up early") is a stack —
+                // it reads "After I …" too, even when the stored cue omitted the "I".
+                const isStack = !startsWithI && stackLabels && stackLabels.has(cueAnchor.trim().toLowerCase());
+                const label = (startsWithI || isStack) ? "After I" : "After";
                 const body  = startsWithI ? cueAnchor.replace(/^i\s+/i, "") : cueAnchor;
                 return (<>
                   <div style={{ fontSize:10, fontWeight:900, letterSpacing:"0.08em", textTransform:"uppercase", color:T.muted, marginBottom:2 }}>{label}</div>
@@ -3789,39 +3754,50 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             </div>
           )}
 
-          {/* Laws (icon chips) + the 7-day chain */}
-          <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-          {/* Left — the three laws as icon chips (tap/hover for detail) + a note icon */}
-          <div style={{ display:"flex", alignItems:"center", gap:7, flexShrink:0 }}>
-            <LawChip compact icon="star" name="Craving" make={breaking ? "make it unattractive" : "make it attractive"} color="#534AB7" emphasis={!habit.attractive}>
-              {habit.attractive || <AddHint label={breaking ? "Add the real cost" : "Add why it's attractive"} />}
-            </LawChip>
-            <LawChip compact icon="bolt" name="Response" make={breaking ? "make it difficult" : "make it easy"} color="#0F6E56" emphasis={!showStarter && !habit.easy}>
-              {showStarter && (breaking ? (
-                <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, fontWeight:700, color:"#712B13", background:"#FAECE7", border:"1px solid #F5C4B3", borderRadius:20, padding:"5px 12px", maxWidth:"100%" }}>
-                  <Ic name="warn" size={13} color="#712B13" />
-                  <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>If tempted: {habit.starter}</span>
+          {/* Laws — each on its own line with its content visible inline (no hover
+              needed) + the streak milestone. Wraps so nothing clips. */}
+          <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:14, flexWrap:"wrap", rowGap:10 }}>
+          {/* Left — the three laws stacked: label + its content per line */}
+          <div style={{ flex:"1 1 220px", minWidth:0, display:"flex", flexDirection:"column", gap:6 }}>
+            {[
+              { icon:"star", name:"Craving", color:"#534AB7",
+                content: habit.attractive
+                  ? <span style={{ color:T.text2 }}>{habit.attractive}</span>
+                  : <AddHint label={breaking ? "Add the real cost" : "Add why it's attractive"} /> },
+              { icon:"bolt", name:"Response", color:"#0F6E56",
+                content: (<>
+                  {showStarter && (breaking ? (
+                    <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, fontWeight:700, color:"#712B13", background:"#FAECE7", border:"1px solid #F5C4B3", borderRadius:20, padding:"4px 10px", maxWidth:"100%" }}>
+                      <Ic name="warn" size={13} color="#712B13" />
+                      <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>If tempted: {habit.starter}</span>
+                    </span>
+                  ) : (
+                    <button onClick={() => toggle(habit.id, habit.frequency, identity)} aria-label={`Do the two-minute version: ${habit.starter}`}
+                      style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, fontWeight:700, color:"#085041", background:"#E1F5EE", border:"1px solid #9FE1CB", borderRadius:20, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", maxWidth:"100%" }}>
+                      <Ic name="clock" size={13} color="#085041" />
+                      <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>2-min: {habit.starter}</span>
+                      <Ic name="check" size={12} color="#085041" />
+                    </button>
+                  ))}
+                  {habit.easy && <span style={{ color:T.text2, marginLeft: showStarter ? 6 : 0 }}>{habit.easy}</span>}
+                  {!showStarter && !habit.easy && <AddHint label={breaking ? "Add friction" : "Add an easy start"} />}
+                </>) },
+              { icon:"gift", name:"Reward", color:"#854F0B",
+                content: habit.satisfying
+                  ? <span style={{ color:T.text2 }}>{breaking ? "If you slip: " : ""}{habit.satisfying}</span>
+                  : <AddHint label={breaking ? "Add an accountability cost" : "Add a reward"} /> },
+            ].map(l => (
+              <div key={l.name} style={{ display:"flex", alignItems:"baseline", gap:8 }}>
+                <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:4, fontSize:10, fontWeight:900, letterSpacing:"0.04em", textTransform:"uppercase", color:l.color, minWidth:74 }}>
+                  <Ic name={l.icon} size={12} color={l.color} /> {l.name}
                 </span>
-              ) : (
-                <button onClick={() => toggle(habit.id, habit.frequency, identity)} aria-label={`Do the two-minute version: ${habit.starter}`}
-                  style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, fontWeight:700, color:"#085041", background:"#E1F5EE", border:"1px solid #9FE1CB", borderRadius:20, padding:"5px 12px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", maxWidth:"100%" }}>
-                  <Ic name="clock" size={13} color="#085041" />
-                  <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>2-min: {habit.starter}</span>
-                  <Ic name="check" size={12} color="#085041" />
-                </button>
-              ))}
-              {habit.easy && <div style={{ marginTop: showStarter ? 6 : 0 }}>{habit.easy}</div>}
-              {!showStarter && !habit.easy && <AddHint label={breaking ? "Add friction" : "Add an easy start"} />}
-            </LawChip>
-            <LawChip compact icon="gift" name="Reward" make={breaking ? "make it unsatisfying" : "make it satisfying"} color="#854F0B" emphasis={!habit.satisfying}>
-              {habit.satisfying
-                ? <span>{breaking ? "If you slip: " : ""}{habit.satisfying}</span>
-                : <AddHint label={breaking ? "Add an accountability cost" : "Add a reward"} />}
-            </LawChip>
+                <span style={{ flex:1, minWidth:0, fontSize:12.5, fontWeight:700, lineHeight:1.35, wordBreak:"break-word" }}>{l.content}</span>
+              </div>
+            ))}
             {setHabitNote && (
               <button type="button" onClick={() => setJournalOpen(true)} aria-label={note ? "Open note" : "Add a note for today"}
-                style={{ width:28, height:28, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", background: note ? "#534AB714" : "transparent", border:`1px ${note ? "solid" : "dashed"} ${note ? "#534AB733" : T.border}`, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
-                <Ic name="pencil" size={13} color={note ? "#534AB7" : T.muted} />
+                style={{ alignSelf:"flex-start", display:"inline-flex", alignItems:"center", gap:5, fontSize:12, fontWeight:700, color: note ? "#534AB7" : T.muted, background:"none", border:"none", padding:0, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
+                <Ic name="pencil" size={13} color={note ? "#534AB7" : T.muted} /> {note ? "Note" : "Add a note"}
               </button>
             )}
           </div>
@@ -4808,6 +4784,10 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
   const [doneOpen, setDoneOpen] = useState(false); // Completed section — collapsed by default
   const [focusAdding, setFocusAdding] = useState(false); // inline "add to a free Top-3 slot" input
 
+  // Lowercased set of every habit's action, so a card can tell a habit-stack cue
+  // ("wake up early") from an event cue ("breakfast") and read it as "After I …".
+  const stackLabels = useMemo(() => new Set(allHabits.map(h => (h.label || "").trim().toLowerCase()).filter(Boolean)), [allHabits]);
+
   // Focus mode — snapshot of pending habits taken when the session starts
   const [focusItems, setFocusItems] = useState(null);
   const startFocus = () => {
@@ -4965,6 +4945,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                     becomes Law 1 in the details. Streak badge + ⋯ menu ride top-right. */}
                 <HabitRow
                   active={habit.id === firstPendingId}
+                  stackLabels={stackLabels}
                   streakBadge={streakBadge}
                   onEdit={() => openEditHabit(identity.id, habit)}
                   menu={<RowMenu habit={habit} identity={identity} missed={todayData[habit.id] === "miss"} onMiss={markMiss} openEditHabit={openEditHabit} openDeleteHabit={openDeleteHabit} onReview={openReviewFor} habitNotes={habitNotes} allData={allData} setHabitNote={setHabitNote} habitOps={habitOps} />}
