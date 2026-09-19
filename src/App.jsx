@@ -3508,11 +3508,13 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               that drops into the check-in ring below. Only when pending + a trigger. ── */}
         {!checked && !missed && cueText && (
           <div style={{ display:"flex", gap:11 }}>
-            <div style={{ width:36, flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center" }}>
-              <span aria-hidden="true" style={{ width:26, height:26, borderRadius:"50%", background:C + "14", border:`1.5px solid ${C}33`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, flexShrink:0 }}>{cueEm || "⏱"}</span>
-              <span aria-hidden="true" style={{ width:2, flex:1, minHeight:13, background:`linear-gradient(${C}40, ${C})`, borderRadius:2 }} />
+            {/* Same 44px width as the ring column below, so the rail drops straight
+                into the ring centre and the cue/action text share one left edge. */}
+            <div style={{ width:44, flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center" }}>
+              <span aria-hidden="true" style={{ width:28, height:28, borderRadius:"50%", background:C + "14", border:`1.5px solid ${C}33`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, flexShrink:0 }}>{cueEm || "⏱"}</span>
+              <span aria-hidden="true" style={{ width:2, flex:1, minHeight:12, background:`linear-gradient(${C}40, ${C})`, borderRadius:2 }} />
             </div>
-            <div style={{ flex:1, minWidth:0, paddingTop:1 }}>
+            <div style={{ flex:1, minWidth:0, paddingTop:2 }}>
               {/* Pull a leading "I" into the label so it reads "After I …" for cues
                   that start with "I" ("I hear the alarm ring"), while keeping a plain
                   "After" for cues that don't ("breakfast", "lunch"). */}
