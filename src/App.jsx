@@ -4863,6 +4863,21 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
     <div style={S.content}>
       {/* Day Navigator now lives in the sticky header (stays pinned on scroll) */}
 
+      {/* Today's Focus — the Big 3 tasks, at the top of the daily dashboard
+          (the standalone Focus tab has been folded in here). */}
+      <div style={{ ...S.card, padding:"14px 14px" }}>
+        <SimpleFocus
+          tasks={dailyTasks[selectedDate] || []}
+          dateKey={selectedDate}
+          editable={selectedDate >= todayKey}
+          onAdd={addTask}
+          onToggle={toggleTask}
+          onSetPriority={setTaskPriority}
+          onEdit={editTask}
+          onDelete={deleteTask}
+        />
+      </div>
+
       {/* Looking ahead — a read-only preview of an upcoming day */}
       {isFuture && (
         <div style={{ display:"flex", alignItems:"center", gap:11, background:T.accent+"12", border:`1px solid ${T.accent}3a`, borderRadius:14, padding:"11px 14px" }}>
@@ -5137,21 +5152,6 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
           )}
         </div>
       )}
-
-      {/* Today's Focus — the Big 3 tasks, brought onto the daily dashboard
-          (the standalone Focus tab has been folded in here). */}
-      <div style={{ ...S.card, padding:"14px 14px", marginTop:12 }}>
-        <SimpleFocus
-          tasks={dailyTasks[selectedDate] || []}
-          dateKey={selectedDate}
-          editable={selectedDate >= todayKey}
-          onAdd={addTask}
-          onToggle={toggleTask}
-          onSetPriority={setTaskPriority}
-          onEdit={editTask}
-          onDelete={deleteTask}
-        />
-      </div>
 
     </div>
   );
