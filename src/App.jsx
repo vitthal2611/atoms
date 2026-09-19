@@ -864,7 +864,9 @@ function HabitForm({ initial={}, identities, cueSettings={ custom: [], dismissed
   const habitCues = identities
     .flatMap(i => (i.habits || []))
     .filter(h => h.id !== initial.id && (h.label || "").trim() && (h.label || "").trim().toLowerCase() !== selfLabel)
-    .map(h => `After I ${h.label.trim()}`);   // a habit's action reads "After I walk"
+    // Read as "After I <action>" — drop a leading "I " the action may already carry
+    // so it never doubles up ("i am a reader" → "After I am a reader", not "After I i…").
+    .map(h => `After I ${h.label.trim().replace(/^i\s+/i, "")}`);
   // A cue already anchored to another habit is "taken" — one cue → one habit keeps
   // the stack clean, so hide used cues (but never hide the one this habit already has).
   const usedCues = new Set(
