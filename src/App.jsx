@@ -3534,8 +3534,18 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               <span aria-hidden="true" style={{ width:2, flex:1, minHeight:13, background:`linear-gradient(${C}40, ${C})`, borderRadius:2 }} />
             </div>
             <div style={{ flex:1, minWidth:0, paddingTop:1 }}>
-              <div style={{ fontSize:10, fontWeight:900, letterSpacing:"0.08em", textTransform:"uppercase", color:T.muted, marginBottom:2 }}>After</div>
-              <div style={{ fontSize:12.5, fontWeight:700, color:T.text2, lineHeight:1.3, wordBreak:"break-word" }}>{cueAnchor}</div>
+              {/* Pull a leading "I" into the label so it reads "After I …" for cues
+                  that start with "I" ("I hear the alarm ring"), while keeping a plain
+                  "After" for cues that don't ("breakfast", "lunch"). */}
+              {(() => {
+                const startsWithI = /^i\s+/i.test(cueAnchor);
+                const label = startsWithI ? "After I" : "After";
+                const body  = startsWithI ? cueAnchor.replace(/^i\s+/i, "") : cueAnchor;
+                return (<>
+                  <div style={{ fontSize:10, fontWeight:900, letterSpacing:"0.08em", textTransform:"uppercase", color:T.muted, marginBottom:2 }}>{label}</div>
+                  <div style={{ fontSize:12.5, fontWeight:700, color:T.text2, lineHeight:1.3, wordBreak:"break-word" }}>{body}</div>
+                </>);
+              })()}
             </div>
           </div>
         )}
