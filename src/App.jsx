@@ -4161,11 +4161,13 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onSetPriority,
   const [editingId, setEditingId] = useState(null);
   const [editVal, setEditVal] = useState("");
   const [doneOpen, setDoneOpen] = useState(false);
-  useEffect(() => { setVal(""); setEditingId(null); }, [dateKey]);
+  const [showAll, setShowAll] = useState(false);   // by default show only High priority
+  useEffect(() => { setVal(""); setEditingId(null); setShowAll(false); }, [dateKey]);
 
   const live = tasks.filter(t => !t.carried);
   const open = live.filter(t => !t.done).slice().sort(byPriority);
   const done = live.filter(t => t.done);
+  const hiddenCount = open.filter(t => priorityOf(t) !== "high").length;   // Med + Low, hidden until "show all"
   const add = () => { const t = val.trim(); if (!t) return; onAdd(dateKey, t, pri); setVal(""); };
   const saveEdit = () => { const t = editVal.trim(); if (t) onEdit(dateKey, editingId, t); setEditingId(null); };
 
@@ -4206,10 +4208,12 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onSetPriority,
         </div>
       )}
 
-      {/* Open tasks grouped under HIGH / MED / LOW — empty groups are hidden */}
+      {/* Open tasks grouped under HIGH / MED / LOW — empty groups are hidden.
+          By default only High shows; Med/Low reveal via "show more" below. */}
       {PRIORITY_ORDER.map(gk => {
         const group = open.filter(t => priorityOf(t) === gk);
         if (group.length === 0) return null;
+        if (!showAll && gk !== "high") return null;
         const G = PRIORITIES[gk];
         return (
           <div key={gk}>
@@ -4253,6 +4257,15 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onSetPriority,
           </div>
         );
       })}
+
+      {/* Show-more toggle — Med/Low stay hidden until the user expands them */}
+      {hiddenCount > 0 && (
+        <button type="button" onClick={() => setShowAll(s => !s)} aria-expanded={showAll}
+          style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, width:"100%", marginTop:8, padding:"9px", background:"transparent", border:"none", cursor:"pointer", fontFamily:"inherit", fontSize:12, fontWeight:800, color:T.primary, WebkitTapHighlightColor:"transparent" }}>
+          {showAll ? "Show less" : `Show ${hiddenCount} more`}
+          <span aria-hidden="true">{showAll ? "▴" : "▾"}</span>
+        </button>
+      )}
 
       {open.length === 0 && done.length === 0 && (
         <div style={{ fontSize:13, color:T.muted, textAlign:"center", padding:"10px 0 4px" }}>No tasks yet{editable ? " — add one above." : "."}</div>
