@@ -4183,30 +4183,6 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onSetPriority,
         )}
       </div>
 
-      {/* Add a task — text + High/Med/Low + add */}
-      {editable && (
-        <div style={{ display:"flex", alignItems:"center", gap:8, background:T.bg, borderRadius:12, padding:"5px 6px 5px 12px", marginBottom:(open.length||done.length)?10:2 }}>
-          <input value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter") add(); if(e.key==="Escape") setVal(""); }}
-            placeholder="Add a task…" maxLength={80} aria-label="New task"
-            style={{ flex:1, minWidth:0, border:"none", background:"transparent", fontSize:16, color:T.text, outline:"none", fontFamily:"inherit", padding:"6px 0" }} />
-          <div style={{ display:"flex", gap:3 }} role="group" aria-label="Priority for the new task">
-            {PRIORITY_ORDER.map(k => {
-              const P = PRIORITIES[k]; const on = pri === k;
-              return (
-                <button key={k} type="button" onClick={()=>setPri(k)} aria-pressed={on}
-                  style={{ fontSize:10, fontWeight:800, padding:"4px 7px", borderRadius:7, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
-                    background: on ? P.pillBg : "#fff", color: on ? P.pillText : T.muted, border:`1px solid ${on ? P.pillBorder : T.border}` }}>
-                  {P.label}
-                </button>
-              );
-            })}
-          </div>
-          <button type="button" onClick={add} aria-label="Add task"
-            style={{ flexShrink:0, width:30, height:30, borderRadius:9, border:"none", background: val.trim()?T.primary:T.border2, color:"#fff", fontSize:18, fontWeight:800, lineHeight:1, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
-            <span aria-hidden="true">+</span>
-          </button>
-        </div>
-      )}
 
       {/* Open tasks grouped under HIGH / MED / LOW — empty groups are hidden.
           By default only High shows; Med/Low reveal via "show more" below. */}
@@ -4257,6 +4233,32 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onSetPriority,
           </div>
         );
       })}
+
+      {/* Add a task — text + High/Med/Low + add. Sits just below the list, above
+          the show-more toggle, so adding is right where the tasks are. */}
+      {editable && (
+        <div style={{ display:"flex", alignItems:"center", gap:8, background:T.bg, borderRadius:12, padding:"5px 6px 5px 12px", marginTop:(open.length||done.length)?10:2 }}>
+          <input value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter") add(); if(e.key==="Escape") setVal(""); }}
+            placeholder="Add a task…" maxLength={80} aria-label="New task"
+            style={{ flex:1, minWidth:0, border:"none", background:"transparent", fontSize:16, color:T.text, outline:"none", fontFamily:"inherit", padding:"6px 0" }} />
+          <div style={{ display:"flex", gap:3 }} role="group" aria-label="Priority for the new task">
+            {PRIORITY_ORDER.map(k => {
+              const P = PRIORITIES[k]; const on = pri === k;
+              return (
+                <button key={k} type="button" onClick={()=>setPri(k)} aria-pressed={on}
+                  style={{ fontSize:10, fontWeight:800, padding:"4px 7px", borderRadius:7, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
+                    background: on ? P.pillBg : "#fff", color: on ? P.pillText : T.muted, border:`1px solid ${on ? P.pillBorder : T.border}` }}>
+                  {P.label}
+                </button>
+              );
+            })}
+          </div>
+          <button type="button" onClick={add} aria-label="Add task"
+            style={{ flexShrink:0, width:30, height:30, borderRadius:9, border:"none", background: val.trim()?T.primary:T.border2, color:"#fff", fontSize:18, fontWeight:800, lineHeight:1, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
+            <span aria-hidden="true">+</span>
+          </button>
+        </div>
+      )}
 
       {/* Show-more toggle — Med/Low stay hidden until the user expands them */}
       {hiddenCount > 0 && (
