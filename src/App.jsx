@@ -3513,17 +3513,18 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             aria-label={isQty && !checked ? `Add one for ${habit.label}` : checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
             style={{ flex: 1, minWidth: 0, cursor: readOnly ? "default" : "pointer" }}
           >
-            {!checked && !missed && intention && (
-              <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.01em", color:C, marginBottom:2 }}>{intention}</div>
-            )}
+            {/* Action first (the hero); the cue reads as a smaller line beneath it. */}
             <span style={{
-              display:"block", wordBreak:"break-word", fontSize:16, fontWeight:700, letterSpacing:"-0.01em", lineHeight:1.3,
+              display:"block", wordBreak:"break-word", fontSize:17, fontWeight:800, letterSpacing:"-0.01em", lineHeight:1.25,
               color: checked ? T.text2 : missed ? T.muted : T.text,
               textDecoration: checked ? "line-through" : "none",
               textDecorationColor: C + "88",
             }}>
               {habit.label}
             </span>
+            {!checked && !missed && cueText && (
+              <div style={{ fontSize:12, fontWeight:700, letterSpacing:"0.01em", color:C, marginTop:3 }}>{cueLead} {cueBody}</div>
+            )}
             {isQty && !checked && !missed && (
               <span style={{ display:"block", fontSize:11.5, fontWeight:700, color:T.text2, marginTop:3 }}>
                 {count} of {target}{unit ? " " + unit : ""} · {target - count} to go
