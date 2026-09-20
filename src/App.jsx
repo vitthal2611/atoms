@@ -3418,6 +3418,14 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
   // Anchor = the trigger with a leading "After " stripped, so the flow can label it
   // "After" once and show just the thing you're stacking onto (e.g. "my morning walk").
   const cueAnchor = (habit.trigger || "").replace(/^\s*after\s+/i, "").trim() || cueText;
+  // Implementation intention as one eyebrow line — "After I have my tea, I will".
+  // Pulls a leading "I" into "After I …" for cues that carry it (or that name
+  // another habit's action), so it always reads as a natural sentence.
+  const cueStartsWithI = /^i\s+/i.test(cueAnchor);
+  const cueIsStack = !cueStartsWithI && stackLabels && stackLabels.has(cueAnchor.trim().toLowerCase());
+  const cueLead = (cueStartsWithI || cueIsStack) ? "After I" : "After";
+  const cueBody = cueStartsWithI ? cueAnchor.replace(/^i\s+/i, "") : cueAnchor;
+  const intention = cueText ? `${cueLead} ${cueBody}, ${habit.kind === "bad" ? "instead I'll" : "I will"}` : "";
 
   // Daily reflection note — the footer link opens the scrollable journal.
   const [journalOpen, setJournalOpen] = useState(false);
@@ -3467,6 +3475,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           if (idVotes < 1) return null;
           return <span title={`${idVotes} votes cast toward becoming ${shortLabel(identity.label)}`} style={{ flexShrink:0, fontSize:10, fontWeight:800, color: Cd, background: C + "1f", borderRadius:20, padding:"2px 8px", whiteSpace:"nowrap" }}>{idVotes} {breaking ? "clean" : "votes"}</span>;
         })()}
+        {streakBadge}
         {menu}
       </div>
 
@@ -3489,38 +3498,8 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             <span style={{ fontSize:11.5, fontWeight:700, color: prepped ? "#085041" : T.text2, textDecoration: prepped ? "line-through" : "none" }}>{prepped ? "Prepped" : "Prep"}: {habit.easy}</span>
           </button>
         )}
-        {/* ── Trigger → Action flow. Step 1: the cue's emoji is a node with a rail
-              that drops into the check-in ring below. Only when pending + a trigger. ── */}
-        {!checked && !missed && cueText && (
-          <div style={{ display:"flex", gap:11 }}>
-            {/* Same 44px width as the ring column below, so the rail drops straight
-                into the ring centre and the cue/action text share one left edge. */}
-            <div style={{ width:44, flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center" }}>
-              <span aria-hidden="true" style={{ width:28, height:28, borderRadius:"50%", background:C + "14", border:`1.5px solid ${C}33`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, flexShrink:0 }}>{cueEm || "⏱"}</span>
-              <span aria-hidden="true" style={{ width:2, flex:1, minHeight:12, background:`linear-gradient(${C}40, ${C})`, borderRadius:2 }} />
-            </div>
-            <div style={{ flex:1, minWidth:0, paddingTop:2 }}>
-              {/* Pull a leading "I" into the label so it reads "After I …" for cues
-                  that start with "I" ("I hear the alarm ring"), while keeping a plain
-                  "After" for cues that don't ("breakfast", "lunch"). */}
-              {(() => {
-                const startsWithI = /^i\s+/i.test(cueAnchor);
-                // A cue that names another habit's action ("wake up early") is a stack —
-                // it reads "After I …" too, even when the stored cue omitted the "I".
-                const isStack = !startsWithI && stackLabels && stackLabels.has(cueAnchor.trim().toLowerCase());
-                const label = (startsWithI || isStack) ? "After I" : "After";
-                const body  = startsWithI ? cueAnchor.replace(/^i\s+/i, "") : cueAnchor;
-                return (<>
-                  <div style={{ fontSize:10, fontWeight:900, letterSpacing:"0.08em", textTransform:"uppercase", color:T.muted, marginBottom:2 }}>{label}</div>
-                  <div style={{ fontSize:12.5, fontWeight:700, color:T.text2, lineHeight:1.3, wordBreak:"break-word" }}>{body}</div>
-                </>);
-              })()}
-            </div>
-          </div>
-        )}
-
-        {/* Step 2: the check-in ring + the action (the hero) */}
-        <div style={{ display:"flex", alignItems:"center", gap:11, marginTop: (!checked && !missed && cueText) ? 2 : 0 }}>
+        {/* ── The check-in ring + the implementation intention (the hero) ── */}
+        <div style={{ display:"flex", alignItems:"center", gap:11 }}>
           <span style={{ flexShrink:0, width:44, display:"flex", alignItems:"center", justifyContent:"center" }}>
             {isQty && !checked && !missed ? (
               <CounterRing count={count} target={target} color={C} size={44}
@@ -3549,11 +3528,11 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             aria-label={isQty && !checked ? `Add one for ${habit.label}` : checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
             style={{ flex: 1, minWidth: 0, cursor: readOnly ? "default" : "pointer" }}
           >
-            {!checked && !missed && cueText && (
-              <div style={{ fontSize:10, fontWeight:900, letterSpacing:"0.08em", textTransform:"uppercase", color:C, marginBottom:2 }}>I will</div>
+            {!checked && !missed && intention && (
+              <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.01em", color:C, marginBottom:2 }}>{intention}</div>
             )}
             <span style={{
-              display:"block", wordBreak:"break-word", fontSize:14.5, fontWeight:700, letterSpacing:"-0.01em", lineHeight:1.3,
+              display:"block", wordBreak:"break-word", fontSize:16, fontWeight:700, letterSpacing:"-0.01em", lineHeight:1.3,
               color: checked ? T.text2 : missed ? T.muted : T.text,
               textDecoration: checked ? "line-through" : "none",
               textDecorationColor: C + "88",
@@ -3793,7 +3772,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
                   : <AddHint label={breaking ? "Add an accountability cost" : "Add a reward"} /> },
             ].map(l => (
               <div key={l.name} style={{ display:"flex", alignItems:"baseline", gap:8 }}>
-                <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:4, fontSize:10, fontWeight:900, letterSpacing:"0.04em", textTransform:"uppercase", color:l.color, minWidth:74 }}>
+                <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:5, fontSize:10, fontWeight:900, letterSpacing:"0.04em", textTransform:"uppercase", color:l.color, minWidth:92 }}>
                   <Ic name={l.icon} size={12} color={l.color} /> {l.name}
                 </span>
                 <span style={{ flex:1, minWidth:0, fontSize:12.5, fontWeight:700, lineHeight:1.35, wordBreak:"break-word" }}>{l.content}</span>
