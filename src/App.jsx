@@ -3483,16 +3483,6 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             <span style={{ fontSize:11.5, fontWeight:800, color:"#085041" }}>Ready now — you just finished “{shortLabel(readyAnchor)}”</span>
           </div>
         )}
-        {/* Environment design (Law 3) — make the prep an actionable, visible cue. */}
-        {!checked && !missed && !breaking && habit.easy && !readOnly && (
-          <button type="button" onClick={() => { const v = !prepped; setPrepped(v); try { localStorage.setItem(`atoms:prep:${habit.id}:${getTodayKey()}`, v ? "1" : "0"); } catch {} }}
-            aria-pressed={prepped} aria-label={prepped ? "Prepped — tap to undo" : `Mark prepped: ${habit.easy}`}
-            style={{ display:"flex", alignItems:"center", gap:7, width:"100%", textAlign:"left", marginBottom:8, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent",
-              background: prepped ? "#E1F5EE" : "#F1F5F9", border:`1px solid ${prepped ? "#9FE1CB" : T.border}`, borderRadius:9, padding:"6px 10px" }}>
-            <span aria-hidden="true" style={{ flexShrink:0, width:16, height:16, borderRadius:5, display:"flex", alignItems:"center", justifyContent:"center", background: prepped ? "#0F9D74" : "transparent", border:`1.5px solid ${prepped ? "#0F9D74" : T.border2}` }}>{prepped && <Ic name="check" size={11} color="#fff" />}</span>
-            <span style={{ fontSize:11.5, fontWeight:700, color: prepped ? "#085041" : T.text2, textDecoration: prepped ? "line-through" : "none" }}>{prepped ? "Prepped" : "Prep"}: {habit.easy}</span>
-          </button>
-        )}
         {/* ── The check-in ring + the implementation intention (the hero) ── */}
         <div style={{ display:"flex", alignItems:"center", gap:11 }}>
           <span style={{ flexShrink:0, width:44, display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -3717,25 +3707,8 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
         <div style={{ background:T.surface, borderTop:`1px solid ${T.surf2}`, padding:"9px 14px 11px" }}
           aria-label={`${votes} of ${total} ${breaking ? "days clean" : "days kept"} toward ${shortLabel(identity.label)}, ${pct} percent${streak > 0 ? `, ${streak} ${breaking ? "days clean streak" : "day streak"}` : ""}`}>
 
-          {/* Commitment device (stake shown upfront, not just on a miss) + contract
-              witness — the accountability is visible before you act, not after. */}
-          {(habit.stakes || habit.partnerName) && (
-            <div style={{ display:"flex", flexWrap:"wrap", gap:7, marginBottom:9 }}>
-              {habit.stakes && (
-                <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11.5, fontWeight:700, color:"#8A3A5E", background:"#FCE9F0", border:"1px solid #F3B6CE", borderRadius:20, padding:"3px 10px" }}>
-                  <span aria-hidden="true">🔒</span> On the line: {habit.stakes}
-                </span>
-              )}
-              {habit.partnerName && (
-                <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11.5, fontWeight:700, color:"#3B6D11", background:"#EAF3DE", border:"1px solid #C0DD97", borderRadius:20, padding:"3px 10px" }}>
-                  <span aria-hidden="true">🤝</span> Witnessed by {shortLabel(habit.partnerName)}
-                </span>
-              )}
-            </div>
-          )}
-
           {/* Four Laws — icon · label · value, one per line (B1). */}
-          <div style={{ display:"flex", flexDirection:"column", gap:10, borderTop:`1px solid ${T.surf2}`, marginTop:14, paddingTop:13 }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
             {[
               { icon:"heart", name:"Craving", color:"#534AB7",
                 content: habit.attractive
