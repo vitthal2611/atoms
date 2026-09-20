@@ -3469,12 +3469,6 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           <span style={{ flexShrink:0, fontSize:10, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking" : "I am"}</span>
           <IdentityName text={idDisplay} color={Cd} />
         </div>
-        {/* Identity evidence — votes cast for this self compound and never reset. */}
-        {(() => {
-          const idVotes = (identity.habits || []).reduce((n, h) => n + Object.values(allData).filter(d => d && d[h.id] === true).length, 0);
-          if (idVotes < 1) return null;
-          return <span title={`${idVotes} votes cast toward becoming ${shortLabel(identity.label)}`} style={{ flexShrink:0, fontSize:10, fontWeight:800, color: Cd, background: C + "1f", borderRadius:20, padding:"2px 8px", whiteSpace:"nowrap" }}>{idVotes} {breaking ? "clean" : "votes"}</span>;
-        })()}
         {streakBadge}
         {menu}
       </div>
@@ -3739,15 +3733,12 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             </div>
           )}
 
-          {/* Laws — each on its own line with its content visible inline (no hover
-              needed) + the streak milestone. Wraps so nothing clips. */}
-          <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:14, flexWrap:"wrap", rowGap:10 }}>
-          {/* Left — the three laws stacked: label + its content per line */}
-          <div style={{ flex:"1 1 220px", minWidth:0, display:"flex", flexDirection:"column", gap:6 }}>
+          {/* Four Laws — icon · label · value, one per line (B1). */}
+          <div style={{ display:"flex", flexDirection:"column", gap:10, borderTop:`1px solid ${T.surf2}`, marginTop:14, paddingTop:13 }}>
             {[
               { icon:"star", name:"Craving", color:"#534AB7",
                 content: habit.attractive
-                  ? <span style={{ color:T.text2 }}>{habit.attractive}</span>
+                  ? <span style={{ color:T.text }}>{habit.attractive}</span>
                   : <AddHint label={breaking ? "Add the real cost" : "Add why it's attractive"} /> },
               { icon:"bolt", name:"Response", color:"#0F6E56",
                 // For good habits the easy/prep already has its own "Prep:" bar at the
@@ -3755,38 +3746,40 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
                 // have no prep bar, so both friction levers can share this line.
                 content: breaking
                   ? ((showStarter || habit.easy)
-                      ? <span style={{ color:T.text2 }}>
+                      ? <span style={{ color:T.text }}>
                           {showStarter && <>If tempted: {habit.starter}</>}
                           {showStarter && habit.easy ? " · " : ""}
                           {habit.easy}
                         </span>
                       : <AddHint label="Add friction" />)
                   : (showStarter
-                      ? <span style={{ color:T.text2 }}>2-min: {habit.starter}</span>
+                      ? <span style={{ color:T.text }}>2-min: {habit.starter}</span>
                       : habit.easy
-                      ? <span style={{ color:T.text2 }}>{habit.easy}</span>
+                      ? <span style={{ color:T.text }}>{habit.easy}</span>
                       : <AddHint label="Add an easy start" />) },
               { icon:"gift", name:"Reward", color:"#854F0B",
                 content: habit.satisfying
-                  ? <span style={{ color:T.text2 }}>{breaking ? "If you slip: " : ""}{habit.satisfying}</span>
+                  ? <span style={{ color:T.text }}>{breaking ? "If you slip: " : ""}{habit.satisfying}</span>
                   : <AddHint label={breaking ? "Add an accountability cost" : "Add a reward"} /> },
             ].map(l => (
-              <div key={l.name} style={{ display:"flex", alignItems:"baseline", gap:8 }}>
-                <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:5, fontSize:10, fontWeight:900, letterSpacing:"0.04em", textTransform:"uppercase", color:l.color, minWidth:92 }}>
-                  <Ic name={l.icon} size={12} color={l.color} /> {l.name}
+              <div key={l.name} style={{ display:"flex", alignItems:"baseline", gap:10 }}>
+                <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:6, width:100, fontSize:11, fontWeight:900, letterSpacing:"0.03em", textTransform:"uppercase", color:l.color }}>
+                  <Ic name={l.icon} size={15} color={l.color} /> {l.name}
                 </span>
-                <span style={{ flex:1, minWidth:0, fontSize:12.5, fontWeight:700, lineHeight:1.35, wordBreak:"break-word" }}>{l.content}</span>
+                <span style={{ flex:1, minWidth:0, fontSize:13.5, fontWeight:600, lineHeight:1.35, wordBreak:"break-word" }}>{l.content}</span>
               </div>
             ))}
-            {setHabitNote && (
-              <button type="button" onClick={() => setJournalOpen(true)} aria-label={note ? "Open note" : "Add a note for today"}
-                style={{ alignSelf:"flex-start", display:"inline-flex", alignItems:"center", gap:5, fontSize:12, fontWeight:700, color: note ? "#534AB7" : T.muted, background:"none", border:"none", padding:0, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
-                <Ic name="pencil" size={13} color={note ? "#534AB7" : T.muted} /> {note ? "Note" : "Add a note"}
-              </button>
-            )}
           </div>
-          {/* Right — the streak milestone (anticipation: the next badge to earn). */}
-          <MilestoneProgress streak={streak} />
+
+          {/* Footer — add a note (left) + the next-reward milestone (right) */}
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginTop:13, paddingTop:12, borderTop:`1px solid ${T.surf2}` }}>
+            {setHabitNote ? (
+              <button type="button" onClick={() => setJournalOpen(true)} aria-label={note ? "Open note" : "Add a note for today"}
+                style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:12, fontWeight:700, color: note ? "#534AB7" : T.muted, background:"none", border:"none", padding:0, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
+                <Ic name="pencil" size={14} color={note ? "#534AB7" : T.muted} /> {note ? "Note" : "Add a note"}
+              </button>
+            ) : <span aria-hidden="true" />}
+            <MilestoneProgress streak={streak} />
           </div>
 
           {/* 2-minute rule scaling — once it's automatic, nudge to grow it (once). */}
