@@ -2967,6 +2967,7 @@ const IC_PATHS = {
   rows:   <><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></>,
   rail:   <><path d="M7 4v16"/><path d="M11 7h9"/><path d="M11 12h9"/><path d="M11 17h9"/><circle cx="7" cy="7" r="1.6" fill="currentColor" stroke="none"/><circle cx="7" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="7" cy="17" r="1.6" fill="currentColor" stroke="none"/></>,
   star:   <polygon points="12 2.6 15 9 22 9.9 17 14.6 18.3 21.4 12 18.1 5.7 21.4 7 14.6 2 9.9 9 9"/>,
+  heart:  <path d="M19.5 12.6l-7.5 7.4-7.5-7.4a5 5 0 1 1 7.5-6.6 5 5 0 1 1 7.5 6.6z"/>,
   bulb:   <><path d="M9 18h6"/><path d="M10 22h4"/><path d="M8 14a6 6 0 1 1 8 0c-.8.7-1.3 1.5-1.5 2.5h-5c-.2-1-.7-1.8-1.5-2.5z"/></>,
   mountain: <><path d="M3 20h18L14 6l-3.5 7L8 10z"/></>,
   trend:  <><path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v5h-5"/></>,
@@ -3736,7 +3737,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           {/* Four Laws — icon · label · value, one per line (B1). */}
           <div style={{ display:"flex", flexDirection:"column", gap:10, borderTop:`1px solid ${T.surf2}`, marginTop:14, paddingTop:13 }}>
             {[
-              { icon:"star", name:"Craving", color:"#534AB7",
+              { icon:"heart", name:"Craving", color:"#534AB7",
                 content: habit.attractive
                   ? <span style={{ color:T.text }}>{habit.attractive}</span>
                   : <AddHint label={breaking ? "Add the real cost" : "Add why it's attractive"} /> },
