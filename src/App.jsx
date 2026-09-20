@@ -3714,7 +3714,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
         const doneColor = breaking ? "#639922" : C;
         return (
-        <div style={{ background:T.bg, borderTop:`1px solid ${T.surf2}`, padding:"9px 14px 11px" }}
+        <div style={{ background:T.surface, borderTop:`1px solid ${T.surf2}`, padding:"9px 14px 11px" }}
           aria-label={`${votes} of ${total} ${breaking ? "days clean" : "days kept"} toward ${shortLabel(identity.label)}, ${pct} percent${streak > 0 ? `, ${streak} ${breaking ? "days clean streak" : "day streak"}` : ""}`}>
 
           {/* Commitment device (stake shown upfront, not just on a miss) + contract
