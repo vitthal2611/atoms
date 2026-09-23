@@ -2004,31 +2004,37 @@ export default function App() {
   // so the same task is never duplicated even across multiple refreshes.
   const performRollover = useCallback(() => {
     const today = getTodayKey();
-    const d = new Date(); d.setDate(d.getDate() - 1);
-    const yesterday = dateToKey(d);
     setDailyTasks(prev => {
-      const undone = (prev[yesterday] || []).filter(t => !t.done && !t.carried);
-      if (!undone.length) return prev;
       const todayTasks = prev[today] || [];
-      // IDs already carried from yesterday → today
+      // Tasks already carried into today (by source id) — never carry them twice.
       const alreadyCarried = new Set(todayTasks.map(t => t.carriedFrom).filter(Boolean));
-      const toCarry = undone.filter(t => !alreadyCarried.has(t.id));
+      // Gap-safe: pull undone tasks from EVERY earlier day, not just yesterday, so
+      // a skipped day never strands them. Oldest first, to preserve order.
+      const next = { ...prev };
+      const toCarry = [];
+      for (const key of Object.keys(prev).filter(k => k < today).sort()) {
+        const list = prev[key];
+        if (!Array.isArray(list)) continue;
+        const undone = list.filter(t => !t.done && !t.carried && !alreadyCarried.has(t.id));
+        if (!undone.length) continue;
+        const ids = new Set(undone.map(t => t.id));
+        next[key] = list.map(t => ids.has(t.id) ? { ...t, carried: true } : t); // hide the source
+        toCarry.push(...undone);
+      }
       if (!toCarry.length) return prev;
-      const carriedIds = new Set(toCarry.map(t => t.id));
-      // Mark source tasks in yesterday as carried so they hide from that day's view
-      const updatedYesterday = (prev[yesterday] || []).map(t =>
-        carriedIds.has(t.id) ? { ...t, carried: true } : t
-      );
-      // Stars survive the midnight rollover — an unfinished priority is still a
-      // priority today. Fill the day's remaining slots in order; anything past
-      // the cap lands unstarred in the backlog rather than blowing through it.
-      let slots = STAR_LIMIT - countStarred(todayTasks);
-      const newToday = [...todayTasks, ...toCarry.map(t => {
-        const keepStar = isStarred(t) && slots > 0;
-        if (keepStar) slots--;
-        return { ...t, id: uid(), done: false, star: keepStar, carriedFrom: t.id };
+      // The Big 3 (focus) survives — an unfinished priority is still one today. Fill
+      // the remaining focus slots in order; anything past the cap lands in the backlog.
+      let slots = 3 - todayTasks.filter(t => t.focus && !t.done).length;
+      next[today] = [...todayTasks, ...toCarry.map(t => {
+        const keepFocus = !!t.focus && slots > 0;
+        if (keepFocus) slots--;
+        // Drop legacy star + the source's focus fields; re-add focus only if kept
+        // (never write `undefined` — Firestore rejects it).
+        const { star, focus, focusAt, ...rest } = t;
+        return { ...rest, id: uid(), done: false, carried: false, carriedFrom: t.id,
+          ...(keepFocus ? { focus: true, focusAt: focusAt || Date.now() } : {}) };
       })];
-      return { ...prev, [yesterday]: updatedYesterday, [today]: newToday };
+      return next;
     });
   }, []);
 
