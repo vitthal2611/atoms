@@ -3505,53 +3505,19 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               />
             )}
           </span>
+          {/* Action is the hero, on one line with the ring. */}
           <span
             onClick={activate}
             role="button"
             tabIndex={0}
             onKeyDown={e => { if (e.key === "Enter") activate(); }}
             aria-label={isQty && !checked ? `Add one for ${habit.label}` : checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
-            style={{ flex: 1, minWidth: 0, cursor: readOnly ? "default" : "pointer" }}
-          >
-            {/* Action first (the hero); the cue reads as a smaller line beneath it. */}
-            <span style={{
-              display:"block", wordBreak:"break-word", fontSize:17, fontWeight:800, letterSpacing:"-0.01em", lineHeight:1.25,
+            style={{ flex:1, minWidth:0, cursor: readOnly ? "default" : "pointer",
+              wordBreak:"break-word", fontSize:17, fontWeight:800, letterSpacing:"-0.01em", lineHeight:1.25,
               color: checked ? T.text2 : missed ? T.muted : T.text,
-              textDecoration: checked ? "line-through" : "none",
-              textDecorationColor: C + "88",
-            }}>
-              {habit.label}
-            </span>
-            {!checked && !missed && cueText && (
-              <div style={{ fontSize:12, fontWeight:700, letterSpacing:"0.01em", color:C, marginTop:3 }}>{cueLead} {cueBody}</div>
-            )}
-            {isQty && !checked && !missed && (
-              <span style={{ display:"block", fontSize:11.5, fontWeight:700, color:T.text2, marginTop:3 }}>
-                {count} of {target}{unit ? " " + unit : ""} · {target - count} to go
-              </span>
-            )}
-            {isQty && checked && (
-              <span style={{ display:"block", fontSize:11.5, fontWeight:700, color:"#0F9D74", marginTop:3 }}>
-                {target} of {target}{unit ? " " + unit : ""} · done
-              </span>
-            )}
-            {/* Time (a reminder when a trigger exists) + place, as clear chips */}
-            {!checked && (habit.time || habit.location) && (
-              <span style={{ display:"flex", alignItems:"center", gap:6, marginTop:6, flexWrap:"wrap" }}>
-                {habit.time && (
-                  <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:800, color:Cd, background:C + "12", border:`1px solid ${C}22`, borderRadius:20, padding:"3px 9px", fontVariantNumeric:"tabular-nums" }}
-                    aria-label={cueText ? `Reminder at ${to24h(habit.time)}` : `At ${to24h(habit.time)}`}>
-                    {cueText ? <span aria-hidden="true" style={{ fontSize:10 }}>🔔</span> : <Ic name="clock" size={11} color={Cd} />}{to24h(habit.time)}
-                  </span>
-                )}
-                {habit.location && (
-                  <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:800, color:T.text2, background:T.surf2, borderRadius:20, padding:"3px 9px", maxWidth:170 }}>
-                    <span aria-hidden="true" style={{ fontSize:10 }}>📍</span>
-                    <span style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.location}</span>
-                  </span>
-                )}
-              </span>
-            )}
+              textDecoration: checked ? "line-through" : "none", textDecorationColor: C + "88" }}
+          >
+            {habit.label}
           </span>
           {isQty && !checked && !missed && count > 0 && (
             <button onClick={(e) => { e.stopPropagation(); adjustCount(habit.id, target, -1); }}
@@ -3564,6 +3530,34 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
             </span>
           )}
         </div>
+
+        {/* Cue + quantity + time/place — beneath the action, indented to line up
+            under it (ring width 44 + gap 11). Keeps the ring · action on one line. */}
+        {!checked && !missed && cueText && (
+          <div style={{ marginLeft:55, marginTop:4, fontSize:12, fontWeight:700, letterSpacing:"0.01em", color:C }}>{cueLead} {cueBody}</div>
+        )}
+        {isQty && !checked && !missed && (
+          <div style={{ marginLeft:55, marginTop:3, fontSize:11.5, fontWeight:700, color:T.text2 }}>{count} of {target}{unit ? " " + unit : ""} · {target - count} to go</div>
+        )}
+        {isQty && checked && (
+          <div style={{ marginLeft:55, marginTop:3, fontSize:11.5, fontWeight:700, color:"#0F9D74" }}>{target} of {target}{unit ? " " + unit : ""} · done</div>
+        )}
+        {!checked && (habit.time || habit.location) && (
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:6, marginLeft:55, flexWrap:"wrap" }}>
+            {habit.time && (
+              <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:800, color:Cd, background:C + "12", border:`1px solid ${C}22`, borderRadius:20, padding:"3px 9px", fontVariantNumeric:"tabular-nums" }}
+                aria-label={cueText ? `Reminder at ${to24h(habit.time)}` : `At ${to24h(habit.time)}`}>
+                {cueText ? <span aria-hidden="true" style={{ fontSize:10 }}>🔔</span> : <Ic name="clock" size={11} color={Cd} />}{to24h(habit.time)}
+              </span>
+            )}
+            {habit.location && (
+              <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:800, color:T.text2, background:T.surf2, borderRadius:20, padding:"3px 9px", maxWidth:170 }}>
+                <span aria-hidden="true" style={{ fontSize:10 }}>📍</span>
+                <span style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.location}</span>
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Never-miss-twice nudge — this habit was missed yesterday */}
         {warnMissedYesterday && !checked && !missed && (() => {
