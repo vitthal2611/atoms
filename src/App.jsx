@@ -3683,7 +3683,7 @@ function VotesBadge({ habit, allData, votes, total, color, isBad }) {
 
 // ─── HABIT ROW ────────────────────────────────────────────────────────────────
 // One habit on the timeline: cue → action → coaching (identity header is above).
-function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, adjustCount, count = 0, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, habitOps, readyAnchor = null, active = false, stackLabels = null, readOnly = false }) {
+function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, adjustCount, count = 0, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, habitOps, active = false, stackLabels = null, readOnly = false }) {
   const next = getNextMilestone(streak);
   // Environment prep tick (Law 3) — a per-day, per-device convenience in localStorage.
   const [prepped, setPrepped] = useState(() => { try { return localStorage.getItem(`atoms:prep:${habit.id}:${getTodayKey()}`) === "1"; } catch { return false; } });
@@ -3772,13 +3772,6 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
 
       {/* ── Card body — ring · action · cue ── */}
       <div style={{ padding: "10px 12px 9px" }}>
-        {/* Habit stacking: the anchor habit is already done → this one is ready now. */}
-        {!checked && !missed && readyAnchor && (
-          <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:8, background:"#E1F5EE", border:"1px solid #9FE1CB", borderRadius:9, padding:"6px 10px" }}>
-            <span aria-hidden="true" style={{ fontSize:13 }}>▶️</span>
-            <span style={{ fontSize:11.5, fontWeight:800, color:"#085041" }}>Ready now — you just finished “{shortLabel(readyAnchor)}”</span>
-          </div>
-        )}
         {/* ── The check-in ring + the implementation intention (the hero) ── */}
         <div style={{ display:"flex", alignItems:"center", gap:11 }}>
           <span style={{ flexShrink:0, width:44, display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -5175,25 +5168,6 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
               const st = getStreakForHabit(habit.id, habit.frequency);
               const bad = habit.kind === "bad";
               const streakBadge = st > 0 ? <StreakBadge habit={habit} allData={allData} streak={st} isBad={bad} /> : null;
-              // Habit stacking: if this habit's cue anchors to another habit that's
-              // already done today, it's "ready now" — surface that link.
-              const readyAnchor = (() => {
-                // Prefer the exact stored anchor id; fall back to cue-text match.
-                if (habit.anchorId) {
-                  for (const idn of identities) for (const h2 of idn.habits) {
-                    if (h2.id === habit.anchorId) return todayData[h2.id] === true ? h2.label : null;
-                  }
-                  return null;
-                }
-                const t = (habit.trigger || "").toLowerCase();
-                if (!t) return null;
-                for (const idn of identities) for (const h2 of idn.habits) {
-                  if (h2.id === habit.id) continue;
-                  const lbl = (h2.label || "").trim().toLowerCase();
-                  if (lbl.length >= 3 && t.includes(lbl) && todayData[h2.id] === true) return h2.label;
-                }
-                return null;
-              })();
               return (
               <div key={habit.id} style={{
                 background: warnMissed ? "#FEF4F4" : T.surface, borderRadius:14,
@@ -5222,7 +5196,6 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                   onEdit={() => openEditHabit(identity.id, habit)}
                   menu={<RowMenu habit={habit} identity={identity} missed={todayData[habit.id] === "miss"} onMiss={markMiss} openEditHabit={openEditHabit} openDeleteHabit={openDeleteHabit} onReview={openReviewFor} habitNotes={habitNotes} allData={allData} setHabitNote={setHabitNote} habitOps={habitOps} />}
                   habitOps={habitOps}
-                  readyAnchor={readyAnchor}
                   habit={habit}
                   identity={identity}
                   checked={todayData[habit.id] === true}
