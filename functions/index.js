@@ -64,16 +64,18 @@ exports.sendHabitReminders = onSchedule(
         hhmm = `${hh}:${g("minute")}`;
       } catch (e) { continue; }
 
-      let idSnap, ciSnap;
+      let idSnap, ciSnap, stSnap;
       try {
-        [idSnap, ciSnap] = await Promise.all([
+        [idSnap, ciSnap, stSnap] = await Promise.all([
           db.doc(`users/${uid}/atomicHabits/identities`).get(),
           db.doc(`users/${uid}/atomicHabits/checkIns`).get(),
+          db.doc(`users/${uid}/atomicHabits/settings`).get(),
         ]);
       } catch (e) { continue; }
       const identities = (idSnap.exists && idSnap.data().data) || [];
       const checkIns = (ciSnap.exists && ciSnap.data().data) || {};
       const today = checkIns[dateKey] || {};
+      const settings = (stSnap.exists && stSnap.data().data) || {};
 
       for (const identity of identities) {
         for (const habit of identity.habits || []) {
@@ -137,6 +139,38 @@ exports.sendHabitReminders = onSchedule(
                         err.code === "messaging/invalid-registration-token")) {
               await tokenDoc.ref.delete().catch(() => {});   // prune dead tokens
             }
+          }
+        }
+      }
+
+      // ── Bedtime wind-down — a nightly nudge to head to bed (opt-in per user) ──
+      const wd = settings.windDown || {};
+      if (wd.enabled && typeof wd.time === "string" && wd.time === hhmm) {
+        try {
+          const title = "Wind down for bed 🌙";
+          const body = "Lights low, screens away — an early night is a vote for an early morning.";
+          await admin.messaging().send({
+            token,
+            data: { windDown: "1", title, body, link: "https://budgetbuddy-9d7da.web.app/" },
+            webpush: {
+              headers: { Urgency: "high", TTL: "300" },
+              notification: {
+                title, body,
+                icon: "https://budgetbuddy-9d7da.web.app/icon-512.png",
+                badge: "https://budgetbuddy-9d7da.web.app/icon-192.png",
+                tag: "wind-down",
+                renotify: true,
+                vibrate: [180, 80, 180],
+              },
+              fcmOptions: { link: "https://budgetbuddy-9d7da.web.app/" },
+            },
+          });
+          console.log(`wind-down sent to ${uid} at ${hhmm}`);
+        } catch (err) {
+          console.error("wind-down push failed for", uid, err && err.code);
+          if (err && (err.code === "messaging/registration-token-not-registered" ||
+                      err.code === "messaging/invalid-registration-token")) {
+            await tokenDoc.ref.delete().catch(() => {});   // prune dead tokens
           }
         }
       }

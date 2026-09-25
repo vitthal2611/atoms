@@ -1266,7 +1266,7 @@ export default function App() {
   const [undoDelete,   setUndoDelete]  = useState(null);
   const [dailyTasks,   setDailyTasks]  = useState({});       // { [dateKey]: [{id, text, done}] }
   const [habitNotes,   setHabitNotes]  = useState({});       // { [dateKey]: { [habitId]: "note" } } — daily reflection per habit
-  const [cueSettings,  setCueSettings] = useState({ custom: [], dismissed: [], scorecard: [] }); // synced settings: cue suggestions + habit scorecard
+  const [cueSettings,  setCueSettings] = useState({ custom: [], dismissed: [], scorecard: [], windDown: { enabled: false, time: "22:00" } }); // synced settings: cue suggestions + habit scorecard + bedtime wind-down
 
   // Modal states
   const [modal,    setModal]    = useState(null);
@@ -1427,7 +1427,7 @@ export default function App() {
           if (stSnap.exists()) {
             const raw = stSnap.data().data || {};
             isFirstSt.current = true;
-            setCueSettings({ custom: raw.custom || [], dismissed: raw.dismissed || [], scorecard: raw.scorecard || [], tribe: !!raw.tribe });
+            setCueSettings({ custom: raw.custom || [], dismissed: raw.dismissed || [], scorecard: raw.scorecard || [], tribe: !!raw.tribe, windDown: { enabled: !!(raw.windDown && raw.windDown.enabled), time: (raw.windDown && raw.windDown.time) || "22:00" } });
           } else {
             const lsCustom = loadCustomCues();
             const lsDismissed = loadDismissedCues();
@@ -2884,6 +2884,37 @@ const ManageView = memo(function ManageView({ identities, allData, onAddHabit, o
             </button>
           )}
         </div>
+
+        {/* Bedtime wind-down — an evening push to start heading to bed, so mornings
+            come easier. Rides the same FCM reminder rails; needs reminders turned on. */}
+        {(() => {
+          const wd = (cueSettings && cueSettings.windDown) || { enabled: false, time: "22:00" };
+          const setWd = (patch) => onChangeCueSettings && onChangeCueSettings(prev => ({ ...(prev || {}), windDown: { enabled: false, time: "22:00", ...((prev || {}).windDown || {}), ...patch } }));
+          return (
+            <div style={{ display:"flex", alignItems:"center", gap:10, paddingBottom:12, marginBottom:12, borderBottom:`1px solid ${T.surf2}` }}>
+              <span style={{ fontSize:18 }} aria-hidden="true">🌙</span>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:14, fontWeight:700, color:T.text }}>Bedtime wind-down</div>
+                <div style={{ fontSize:12, color:T.muted, marginTop:1, lineHeight:1.4 }}>
+                  {wd.enabled
+                    ? "A nightly nudge to head to bed — an early night is a vote for an early morning."
+                    : "Get a nightly push to start winding down, so mornings come easier."}
+                  {wd.enabled && notifStatus !== "granted" && " Turn on Habit reminders above for this to arrive."}
+                </div>
+              </div>
+              {wd.enabled && (
+                <input type="time" value={wd.time || "22:00"} onChange={e=>setWd({ time: e.target.value || "22:00" })}
+                  aria-label="Wind-down time"
+                  style={{ background:T.surf2, border:`1px solid ${T.border}`, borderRadius:10, fontSize:13, fontWeight:700, color:T.text, padding:"6px 8px", fontFamily:"inherit", flexShrink:0, WebkitTapHighlightColor:"transparent" }} />
+              )}
+              <button onClick={()=>setWd({ enabled: !wd.enabled })}
+                aria-pressed={wd.enabled}
+                style={{ background: wd.enabled ? T.primary : "transparent", border: wd.enabled ? "none" : `1px solid ${T.border}`, borderRadius:20, fontSize:13, fontWeight:700, color: wd.enabled ? "#fff" : T.text2, padding:"7px 15px", cursor:"pointer", fontFamily:"inherit", flexShrink:0, WebkitTapHighlightColor:"transparent" }}>
+                {wd.enabled ? "On" : "Turn on"}
+              </button>
+            </div>
+          );
+        })()}
 
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           <span style={{ width:34, height:34, borderRadius:"50%", background:T.surf2, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, fontWeight:800, color:T.primary, flexShrink:0 }} aria-hidden="true">
