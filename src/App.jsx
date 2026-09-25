@@ -2345,6 +2345,19 @@ export default function App() {
     }
   };
 
+  // Wipe every habit and identity — a clean slate (e.g. before re-importing a
+  // fresh set). Snapshots first so the undo toast can restore it for a few sec.
+  const deleteAllHabits = () => {
+    const snapshot = identities;
+    setIdentities([]);
+    setModal(null);
+    if (snapshot.length) {
+      clearTimeout(undoTimerRef.current);
+      setUndoDelete({ label: "All habits deleted", restore: () => setIdentities(snapshot) });
+      undoTimerRef.current = setTimeout(() => setUndoDelete(null), 8000);
+    }
+  };
+
 
   return (
     <div style={S.root}>
@@ -2425,6 +2438,11 @@ export default function App() {
         <Confirm
           message={`Delete the identity "${modalCtx.ident?.label}" and ALL its habits? This cannot be undone.`}
           onConfirm={deleteIdentity} onCancel={()=>setModal(null)} />
+      )}
+      {modal==="confirmDeleteAll" && (
+        <Confirm
+          message={`Delete ALL ${liveIdentities.reduce((n,i)=>n+(i.habits?.length||0),0)} habits and every identity? This clears your whole list (you'll get a few seconds to undo).`}
+          onConfirm={deleteAllHabits} onCancel={()=>setModal(null)} />
       )}
 
       {/* ── Header ── */}
@@ -2573,6 +2591,7 @@ export default function App() {
             cueSettings={cueSettings}
             onChangeCueSettings={setCueSettings}
             onOpenImport={()=>setModal("importHabits")}
+            onDeleteAll={()=>setModal("confirmDeleteAll")}
           />
         )}
       </main>
@@ -3014,7 +3033,7 @@ function ImportHabits({ onImport, onDone }) {
   );
 }
 
-const ManageView = memo(function ManageView({ identities, allData, onAddHabit, onEditHabit, onDeleteHabit, onAddIdentity, onEditIdentity, onDeleteIdentity, userName, userEmail, onSignOut, notifStatus, notifBusy, onEnableReminders, cueSettings, onChangeCueSettings, onOpenImport }) {
+const ManageView = memo(function ManageView({ identities, allData, onAddHabit, onEditHabit, onDeleteHabit, onAddIdentity, onEditIdentity, onDeleteIdentity, userName, userEmail, onSignOut, notifStatus, notifBusy, onEnableReminders, cueSettings, onChangeCueSettings, onOpenImport, onDeleteAll }) {
   return (
     <div style={S.content}>
 
@@ -3188,6 +3207,17 @@ const ManageView = memo(function ManageView({ identities, allData, onAddHabit, o
             Sign out
           </button>
         </div>
+
+        {/* Danger zone — wipe every habit + identity (with an undo window). */}
+        {identities.some(i => (i.habits?.length || 0) > 0) && (
+          <div style={{ marginTop:14, paddingTop:14, borderTop:`1px solid ${T.surf2}` }}>
+            <button onClick={onDeleteAll}
+              style={{ width:"100%", background:"transparent", border:`1px solid ${T.red}66`, borderRadius:10, fontSize:13, fontWeight:800, color:T.red, padding:"10px 15px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
+              Delete all habits
+            </button>
+            <div style={{ fontSize:11, color:T.muted, marginTop:6, textAlign:"center", lineHeight:1.4 }}>Clears every habit and identity. You'll get a few seconds to undo.</div>
+          </div>
+        )}
       </div>
     </div>
   );
