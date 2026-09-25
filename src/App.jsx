@@ -1647,10 +1647,6 @@ export default function App() {
   const toggle = useCallback((habitId, frequency, identity) => {
     // No checking in ahead of today — future days are a read-only preview.
     if (selectedDate > getTodayKey()) return;
-    // Read the committed data up front (a ref, always current) — do NOT compute
-    // totals inside the setData updater; React may not run it synchronously.
-    const cur = dataRef.current;
-    const wasChecked = cur[selectedDate]?.[habitId] === true;
     setData(prev=>{
       const day=prev[selectedDate]||{};
       // Checking a habit always sets done — including from the "miss" state
@@ -1664,20 +1660,8 @@ export default function App() {
     justCheckedTimerRef.current = setTimeout(()=>setJustChecked(null),3400);
     // Check-in celebration popup intentionally disabled — a check-in shows only
     // the inline row reward (justChecked), no full-screen popup message.
-    // Habit stacking (after-habit cue): when you complete a habit, notify any
-    // pending habit stacked on it. Best-effort, only if notifications are on.
-    if (!wasChecked && selectedDate === getTodayKey()) {
-      try {
-        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-          const today = getTodayKey();
-          for (const idn of (latestRef.current?.identities || [])) for (const h of idn.habits || []) {
-            if (h.anchorId === habitId && isScheduledOn(h.frequency, today) && dataRef.current[today]?.[h.id] == null) {
-              new Notification(`Ready now: ${h.label}`, { body: "You just finished the habit it follows — do this next.", icon: "/icon-192.png", tag: `stack-${h.id}`, renotify: true });
-            }
-          }
-        }
-      } catch {}
-    }
+    // (Habit-stacking "Ready now" completion notification removed — it fired on
+    // nearly every check-in for chained routines; the in-card banner remains.)
   }, [selectedDate]);
 
   // ── Quantity habits — bump the day's count toward the target. Storing `true`
@@ -3817,20 +3801,26 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
               />
             )}
           </span>
-          {/* Action is the hero, on one line with the ring. */}
-          <span
-            onClick={activate}
-            role="button"
-            tabIndex={0}
-            onKeyDown={e => { if (e.key === "Enter") activate(); }}
-            aria-label={isQty && !checked ? `Add one for ${habit.label}` : checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
-            style={{ flex:1, minWidth:0, cursor: readOnly ? "default" : "pointer",
-              wordBreak:"break-word", fontSize:17, fontWeight:800, letterSpacing:"-0.01em", lineHeight:1.25,
-              color: checked ? T.text2 : missed ? T.muted : T.text,
-              textDecoration: checked ? "line-through" : "none", textDecorationColor: C + "88" }}
-          >
-            {habit.label}
-          </span>
+          {/* Action is the hero; the cue sits tight beneath it as one unit so
+              there's no floating gap between the action and its cue. */}
+          <div style={{ flex:1, minWidth:0 }}>
+            <span
+              onClick={activate}
+              role="button"
+              tabIndex={0}
+              onKeyDown={e => { if (e.key === "Enter") activate(); }}
+              aria-label={isQty && !checked ? `Add one for ${habit.label}` : checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
+              style={{ display:"block", cursor: readOnly ? "default" : "pointer",
+                wordBreak:"break-word", fontSize:17, fontWeight:800, letterSpacing:"-0.01em", lineHeight:1.25,
+                color: checked ? T.text2 : missed ? T.muted : T.text,
+                textDecoration: checked ? "line-through" : "none", textDecorationColor: C + "88" }}
+            >
+              {habit.label}
+            </span>
+            {!checked && !missed && cueText && (
+              <div style={{ marginTop:2, fontSize:12, fontWeight:700, letterSpacing:"0.01em", color:C }}>{cueLead} {cueBody}</div>
+            )}
+          </div>
           {isQty && !checked && !missed && count > 0 && (
             <button onClick={(e) => { e.stopPropagation(); adjustCount(habit.id, target, -1); }}
               aria-label={`Remove one — ${count} of ${target}`}
@@ -3843,11 +3833,9 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
           )}
         </div>
 
-        {/* Cue + quantity + time/place — beneath the action, indented to line up
-            under it (ring width 44 + gap 11). Keeps the ring · action on one line. */}
-        {!checked && !missed && cueText && (
-          <div style={{ marginLeft:55, marginTop:4, fontSize:12, fontWeight:700, letterSpacing:"0.01em", color:C }}>{cueLead} {cueBody}</div>
-        )}
+        {/* Quantity + time/place — beneath the action, indented to line up
+            under it (ring width 44 + gap 11). The cue now lives beside the ring
+            with the action, so it's not repeated here. */}
         {isQty && !checked && !missed && (
           <div style={{ marginLeft:55, marginTop:3, fontSize:11.5, fontWeight:700, color:T.text2 }}>{count} of {target}{unit ? " " + unit : ""} · {target - count} to go</div>
         )}
