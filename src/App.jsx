@@ -2226,6 +2226,102 @@ export default function App() {
     return newId;
   };
 
+  // Import habits from a pasted/uploaded JSON blob. Forgiving: accepts an array
+  // of habits, { habits: [...] }, a single habit object, or a full
+  // { identities: [{ label, habits: [...] }] } shape. Book vocabulary is accepted
+  // as aliases (cue/craving/response/reward → trigger/attractive/easy/satisfying).
+  // Each habit must clear the same Four-Laws gate the form enforces, or it's
+  // skipped with a reason. Returns { imported, skipped } or { error }.
+  const importHabitsFromJSON = (text) => {
+    let data;
+    try { data = JSON.parse(text); }
+    catch (e) { return { error: `That isn't valid JSON — ${e.message}` }; }
+
+    const rawList = [];
+    const push = (h, identityLabel) => rawList.push({ h, identityLabel });
+    if (Array.isArray(data)) {
+      data.forEach(h => push(h, h && (h.identity || h.identityLabel)));
+    } else if (data && Array.isArray(data.habits)) {
+      data.habits.forEach(h => push(h, h && (h.identity || h.identityLabel)));
+    } else if (data && Array.isArray(data.identities)) {
+      data.identities.forEach(idn => (idn.habits || []).forEach(h => push(h, idn.label || (h && h.identity))));
+    } else if (data && typeof data === "object") {
+      push(data, data.identity || data.identityLabel);
+    } else {
+      return { error: "Expected a habit object, an array of habits, or { identities: [...] }." };
+    }
+    if (!rawList.length) return { error: "No habits found in that JSON." };
+
+    const pick = (h, ...keys) => { for (const k of keys) { const v = h && h[k]; if (typeof v === "string" && v.trim()) return v.trim(); } return ""; };
+    // Accept a frequency object ({ cadence:"weekly", days:[0-6] } or
+    // { cadence:"monthly", dates:[1-31] }); fall back to daily if malformed.
+    const sanitizeFreq = (f) => {
+      if (!f || typeof f !== "object") return DEFAULT_FREQUENCY;
+      if (f.cadence === "monthly" && Array.isArray(f.dates)) {
+        const dates = [...new Set(f.dates.map(n => Math.round(Number(n))).filter(n => n >= 1 && n <= 32))];
+        return dates.length ? { cadence: "monthly", dates } : DEFAULT_FREQUENCY;
+      }
+      if (Array.isArray(f.days)) {
+        const days = [...new Set(f.days.map(n => Math.round(Number(n))).filter(n => n >= 0 && n <= 6))].sort((a, b) => a - b);
+        return days.length ? { cadence: "weekly", days } : DEFAULT_FREQUENCY;
+      }
+      return DEFAULT_FREQUENCY;
+    };
+    const valid = [], skipped = [];
+    rawList.forEach(({ h, identityLabel }, i) => {
+      if (!h || typeof h !== "object") { skipped.push({ label: `Item ${i + 1}`, reason: "not an object" }); return; }
+      const label      = pick(h, "label", "name", "habit");
+      const trigger    = pick(h, "trigger", "cue");
+      const attractive = pick(h, "attractive", "craving");
+      const easy       = pick(h, "easy", "response");
+      const starter    = pick(h, "starter");
+      const satisfying = pick(h, "satisfying", "reward");
+      const kind       = pick(h, "kind", "type").toLowerCase() === "bad" ? "bad" : "good";
+      const missing = [];
+      if (!label) missing.push("name");
+      if (!trigger) missing.push("cue");
+      if (!attractive) missing.push("craving");
+      if (!easy && !starter) missing.push("response");
+      if (!satisfying) missing.push("reward");
+      if (missing.length) { skipped.push({ label: label || `Item ${i + 1}`, reason: `missing ${missing.join(", ")}` }); return; }
+      const tgt = cleanTarget(kind, h.target);
+      valid.push({
+        identityLabel: (typeof identityLabel === "string" && identityLabel.trim()) ? identityLabel.trim().slice(0, 60) : "",
+        habit: { label: label.slice(0, 80), trigger: trigger.slice(0, 120), attractive: attractive.slice(0, 140),
+          easy: easy.slice(0, 140), starter: starter.slice(0, 120), satisfying: satisfying.slice(0, 140),
+          stakes: pick(h, "stakes").slice(0, 100), partnerName: pick(h, "partnerName").slice(0, 40), partnerEmail: pick(h, "partnerEmail").slice(0, 120),
+          time: pick(h, "time").slice(0, 20), location: pick(h, "location").slice(0, 80), icon: pick(h, "icon"), kind,
+          frequency: sanitizeFreq(h.frequency), target: tgt, unit: tgt ? pick(h, "unit").slice(0, 20) : "" },
+      });
+    });
+    if (!valid.length) return { error: "No habit had all Four Laws filled in — nothing to import.", skipped };
+
+    setIdentities(prev => {
+      const next = prev.map(i => ({ ...i, habits: [...i.habits] }));
+      const findIdent = (name) => next.find(i => (i.label || "").trim().toLowerCase() === name.trim().toLowerCase());
+      const makeIdent = (name) => {
+        const ci = next.length % IDENTITY_COLORS.length;
+        const idn = { id: uid(), label: name.slice(0, 60), icon: "🎯", color: IDENTITY_COLORS[ci], colorDim: IDENTITY_DIMS[ci], habits: [] };
+        next.push(idn); return idn;
+      };
+      valid.forEach(({ identityLabel, habit }) => {
+        const target = identityLabel
+          ? (findIdent(identityLabel) || makeIdent(identityLabel))
+          : (next[0] || makeIdent("Imported"));
+        target.habits.push({
+          id: uid(), label: habit.label, trigger: habit.trigger, attractive: habit.attractive,
+          easy: habit.easy, starter: habit.starter, satisfying: habit.satisfying,
+          stakes: habit.stakes, partnerName: habit.partnerName, partnerEmail: habit.partnerEmail,
+          time: habit.time, location: habit.location, icon: habit.icon || "", kind: habit.kind,
+          frequency: habit.frequency, target: habit.target, unit: habit.unit,
+          anchorId: anchorHabitId(habit.trigger, next, ""), createdAt: getTodayKey(),
+        });
+      });
+      return next;
+    });
+    return { imported: valid.length, skipped };
+  };
+
   const updateIdentity = ({ label, icon, colorIdx }) => {
     const { identityId } = modalCtx;
     const color    = IDENTITY_COLORS[colorIdx];
@@ -2315,6 +2411,11 @@ export default function App() {
       {modal==="addIdentity" && (
         <Modal title="Add New Identity" onClose={()=>setModal(null)}>
           <IdentityForm onSave={addIdentity} onCancel={()=>setModal(null)} mode="add" />
+        </Modal>
+      )}
+      {modal==="importHabits" && (
+        <Modal title="Import habits" onClose={()=>setModal(null)}>
+          <ImportHabits onImport={importHabitsFromJSON} onDone={()=>setModal(null)} />
         </Modal>
       )}
       {modal==="editIdentity" && modalCtx && (
@@ -2478,6 +2579,7 @@ export default function App() {
             onEnableReminders={handleEnableReminders}
             cueSettings={cueSettings}
             onChangeCueSettings={setCueSettings}
+            onOpenImport={()=>setModal("importHabits")}
           />
         )}
       </main>
@@ -2781,7 +2883,144 @@ function MonthReport({ identities, allData = {} }) {
   );
 }
 
-const ManageView = memo(function ManageView({ identities, allData, onAddHabit, onEditHabit, onDeleteHabit, onAddIdentity, onEditIdentity, onDeleteIdentity, userName, userEmail, onSignOut, notifStatus, notifBusy, onEnableReminders, cueSettings, onChangeCueSettings }) {
+// Download all habits as a JSON file, in the same shape the importer reads
+// (round-trips): { identities: [{ label, icon, habits: [...] }] }. Internal
+// tracking (ids, streaks, createdAt) is left out — this is the habit definitions.
+function downloadHabitsJSON(identities) {
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    app: "atomic-habits",
+    identities: (identities || []).map(idn => ({
+      label: idn.label || "",
+      icon: idn.icon || "",
+      habits: (idn.habits || []).map(h => ({
+        label: h.label || "", kind: h.kind || "good",
+        trigger: h.trigger || "", attractive: h.attractive || "",
+        easy: h.easy || "", starter: h.starter || "", satisfying: h.satisfying || "",
+        stakes: h.stakes || "", partnerName: h.partnerName || "", partnerEmail: h.partnerEmail || "",
+        time: h.time || "", location: h.location || "", icon: h.icon || "",
+        frequency: h.frequency || DEFAULT_FREQUENCY,
+        target: h.target || 0, unit: h.unit || "",
+      })),
+    })),
+  };
+  try {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `atomic-habits-${getTodayKey()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (e) { /* best-effort; nothing to recover if the browser blocks it */ }
+}
+
+// Import habits from a JSON file or pasted text. Paste or load a file, then
+// Import — the parent handler validates against the Four Laws and reports back.
+const IMPORT_EXAMPLE = `[
+  {
+    "identity": "Healthy person",
+    "name": "Walk after lunch",
+    "cue": "After I finish lunch",
+    "craving": "Feel awake for the afternoon",
+    "response": "Walk one lap around the block",
+    "reward": "A good coffee back at my desk",
+    "time": "13:00"
+  }
+]`;
+
+function ImportHabits({ onImport, onDone }) {
+  const [text, setText] = useState("");
+  const [result, setResult] = useState(null);   // { imported, skipped } | { error, skipped? }
+  const [fileErr, setFileErr] = useState("");
+
+  const loadFile = (e) => {
+    setFileErr("");
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";                                // let the same file re-trigger onChange
+    if (!file) return;
+    if (file.size > 1_000_000) { setFileErr("That file is over 1 MB — paste the JSON instead."); return; }
+    const reader = new FileReader();
+    reader.onload = () => { setText(String(reader.result || "")); setResult(null); };
+    reader.onerror = () => setFileErr("Couldn't read that file.");
+    reader.readAsText(file);
+  };
+
+  const doImport = () => {
+    if (!text.trim()) { setResult({ error: "Paste some JSON or choose a file first." }); return; }
+    setResult(onImport(text));
+  };
+
+  const ok = result && typeof result.imported === "number";
+
+  return (
+    <div>
+      {ok ? (
+        <div>
+          <div style={{ fontSize:14, fontWeight:700, color:T.text, marginBottom:6 }}>
+            ✅ Imported {result.imported} habit{result.imported === 1 ? "" : "s"}.
+          </div>
+          {result.skipped && result.skipped.length > 0 && (
+            <div style={{ fontSize:12.5, color:T.muted, lineHeight:1.5, marginBottom:4 }}>
+              Skipped {result.skipped.length}:
+              <ul style={{ margin:"6px 0 0", paddingLeft:18 }}>
+                {result.skipped.map((s, i) => <li key={i}><strong style={{ color:T.text2 }}>{s.label}</strong> — {s.reason}</li>)}
+              </ul>
+            </div>
+          )}
+          <button onClick={onDone}
+            style={{ ...S.input, marginTop:14, background:T.primary, border:"none", color:"#fff", fontWeight:800, cursor:"pointer", textAlign:"center" }}>
+            Done
+          </button>
+        </div>
+      ) : (
+        <div>
+          <div style={{ fontSize:12.5, color:T.muted, lineHeight:1.5, marginBottom:10 }}>
+            Paste JSON or load a <code>.json</code> file. Each habit needs a <strong>name</strong> and all four laws —
+            <em> cue, craving, response, reward</em> (book names accepted, or trigger/attractive/easy/satisfying).
+            Add <code>"identity"</code> to file it under a person (created if new). Set <code>"kind": "bad"</code> for a habit to break.
+          </div>
+
+          <label style={{ display:"inline-block", marginBottom:10 }}>
+            <span style={{ display:"inline-block", background:"transparent", border:`1px solid ${T.border}`, borderRadius:20, fontSize:13, fontWeight:700, color:T.text2, padding:"7px 15px", cursor:"pointer" }}>
+              Choose .json file
+            </span>
+            <input type="file" accept=".json,application/json" onChange={loadFile} style={{ display:"none" }} />
+          </label>
+          {fileErr && <div style={{ fontSize:12, color:T.danger || "#B4231F", marginBottom:8 }}>{fileErr}</div>}
+
+          <textarea
+            value={text}
+            onChange={e => { setText(e.target.value); setResult(null); }}
+            placeholder={IMPORT_EXAMPLE}
+            spellCheck={false}
+            style={{ ...S.input, minHeight:180, fontFamily:"ui-monospace, SFMono-Regular, Menlo, monospace", fontSize:12.5, lineHeight:1.5, resize:"vertical", whiteSpace:"pre" }}
+          />
+
+          {result && result.error && (
+            <div style={{ fontSize:12.5, color:T.danger || "#B4231F", marginTop:8, lineHeight:1.5 }}>
+              {result.error}
+              {result.skipped && result.skipped.length > 0 && (
+                <ul style={{ margin:"6px 0 0", paddingLeft:18 }}>
+                  {result.skipped.map((s, i) => <li key={i}><strong>{s.label}</strong> — {s.reason}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
+
+          <button onClick={doImport}
+            style={{ ...S.input, marginTop:14, background:T.primary, border:"none", color:"#fff", fontWeight:800, cursor:"pointer", textAlign:"center" }}>
+            Import
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const ManageView = memo(function ManageView({ identities, allData, onAddHabit, onEditHabit, onDeleteHabit, onAddIdentity, onEditIdentity, onDeleteIdentity, userName, userEmail, onSignOut, notifStatus, notifBusy, onEnableReminders, cueSettings, onChangeCueSettings, onOpenImport }) {
   return (
     <div style={S.content}>
 
@@ -2915,6 +3154,32 @@ const ManageView = memo(function ManageView({ identities, allData, onAddHabit, o
             </div>
           );
         })()}
+
+        {/* Import habits from JSON — bulk-add habits from a file or pasted blob. */}
+        <div style={{ display:"flex", alignItems:"center", gap:10, paddingBottom:12, marginBottom:12, borderBottom:`1px solid ${T.surf2}` }}>
+          <span style={{ fontSize:18 }} aria-hidden="true">📥</span>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:14, fontWeight:700, color:T.text }}>Import habits</div>
+            <div style={{ fontSize:12, color:T.muted, marginTop:1, lineHeight:1.4 }}>Bulk-add habits from a JSON file or pasted text.</div>
+          </div>
+          <button onClick={onOpenImport}
+            style={{ background:"transparent", border:`1px solid ${T.border}`, borderRadius:20, fontSize:13, fontWeight:700, color:T.text2, padding:"7px 15px", cursor:"pointer", fontFamily:"inherit", flexShrink:0, WebkitTapHighlightColor:"transparent" }}>
+            Import
+          </button>
+        </div>
+
+        {/* Export habits — download all habit definitions as JSON (re-importable). */}
+        <div style={{ display:"flex", alignItems:"center", gap:10, paddingBottom:12, marginBottom:12, borderBottom:`1px solid ${T.surf2}` }}>
+          <span style={{ fontSize:18 }} aria-hidden="true">📤</span>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:14, fontWeight:700, color:T.text }}>Export habits</div>
+            <div style={{ fontSize:12, color:T.muted, marginTop:1, lineHeight:1.4 }}>Download all your habits as a JSON file you can re-import.</div>
+          </div>
+          <button onClick={()=>downloadHabitsJSON(identities)}
+            style={{ background:"transparent", border:`1px solid ${T.border}`, borderRadius:20, fontSize:13, fontWeight:700, color:T.text2, padding:"7px 15px", cursor:"pointer", fontFamily:"inherit", flexShrink:0, WebkitTapHighlightColor:"transparent" }}>
+            Download
+          </button>
+        </div>
 
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           <span style={{ width:34, height:34, borderRadius:"50%", background:T.surf2, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, fontWeight:800, color:T.primary, flexShrink:0 }} aria-hidden="true">
