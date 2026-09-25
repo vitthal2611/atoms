@@ -2267,6 +2267,12 @@ export default function App() {
       }
       return DEFAULT_FREQUENCY;
     };
+    // De-dupe by habit name (case-insensitive): skip anything that already
+    // exists on the account, or that repeats earlier in this same import, so
+    // re-importing a file never creates duplicate habits.
+    const existingNames = new Set();
+    identities.forEach(idn => (idn.habits || []).forEach(hh => existingNames.add((hh.label || "").trim().toLowerCase())));
+    const seenNames = new Set();
     const valid = [], skipped = [];
     rawList.forEach(({ h, identityLabel }, i) => {
       if (!h || typeof h !== "object") { skipped.push({ label: `Item ${i + 1}`, reason: "not an object" }); return; }
@@ -2284,6 +2290,9 @@ export default function App() {
       if (!easy && !starter) missing.push("response");
       if (!satisfying) missing.push("reward");
       if (missing.length) { skipped.push({ label: label || `Item ${i + 1}`, reason: `missing ${missing.join(", ")}` }); return; }
+      const nameKey = label.trim().toLowerCase();
+      if (existingNames.has(nameKey) || seenNames.has(nameKey)) { skipped.push({ label, reason: "already exists — skipped (no duplicate)" }); return; }
+      seenNames.add(nameKey);
       const tgt = cleanTarget(kind, h.target);
       valid.push({
         identityLabel: (typeof identityLabel === "string" && identityLabel.trim()) ? identityLabel.trim().slice(0, 60) : "",
@@ -2294,7 +2303,7 @@ export default function App() {
           frequency: sanitizeFreq(h.frequency), target: tgt, unit: tgt ? pick(h, "unit").slice(0, 20) : "" },
       });
     });
-    if (!valid.length) return { error: "No habit had all Four Laws filled in — nothing to import.", skipped };
+    if (!valid.length) return { error: "Nothing new to import — every habit was skipped (see below).", skipped };
 
     setIdentities(prev => {
       const next = prev.map(i => ({ ...i, habits: [...i.habits] }));
@@ -2981,6 +2990,7 @@ function ImportHabits({ onImport, onDone }) {
             Paste JSON or load a <code>.json</code> file. Each habit needs a <strong>name</strong> and all four laws —
             <em> cue, craving, response, reward</em> (book names accepted, or trigger/attractive/easy/satisfying).
             Add <code>"identity"</code> to file it under a person (created if new). Set <code>"kind": "bad"</code> for a habit to break.
+            Habits you already have (matched by name) are skipped, so re-importing never creates duplicates.
           </div>
 
           <label style={{ display:"inline-block", marginBottom:10 }}>
