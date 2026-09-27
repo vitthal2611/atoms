@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 // ─── BUDGET PLANNER ──────────────────────────────────────────────────────────
 // Single-screen envelope budgeting in ₹, its own tab (no habit chrome, no
@@ -56,8 +56,9 @@ export function seedBudget() {
       { id:"eat",name:"Eatout",bucket:"want",budget:5000,icon:"🍽️" },{ id:"shop",name:"Shopping",bucket:"want",budget:8000,icon:"🛍️" },{ id:"maint",name:"Maintenance",bucket:"want",budget:1500,icon:"🔧" },
       { id:"groom",name:"Grooming",bucket:"want",budget:1500,icon:"💇" },{ id:"ent",name:"Entertainment",bucket:"want",budget:1500,icon:"🎬" },
     ],
-    savingsActual:{ sip:20000, ssy:22000, re:10000 },
-    txns:[ tx(mid+"-01","EMI auto-debit",91393,"emi","need"),tx(mid+"-05","Insurance & school",20000,"ins","need"),tx(mid+"-01","Milk",2700,"milk","need"),
+    savingsActual:{},
+    txns:[ tx(mid+"-01","Opening balance",22000,"ssy","save"),tx(mid+"-01","Opening balance",20000,"sip","save"),tx(mid+"-01","Opening balance",10000,"re","save"),
+      tx(mid+"-01","EMI auto-debit",91393,"emi","need"),tx(mid+"-05","Insurance & school",20000,"ins","need"),tx(mid+"-01","Milk",2700,"milk","need"),
       tx(mid+"-08","Electricity",2500,"elec","need"),tx(mid+"-03","Gas",4000,"gas","need"),tx(mid+"-12","DMart",3200,"dmart","need"),tx(mid+"-20","DMart",3000,"dmart","need"),
       tx(mid+"-10","Petrol",2500,"petrol","need"),tx(mid+"-09","Dinner out",1700,"eat","want"),tx(mid+"-15","Lunch",1300,"eat","want"),tx(mid+"-19","Snacks",1000,"eat","want"),
       tx(mid+"-11","Clothes",6000,"shop","want"),tx(mid+"-16","Salon",1400,"groom","want") ],
@@ -71,7 +72,7 @@ function calc(m) {
   const cats=m.categories||[]; let sb=0,eb=0;
   const bbud={need:0,want:0,save:0};
   cats.forEach(c=>{ if(c.bucket==="save"){ sb+=(+c.budget||0); bbud.save+=(+c.budget||0); } else { eb+=(+c.budget||0); bbud[c.bucket]+=(+c.budget||0); } });
-  const sa=cats.filter(c=>c.bucket==="save").reduce((a,c)=>a+(+(m.savingsActual?.[c.id]||0)),0);
+  const sa=bk.save;   // savings actual = sum of Save transactions (contributions)
   const es=bk.need+bk.want, allocated=sb+eb;
   return { m, sp, bk, bbud, income, sb, sa, es, allocated, balance:income-es-sa, unalloc:income-allocated };
 }
@@ -112,7 +113,7 @@ function SpendSheet({ m, api, env, initial, curMonth, onClose, onChange }) {
     const a=+amt;
     if(!(a>0)) return setErr("Enter an amount.");
     if(!date || date.slice(0,7)!==m.id) return setErr("Date must be within "+m.label+".");
-    if(!isInc){ const rem=(+env.budget||0)-spentOf(env.id); if(a>rem){ setXfer({ shortfall:Math.round(a-rem), rem }); setSrc(""); return; } }
+    if(!isInc && env.bucket!=="save"){ const rem=(+env.budget||0)-spentOf(env.id); if(a>rem){ setXfer({ shortfall:Math.round(a-rem), rem }); setSrc(""); return; } }
     record();
   };
   if (xfer) {
@@ -221,6 +222,26 @@ function CatSheet({ api, initial, onClose }) {
   </Sheet>;
 }
 
+function GoalSheet({ m, cat, onAdd, onEdit, onClose }) {
+  const contribs=[...(m.txns||[])].filter(t=>t.categoryId===cat.id && t.bucket==="save").sort((a,b)=>b.date.localeCompare(a.date));
+  const funded=contribs.reduce((a,t)=>a+(+t.amount||0),0); const budget=+cat.budget||0, rem=budget-funded, done=funded>=budget&&budget>0;
+  return <Sheet title={cat.name} onClose={onClose}>
+    <div style={{ display:"flex", alignItems:"center", gap:11, background:T.saveS, borderRadius:13, padding:12, marginBottom:6 }}>
+      <div style={{ width:40, height:40, borderRadius:11, background:T.surface, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>{iconOf(cat)}</div>
+      <div><div style={{ fontWeight:800, fontSize:16, fontVariantNumeric:"tabular-nums" }}>{INR(funded)} <span style={{ fontSize:13, color:T.muted, fontWeight:500 }}>/ {INR(budget)}</span></div>
+        <div style={{ fontSize:12, color:T.muted }}>{done?"Fully funded 🎉":INR(Math.max(0,rem))+" left to fund"}</div></div></div>
+    <div style={{ fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".04em", margin:"16px 2px 4px" }}>Contributions this month</div>
+    {contribs.length ? contribs.map(t=><div key={t.id} onClick={()=>onEdit(t)} style={{ display:"flex", alignItems:"center", gap:11, padding:"11px 0", borderBottom:`1px solid ${T.border}`, cursor:"pointer" }}>
+        <div style={{ width:34, height:34, borderRadius:10, background:T.saveS, display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, flexShrink:0 }}>💜</div>
+        <div style={{ flex:1, minWidth:0 }}><div style={{ fontWeight:600, fontSize:13.5, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{t.desc||"Contribution"}</div><div style={{ fontSize:11.5, color:T.muted }}>{fmtD(t.date)}</div></div>
+        <div style={{ fontWeight:700, fontSize:14, color:T.save, fontVariantNumeric:"tabular-nums" }}>{INR(t.amount)}</div></div>)
+      : <div style={{ fontSize:13, color:T.muted, padding:"12px 2px" }}>No contributions yet.</div>}
+    <div style={{ display:"flex", justifyContent:"space-between", paddingTop:12, marginTop:4, borderTop:`2px solid ${T.border}`, fontSize:15, fontWeight:800 }}>
+      <span>Total funded</span><span style={{ color:T.save, fontVariantNumeric:"tabular-nums" }}>{INR(funded)}</span></div>
+    <button onClick={onAdd} style={{ ...ghostBtn, width:"100%", background:T.saveS, color:T.save, borderColor:T.save+"4d", marginTop:14 }}>＋ Add contribution</button>
+  </Sheet>;
+}
+
 function TransactionsSheet({ m, onAdd, onEdit, onClose }) {
   const [filter,setFilter]=useState("all");
   const cat=id=>(m.categories||[]).find(c=>c.id===id);
@@ -232,7 +253,7 @@ function TransactionsSheet({ m, onAdd, onEdit, onClose }) {
   let last=null;
   return <Sheet title={"All transactions · "+(m.label||mLabel(m.id))} onClose={onClose}>
     <button onClick={onAdd} style={{ ...primaryBtn, marginBottom:12 }}>＋ Add transaction</button>
-    <div style={{ display:"flex", gap:7, marginBottom:6 }}>{fchip("all","All")}{fchip("need","Needs")}{fchip("want","Wants")}{fchip("income","Income")}</div>
+    <div style={{ display:"flex", gap:6, marginBottom:6 }}>{fchip("all","All")}{fchip("need","Needs")}{fchip("want","Wants")}{fchip("save","Save")}{fchip("income","Income")}</div>
     {items.length ? items.map(t=>{ const c=cat(t.categoryId), bk=BK[t.bucket]||BK.need, showDay=t.date!==last; last=t.date;
       return <div key={t.id}>
         {showDay && <div style={{ fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".03em", margin:"12px 2px 6px" }}>{fmtDFull(t.date)}</div>}
@@ -282,13 +303,29 @@ export default function BudgetView({ budget, setBudget }) {
     setIncome:(s,o)=>updateMonth(mm=>({ ...mm, salaryIncome:s, otherIncome:o })),
     addCategory:c=>updateMonth(mm=>({ ...mm, categories:[...mm.categories, { id:"c"+Date.now(), ...c }] })),
     editCategory:(id,p)=>updateMonth(mm=>({ ...mm, categories:mm.categories.map(c=>c.id===id?{ ...c, ...p }:c) })),
-    deleteCategory:id=>updateMonth(mm=>{ const { [id]:_, ...sa }=mm.savingsActual||{}; return { ...mm, categories:mm.categories.filter(c=>c.id!==id), txns:mm.txns.filter(t=>t.categoryId!==id), savingsActual:sa }; }),
-    setSavingsActual:(id,v)=>updateMonth(mm=>({ ...mm, savingsActual:{ ...mm.savingsActual, [id]:v } })),
+    deleteCategory:id=>updateMonth(mm=>({ ...mm, categories:mm.categories.filter(c=>c.id!==id), txns:mm.txns.filter(t=>t.categoryId!==id) })),
     transfer:(from,to,a)=>updateMonth(mm=>({ ...mm, categories:mm.categories.map(c=>c.id===from?{ ...c, budget:(+c.budget||0)-a }:c.id===to?{ ...c, budget:(+c.budget||0)+a }:c) })),
     addTxn:t=>updateMonth(mm=>({ ...mm, txns:[...mm.txns, t] })),
     editTxn:(id,p)=>updateMonth(mm=>({ ...mm, txns:mm.txns.map(t=>t.id===id?{ ...t, ...p }:t) })),
     deleteTxn:id=>updateMonth(mm=>({ ...mm, txns:mm.txns.filter(t=>t.id!==id) })),
   };
+  // One-time migration: older data funded savings via savingsActual (mark-funded).
+  // Convert each into an opening Save contribution so savings are transaction-based.
+  useEffect(() => {
+    if (!budget?.months) return;
+    const needs = Object.values(budget.months).some(mm => Object.values(mm.savingsActual||{}).some(v => +v>0));
+    if (!needs) return;
+    const months = { ...budget.months };
+    for (const id of Object.keys(months)) {
+      const mm = months[id], sa = mm.savingsActual||{};
+      const has = new Set((mm.txns||[]).filter(t=>t.bucket==="save").map(t=>t.categoryId));
+      const add = Object.keys(sa).filter(k=>+sa[k]>0 && !has.has(k))
+        .map(k=>({ id:"t"+Date.now()+Math.random().toString(36).slice(2,6), date:id+"-01", desc:"Opening balance", amount:+sa[k], categoryId:k, bucket:"save" }));
+      months[id] = { ...mm, txns:[...(mm.txns||[]), ...add], savingsActual:{} };
+    }
+    setBudget(b => ({ ...b, months }));
+  }, [budget, setBudget]);
+
   if (!m) return <div style={{ color:T.muted, textAlign:"center", padding:"40px 0" }}>No budget yet.</div>;
   const d = calc(m); const committed = m.status==="committed";
   // Frequently-used envelopes float to the top (most transactions this month first).
@@ -298,7 +335,6 @@ export default function BudgetView({ budget, setBudget }) {
   // month nav lives inside the (dark) budget card, so it's styled light
   const navBtn=(on,dir,dlt)=><button onClick={()=>on?api.goto(dlt):api.createMonth(dlt)} aria-label={dir}
     style={{ background:"#ffffff2e", border:"none", color:"#fff", width:30, height:30, borderRadius:9, fontSize:17, cursor:"pointer", fontFamily:"inherit", lineHeight:1 }}>{dir==="prev"?"‹":"›"}</button>;
-  const savingsActual = id => +(m.savingsActual?.[id]||0);
 
   return <div style={{ display:"flex", flexDirection:"column" }}>
     {/* own header — month selection lives inside the Monthly budget card */}
@@ -324,7 +360,14 @@ export default function BudgetView({ budget, setBudget }) {
       <div style={{ ...card({ padding:"10px 12px" }), flex:1, display:"flex", alignItems:"center", gap:9 }}><span style={{ fontSize:17 }}>💸</span><div><div style={{ fontSize:11, color:T.muted, fontWeight:600 }}>Spent</div><div style={{ fontSize:15, fontWeight:800, fontVariantNumeric:"tabular-nums" }}>{INR(d.es)}</div></div></div>
       <div style={{ ...card({ padding:"10px 12px" }), flex:1, display:"flex", alignItems:"center", gap:9 }}><span style={{ fontSize:17 }}>🏦</span><div><div style={{ fontSize:11, color:T.muted, fontWeight:600 }}>Balance</div><div style={{ fontSize:15, fontWeight:800, fontVariantNumeric:"tabular-nums", color:d.balance<0?T.bad:T.good }}>{INR(d.balance)}</div></div></div>
     </div>
-    {d.unalloc<0 && <div style={{ marginTop:12, background:T.warnS, border:`1px solid ${T.warn}55`, borderRadius:13, padding:"11px 13px", fontSize:12.5, fontWeight:600, color:T.warn }}>⚠ Over-allocated by {INR(-d.unalloc)} — you've allocated more than your income.</div>}
+    <div style={{ ...card({ padding:"12px 13px", marginTop:9 }) }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:8 }}>
+        <span style={{ fontSize:12.5, fontWeight:700 }}>Allocation</span>
+        <span style={{ fontSize:12, color:T.text2, fontVariantNumeric:"tabular-nums" }}>{INR(d.allocated)} of {INR(d.income)} income</span></div>
+      <div style={{ height:9, borderRadius:6, background:T.surf2, overflow:"hidden" }}>
+        <div style={{ height:"100%", width:Math.min(100,pct(d.allocated,d.income))+"%", background:d.unalloc<0?T.bad:T.primary, borderRadius:6 }} /></div>
+      <div style={{ fontSize:11.5, marginTop:7, fontWeight:700, color:d.unalloc<0?T.bad:d.unalloc>0?T.warn:T.good }}>
+        {d.unalloc<0 ? `⚠ Over-allocated by ${INR(-d.unalloc)}` : d.unalloc>0 ? `${INR(d.unalloc)} left to allocate` : "✓ Every rupee allocated"}</div></div>
 
     {!committed && <div style={{ marginTop:12, background:T.warnS, border:`1px solid ${T.warn}55`, borderRadius:13, padding:13 }}>
       <div style={{ fontWeight:700, color:T.warn }}>This month is a draft</div>
@@ -338,13 +381,13 @@ export default function BudgetView({ budget, setBudget }) {
     </div>
     {editMode && <div style={{ fontSize:12, color:T.muted, margin:"0 2px 8px" }}>Tap an envelope to edit its budget & icon, or add a new one below.</div>}
     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
-    {orderedCats.map(c=>{ const s=c.bucket==="save"?savingsActual(c.id):(d.sp[c.id]||0); const bal=(+c.budget||0)-s, u=pct(s,c.budget);
+    {orderedCats.map(c=>{ const s=d.sp[c.id]||0; const bal=(+c.budget||0)-s, u=pct(s,c.budget);
       const st=c.bucket==="save"?(s>=c.budget&&c.budget>0?"done":u>=80?"good":"warn"):stOf(s,c.budget);
       const label=c.bucket==="save"?(s>=c.budget&&c.budget>0?"Funded":u>0?"Partial":"Empty"):(st==="bad"?"Overspent":st==="warn"?"Watch":"On track");
       const col=st==="bad"?T.bad:st==="warn"?T.warn:BK[c.bucket].c;
       const stat=(l,v,vc)=><div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", gap:6 }}>
         <span style={{ fontSize:11, color:T.muted }}>{l}</span><span style={{ fontSize:12, fontWeight:700, fontVariantNumeric:"tabular-nums", color:vc||T.text }}>{v}</span></div>;
-      return <div key={c.id} onClick={()=>editMode?setModal({type:"cat",initial:c}):setModal({type:"spend",env:c})}
+      return <div key={c.id} onClick={()=>editMode?setModal({type:"cat",initial:c}):setModal(c.bucket==="save"?{type:"goal",cat:c}:{type:"spend",env:c})}
         style={{ ...card({ padding:13 }), cursor:"pointer", minWidth:0 }}>
         <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:11 }}>
           <div style={{ width:32, height:32, borderRadius:9, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, background:BK[c.bucket].s, flexShrink:0 }}>{iconOf(c)}</div>
@@ -371,16 +414,20 @@ export default function BudgetView({ budget, setBudget }) {
           <div style={{ fontSize:11.5, color:T.muted }}>{fmtD(t.date)} · {t.bucket==="income"?"Income":(c?c.name:"General")} · {BK[t.bucket].l}</div></div>
         <div style={{ fontWeight:700, fontSize:14, fontVariantNumeric:"tabular-nums", color:t.bucket==="income"?T.good:T.text }}>{t.bucket==="income"?"+":""}{INR(t.amount)}</div></div>; })}
 
-    {/* modals */}
-    {modal?.type==="spend"  && <SpendSheet m={m} api={api} env={modal.env} initial={modal.initial} curMonth={curMonth} onClose={()=>setModal(modal.back?{type:modal.back}:null)} onChange={()=>setModal({type:"picker"})} />}
-    {modal?.type==="picker" && <PickerSheet m={m} onPick={c=>setModal({type:"spend", env:c, back:modal.back})} onNew={()=>setModal({type:"cat", spendAfter:true})} onClose={()=>setModal(modal.back?{type:modal.back}:null)} />}
+    {/* modals — `back` is a full modal descriptor so sheets return where they came from */}
+    {modal?.type==="spend"  && <SpendSheet m={m} api={api} env={modal.env} initial={modal.initial} curMonth={curMonth} onClose={()=>setModal(modal.back||null)} onChange={()=>setModal({type:"picker"})} />}
+    {modal?.type==="picker" && <PickerSheet m={m} onPick={c=>setModal({type:"spend", env:c, back:modal.back})} onNew={()=>setModal({type:"cat", spendAfter:true})} onClose={()=>setModal(modal.back||null)} />}
     {modal?.type==="txns"   && <TransactionsSheet m={m}
-       onAdd={()=>setModal({type:"picker", back:"txns"})}
-       onEdit={t=>setModal({type:"spend", env:(m.categories||[]).find(c=>c.id===t.categoryId)||{id:"",name:"Income",bucket:t.bucket}, initial:t, back:"txns"})}
+       onAdd={()=>setModal({type:"picker", back:{type:"txns"}})}
+       onEdit={t=>setModal({type:"spend", env:(m.categories||[]).find(c=>c.id===t.categoryId)||{id:"",name:"Income",bucket:t.bucket}, initial:t, back:{type:"txns"}})}
        onClose={()=>setModal(null)} />}
     {modal?.type==="income" && <IncomeSheet m={m} api={api}
-       onAdd={()=>setModal({type:"spend", env:{id:"",name:"Income",bucket:"income"}, back:"income"})}
-       onEdit={t=>setModal({type:"spend", env:{id:"",name:"Income",bucket:"income"}, initial:t, back:"income"})}
+       onAdd={()=>setModal({type:"spend", env:{id:"",name:"Income",bucket:"income"}, back:{type:"income"}})}
+       onEdit={t=>setModal({type:"spend", env:{id:"",name:"Income",bucket:"income"}, initial:t, back:{type:"income"}})}
+       onClose={()=>setModal(null)} />}
+    {modal?.type==="goal"   && <GoalSheet m={m} cat={modal.cat}
+       onAdd={()=>setModal({type:"spend", env:modal.cat, back:{type:"goal", cat:modal.cat}})}
+       onEdit={t=>setModal({type:"spend", env:modal.cat, initial:t, back:{type:"goal", cat:modal.cat}})}
        onClose={()=>setModal(null)} />}
     {modal?.type==="cat"    && <CatSheet api={api} initial={modal.initial} onClose={(cat)=>setModal(cat&&modal.spendAfter?{type:"spend", env:cat}:null)} />}
     {modal?.type==="report" && <ReportSheet m={m} onClose={()=>setModal(null)} />}
