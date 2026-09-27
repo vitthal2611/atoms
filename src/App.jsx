@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo, useId, memo, Fragment } from "react";
 import { createPortal } from "react-dom";
+import BudgetView, { seedBudget } from "./Budget.jsx";
 import { initializeApp, getApps } from "firebase/app";
 import { getFirestore, initializeFirestore, doc, getDoc, setDoc, collection, query, where, getCountFromServer } from "firebase/firestore";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "firebase/auth";
@@ -34,6 +35,7 @@ function checkInsRef(uid)    { return doc(_db, "users", uid, "atomicHabits", "ch
 function dailyTasksRef(uid)  { return doc(_db, "users", uid, "atomicHabits", "dailyTasks"); }
 function habitNotesRef(uid)  { return doc(_db, "users", uid, "atomicHabits", "habitNotes"); }
 function settingsRef(uid)    { return doc(_db, "users", uid, "atomicHabits", "settings"); }
+function budgetRef(uid)       { return doc(_db, "users", uid, "atomicHabits", "budget"); }
 // Tribe (anonymous aggregate): one cohort per identity, keyed by its normalized
 // label. A member doc stores ONLY an opaque uid → last-vote date — no names/emails.
 function cohortKey(identityLabel) {
@@ -1245,6 +1247,7 @@ export default function App() {
   const [user,         setUser]        = useState(undefined); // undefined = loading
   const [dataLoading,  setDataLoading] = useState(false);   // true while Firestore fetch is in-flight
   const [identities,   setIdentities]  = useState([]);
+  const [budget,       setBudget]      = useState(() => seedBudget());
   const [data,         setData]        = useState({});
   const [view,         setView]        = useState(() => {
     // Honor a PWA app-shortcut deep link (?view=today|focus|manage).
@@ -1356,6 +1359,8 @@ export default function App() {
   const stDirty   = useRef(false);
   const stTimer   = useRef(null);
   const isFirstSt = useRef(true);
+  const bgTimer   = useRef(null);
+  const isFirstBg = useRef(true);
   const latestRef = useRef({});   // most recent state, for the unload-flush closure
 
   // ── Streak cache — avoids 400-iteration loop per habit on every render ──
@@ -1390,16 +1395,18 @@ export default function App() {
       if (u) {
         setDataLoading(true);
         try {
-          const [idSnap, ciSnap, dtSnap, hnSnap, stSnap] = await Promise.all([
+          const [idSnap, ciSnap, dtSnap, hnSnap, stSnap, bgSnap] = await Promise.all([
             getDoc(identitiesRef(u.uid)),
             getDoc(checkInsRef(u.uid)),
             getDoc(dailyTasksRef(u.uid)),
             getDoc(habitNotesRef(u.uid)),
             getDoc(settingsRef(u.uid)),
+            getDoc(budgetRef(u.uid)),
           ]);
           // Re-arm each first-run guard when applying fetched data, so the load
           // itself doesn't echo straight back to Firestore as a spurious save
           if (idSnap.exists()) { isFirstId.current = true; setIdentities(idSnap.data().data); }
+          if (bgSnap.exists() && bgSnap.data().data) { isFirstBg.current = true; setBudget(bgSnap.data().data); }
           // Prune entries older than 366 days to prevent Firestore 1MB doc limit
           const cutoff = new Date();
           cutoff.setDate(cutoff.getDate() - 366);
@@ -1521,6 +1528,20 @@ export default function App() {
         .finally(() => setSyncing(false));
     }, 500);
   }, [cueSettings, user]);
+
+  // Budget doc — debounced save, mirroring the settings pattern.
+  useEffect(() => {
+    if (!user || isFirstBg.current) { isFirstBg.current = false; return; }
+    if (!hasLoadedRef.current) return;
+    clearTimeout(bgTimer.current);
+    bgTimer.current = setTimeout(() => {
+      setSyncing(true);
+      setSaveError(false);
+      setDoc(budgetRef(user.uid), { data: budget })
+        .catch(err => { console.error("Budget save failed:", err); setSaveError(true); })
+        .finally(() => setSyncing(false));
+    }, 500);
+  }, [budget, user]);
 
   // Tribe (anonymous): when opted in, publish only "I showed up today" (an opaque
   // uid → today's date) to each identity's cohort. Writes once per cohort per day.
@@ -2462,6 +2483,7 @@ export default function App() {
               ? (selectedDate === todayKey ? "Today" : formatNavDate(selectedDate))
               : view==="week" ? "This Month"
               : view==="streaks" ? "Streaks"
+              : view==="budget" ? "Budget"
               : "Manage"}
           </h1>
           <div style={S.dateLabel}>
@@ -2572,6 +2594,7 @@ export default function App() {
 
         {view==="week"    && <WeekView data={data} todayKey={todayKey} identities={liveIdentities} onToggleDay={toggleForDate}/>}
         {view==="streaks" && <StreaksView data={data} getStreak={getStreakForHabit} identities={liveIdentities}/>}
+        {view==="budget"  && <BudgetView budget={budget} setBudget={setBudget}/>}
         {view==="manage"  && (
           <ManageView
             identities={liveIdentities}
@@ -2644,6 +2667,7 @@ export default function App() {
       <nav style={S.bottomNav} aria-label="Main navigation">
         {[
           {id:"today",    icon:"☀️",  label:"Today"},
+          {id:"budget",   icon:"💰",  label:"Budget"},
           {id:"manage",   icon:"⚙️",  label:"Manage"},
         ].map(t=>(
           <button key={t.id} onClick={()=>{ setView(t.id); if(t.id==="today") setSelectedDate(todayKey); }}
