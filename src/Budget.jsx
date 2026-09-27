@@ -54,12 +54,12 @@ export function seedBudget() {
       { id:"petrol",name:"Petrol",             bucket:"need", budget:6000 },
       { id:"ins",   name:"Insurance & School", bucket:"need", budget:20000 },
       { id:"med",   name:"Medical",            bucket:"need", budget:4000 },
-      { id:"sub",   name:"Subscription",       bucket:"want", budget:1000 },
+      { id:"sub",   name:"Subscription & Internet", bucket:"want", budget:1000 },
       { id:"eat",   name:"Eatout",             bucket:"want", budget:5000 },
       { id:"shop",  name:"Shopping",           bucket:"want", budget:8000 },
       { id:"maint", name:"Maintenance",        bucket:"want", budget:1500 },
-      { id:"groom", name:"Grooming",           bucket:"want", budget:1700 },
-      { id:"ent",   name:"Entertainment",      bucket:"want", budget:1700 },
+      { id:"groom", name:"Grooming",           bucket:"want", budget:1500 },
+      { id:"ent",   name:"Entertainment",      bucket:"want", budget:1500 },
     ],
     savingsActual:{ sip:20000, ssy:22000, re:10000 },
     txns:[
@@ -246,19 +246,53 @@ function TxnForm({ m, api, initial, onClose }) {
   const [date,setDate]=useState(initial?.date || m.id+"-27");
   const [desc,setDesc]=useState(initial?.desc||""); const [mode,setMode]=useState(initial?.mode||"UPI");
   const [notes,setNotes]=useState(initial?.notes||""); const [err,setErr]=useState(""); const [confirmDel,setConfirmDel]=useState(false);
+  const [xfer,setXfer]=useState(null); const [src,setSrc]=useState("");
   const catsForBucket=exp.filter(c=>c.bucket===bucket);
   const onBucket=bk=>{ setBucket(bk); if(bk!=="income"){ const f=exp.find(c=>c.bucket===bk); if(f) setCat(f.id); } };
+  const spentOf=id=>(m.txns||[]).filter(t=>t.categoryId===id && (!initial||t.id!==initial.id)).reduce((s,t)=>s+(+t.amount||0),0);
+  const record=()=>{
+    const a=+amt;
+    const patch={ date, desc:desc.trim(), amount:a, bucket, categoryId:bucket==="income"?"":cat, mode, notes:notes.trim() };
+    if(edit) api.editTxn(initial.id,patch); else api.addTxn({ id:"t"+Date.now(), ...patch });
+    onClose("go");
+  };
   const submit=()=>{
     const a=+amt;
     if(m.status!=="committed") return setErr("Commit this month before recording transactions.");
     if(!(a>0)) return setErr("Enter an amount greater than ₹0.");
     if(!date||date.slice(0,7)!==m.id) return setErr("Date must fall within "+m.label+".");
     if(bucket!=="income"&&!cat) return setErr("Pick a category.");
-    const patch={ date, desc:desc.trim(), amount:a, bucket, categoryId:bucket==="income"?"":cat, mode, notes:notes.trim() };
-    if(edit) api.editTxn(initial.id,patch);
-    else api.addTxn({ id:"t"+Date.now(), ...patch });
-    onClose("go");
+    if(bucket!=="income"){
+      const c=exp.find(x=>x.id===cat); const remaining=(+c.budget||0)-spentOf(cat);
+      if(a>remaining){ setXfer({ shortfall:Math.round(a-remaining), remaining, catName:c.name }); setSrc(""); return; }
+    }
+    record();
   };
+  // Envelope out of money → offer to transfer the shortfall from another envelope.
+  if (xfer) {
+    const donors=exp.filter(c=>c.id!==cat && c.bucket!=="save").map(c=>({ ...c, avail:(+c.budget||0)-spentOf(c.id) })).filter(c=>c.avail>0).sort((a,b)=>b.avail-a.avail);
+    const chosen=donors.find(c=>c.id===src);
+    const canCover=chosen && chosen.avail>=xfer.shortfall;
+    return <Sheet title="Not enough in the envelope" onClose={()=>setXfer(null)}>
+      <div style={{ background:T.warnSoft, color:T.warn, borderRadius:11, padding:"11px 12px", fontSize:13, fontWeight:600, lineHeight:1.5, marginBottom:14 }}>
+        <b>{xfer.catName}</b> has only {INR(xfer.remaining)} left, but this spend is {INR(+amt)}.<br/>Move {INR(xfer.shortfall)} from another envelope to cover it?
+      </div>
+      <div style={{ marginBottom:12 }}><label style={lab}>Transfer from</label>
+        {donors.length ? <select style={fld} value={src} onChange={e=>setSrc(e.target.value)}>
+          <option value="">Choose an envelope…</option>
+          {donors.map(c=><option key={c.id} value={c.id}>{c.name} — {INR(c.avail)} available</option>)}
+        </select> : <div style={{ fontSize:12.5, color:T.muted }}>No other envelope has spare money.</div>}
+        {chosen && !canCover && <div style={{ fontSize:12, color:T.bad, marginTop:6 }}>{chosen.name} only has {INR(chosen.avail)} — not enough to cover {INR(xfer.shortfall)}.</div>}
+      </div>
+      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+        <button disabled={!canCover} onClick={()=>{ api.transfer(src, cat, xfer.shortfall); record(); }}
+          style={{ background:canCover?T.primary:T.surf2, color:canCover?"#fff":T.muted, border:"none", borderRadius:12, padding:13, fontFamily:"inherit", fontWeight:700, fontSize:15, cursor:canCover?"pointer":"default" }}>
+          Transfer {INR(xfer.shortfall)} & spend</button>
+        <button onClick={record} style={{ background:"transparent", color:T.bad, border:`1px solid ${T.bad}44`, borderRadius:12, padding:13, fontFamily:"inherit", fontWeight:700, fontSize:14, cursor:"pointer" }}>Overspend anyway</button>
+        <button onClick={()=>setXfer(null)} style={{ background:"transparent", color:T.text2, border:`1px solid ${T.border}`, borderRadius:12, padding:11, fontFamily:"inherit", fontWeight:700, fontSize:14, cursor:"pointer" }}>Back</button>
+      </div>
+    </Sheet>;
+  }
   if (confirmDel) return <Confirm message="Delete this transaction? Its amount will be removed from the envelope." onYes={()=>api.deleteTxn(initial.id)} onClose={()=>onClose("go")} />;
   return <Sheet title={edit?"Edit transaction":"Add transaction"} onClose={()=>onClose()}>
     <div style={{ display:"flex", gap:7, marginBottom:12 }}>
@@ -417,7 +451,21 @@ function Summary({ m }) {
       {row("Spent (expenses)", INR(d.expSpent))}{row("Saved", INR(d.savActual), T.save)}
       <div style={{ display:"flex", justifyContent:"space-between", paddingTop:11, marginTop:2, borderTop:`2px solid ${T.border}`, fontSize:14 }}>
         <span>Remaining in pocket</span><span style={{ fontWeight:800, fontVariantNumeric:"tabular-nums", color:d.remaining<0?T.bad:T.good }}>{INR(d.remaining)}</span></div>
-      <div style={{ fontSize:11.5, color:T.muted, marginTop:6 }}>Savings rate <b>{pct(d.savActual,d.income).toFixed(1)}%</b> · Expense rate <b>{pct(d.expSpent,d.income).toFixed(1)}%</b></div></div>,
+      <div style={{ fontSize:11.5, color:T.muted, marginTop:6 }}>Savings rate <b>{pct(d.savActual,d.income).toFixed(1)}%</b> · Expense rate <b>{pct(d.expSpent,d.income).toFixed(1)}%</b></div>
+      {d.remaining>0 && <div style={{ marginTop:10, background:T.goodSoft, color:T.good, borderRadius:11, padding:"10px 12px", fontSize:13.5, fontWeight:700, textAlign:"center" }}>🎉 You saved {INR(d.remaining)} this month</div>}</div>,
+    <div key="report" style={card()}>
+      <div style={{ fontWeight:600, fontSize:14, marginBottom:8, color:T.text }}>Category report</div>
+      <div style={{ display:"grid", gridTemplateColumns:"1.6fr 1fr 1fr 0.8fr", gap:6, fontSize:11, fontWeight:700, color:T.muted, textTransform:"uppercase", letterSpacing:".03em", paddingBottom:6, borderBottom:`1px solid ${T.border}` }}>
+        <span>Category</span><span style={{ textAlign:"right" }}>Spent</span><span style={{ textAlign:"right" }}>Balance</span><span style={{ textAlign:"right" }}>% inc</span></div>
+      {[...exp].sort((a,b)=>(d.spentBy[b.id]||0)-(d.spentBy[a.id]||0)).map(c=>{ const sp=d.spentBy[c.id]||0, bal=(+c.budget||0)-sp;
+        return <div key={c.id} style={{ display:"grid", gridTemplateColumns:"1.6fr 1fr 1fr 0.8fr", gap:6, fontSize:13, padding:"7px 0", borderBottom:`1px solid ${T.border}`, fontVariantNumeric:"tabular-nums" }}>
+          <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.name}</span>
+          <span style={{ textAlign:"right", fontWeight:600 }}>{INR(sp)}</span>
+          <span style={{ textAlign:"right", color:bal<0?T.bad:T.text2 }}>{INR(bal)}</span>
+          <span style={{ textAlign:"right", color:T.muted }}>{pct(sp,d.income).toFixed(1)}</span></div>; })}
+      <div style={{ display:"grid", gridTemplateColumns:"1.6fr 1fr 1fr 0.8fr", gap:6, fontSize:13.5, fontWeight:800, paddingTop:9, marginTop:2, borderTop:`2px solid ${T.border}`, fontVariantNumeric:"tabular-nums" }}>
+        <span>Total spent</span><span style={{ textAlign:"right" }}>{INR(d.expSpent)}</span><span></span><span style={{ textAlign:"right", color:T.muted }}>{pct(d.expSpent,d.income).toFixed(1)}</span></div>
+    </div>,
     <div key="s2" style={card()}><div style={{ fontWeight:600, fontSize:14, marginBottom:8, color:T.text }}>Top spending</div>
       {top.length?top.map((x,i)=><div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:i<top.length-1?`1px solid ${T.border}`:"none", fontSize:14 }}>
         <span>{i+1}. {x.name}</span><span style={{ fontWeight:700, fontVariantNumeric:"tabular-nums" }}>{INR(x.v)}</span></div>):<div style={{ color:T.muted, fontSize:13, textAlign:"center", padding:"16px 0" }}>No spending yet.</div>}</div>,
@@ -457,6 +505,9 @@ export default function BudgetView({ budget, setBudget }) {
       const bk=arr[i].bucket; let j=i+dir; while(j>=0&&j<arr.length&&arr[j].bucket!==bk) j+=dir;
       if(j<0||j>=arr.length) return mm; [arr[i],arr[j]]=[arr[j],arr[i]]; return { ...mm, categories:arr }; }),
     setSavingsActual:(id,val)=>updateMonth(mm=>({ ...mm, savingsActual:{ ...mm.savingsActual, [id]:val } })),
+    // Move budget between envelopes — the "transfer from other" the notes ask for.
+    transfer:(fromId,toId,amt)=>updateMonth(mm=>({ ...mm, categories:mm.categories.map(c=>
+      c.id===fromId ? { ...c, budget:(+c.budget||0)-amt } : c.id===toId ? { ...c, budget:(+c.budget||0)+amt } : c) })),
     addTxn:t=>updateMonth(mm=>({ ...mm, txns:[...mm.txns, t] })),
     editTxn:(id,patch)=>updateMonth(mm=>({ ...mm, txns:mm.txns.map(t=>t.id===id?{ ...t, ...patch }:t) })),
     deleteTxn:id=>updateMonth(mm=>({ ...mm, txns:mm.txns.filter(t=>t.id!==id) })),
