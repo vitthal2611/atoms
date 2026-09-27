@@ -2466,8 +2466,8 @@ export default function App() {
           onConfirm={deleteAllHabits} onCancel={()=>setModal(null)} />
       )}
 
-      {/* ── Header ── */}
-      <header style={{ ...S.header, flexDirection:"column", alignItems:"stretch" }}>
+      {/* ── Header ── (hidden on the Budget tab, which brings its own header) */}
+      {view!=="budget" && <header style={{ ...S.header, flexDirection:"column", alignItems:"stretch" }}>
        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", width:"100%" }}>
         <div style={{ minHeight:90, display:"flex", flexDirection:"column", justifyContent:"center" }}>
           {/* Always occupy the eyebrow's space (hidden when idle) so the title/date
@@ -2549,7 +2549,7 @@ export default function App() {
            </div>
          </>
        )}
-      </header>
+      </header>}
 
       {/* ── Scrollable Content ── */}
       <main style={S.scrollArea} ref={scrollRef}>
