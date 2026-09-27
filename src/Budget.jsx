@@ -218,6 +218,22 @@ function CatSheet({ api, initial, onClose }) {
   </Sheet>;
 }
 
+function MonthPicker({ budget, onPick, onCreate, onClose }) {
+  const ids=Object.keys(budget.months).sort(); const nextId=mShift(ids[ids.length-1],1);
+  const incomeOf=mm=>(+mm.salaryIncome||0)+(+mm.otherIncome||0)+((mm.txns||[]).filter(t=>t.bucket==="income").reduce((a,t)=>a+(+t.amount||0),0));
+  return <Sheet title="Your budgets" onClose={onClose}>
+    <div style={{ fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".04em", margin:"2px 2px 6px" }}>{ids.length} month{ids.length===1?"":"s"} created</div>
+    {ids.map(id=>{ const mm=budget.months[id], active=id===budget.active;
+      return <div key={id} onClick={()=>onPick(id)} style={{ display:"flex", alignItems:"center", gap:11, padding:"13px 12px", borderRadius:12, cursor:"pointer", border:`1px solid ${active?T.primary:"transparent"}`, background:active?T.primary+"14":"transparent", marginBottom:2 }}>
+        <div style={{ width:38, height:38, borderRadius:11, background:T.surf2, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>🗓️</div>
+        <div style={{ flex:1, minWidth:0 }}><div style={{ fontWeight:700, fontSize:15 }}>{mm.label||mLabel(id)}</div><div style={{ fontSize:11.5, color:T.muted, fontVariantNumeric:"tabular-nums" }}>{INR(incomeOf(mm))} budget</div></div>
+        {active ? <span style={{ color:T.primary, fontWeight:800 }}>✓</span>
+          : <span style={{ fontSize:10.5, fontWeight:800, padding:"2px 8px", borderRadius:20, background:mm.status==="committed"?T.goodS:T.warnS, color:mm.status==="committed"?T.good:T.warn }}>{mm.status==="committed"?"Committed":"Draft"}</span>}
+      </div>; })}
+    <button onClick={onCreate} style={{ width:"100%", marginTop:12, background:T.surf2, border:`1px dashed ${T.primary}72`, color:T.primary, borderRadius:13, padding:14, fontFamily:"inherit", fontWeight:800, fontSize:14, cursor:"pointer" }}>＋ Create {mLabel(nextId)}</button>
+  </Sheet>;
+}
+
 function GoalSheet({ m, cat, onAdd, onEdit, onClose }) {
   const contribs=[...(m.txns||[])].filter(t=>t.categoryId===cat.id && t.bucket==="save").sort((a,b)=>b.date.localeCompare(a.date));
   const funded=contribs.reduce((a,t)=>a+(+t.amount||0),0); const budget=+cat.budget||0, rem=budget-funded, done=funded>=budget&&budget>0;
@@ -298,9 +314,10 @@ export default function BudgetView({ budget, setBudget }) {
   const curMonth = today().slice(0,7);
   const updateMonth = fn => setBudget(b => ({ ...b, months:{ ...b.months, [b.active]:fn(b.months[b.active]) } }));
   const api = {
-    goto:d=>setBudget(b=>{ const id=mShift(b.active,d); return b.months[id]?{ ...b, active:id }:b; }),
-    createMonth:d=>setBudget(b=>{ const id=mShift(b.active,d); if(b.months[id]) return { ...b, active:id };
-      const src=b.months[b.active]; return { ...b, months:{ ...b.months, [id]:{ id, label:mLabel(id), status:"draft", salaryIncome:src.salaryIncome, otherIncome:src.otherIncome, categories:src.categories.map(c=>({ ...c })), savingsActual:{}, txns:[] } }, active:id }; }),
+    setActive:id=>setBudget(b=>({ ...b, active:id })),
+    createNext:()=>setBudget(b=>{ const list=Object.keys(b.months).sort(); const last=list[list.length-1]; const id=mShift(last,1);
+      if(b.months[id]) return { ...b, active:id };
+      const src=b.months[last]; return { ...b, months:{ ...b.months, [id]:{ id, label:mLabel(id), status:"draft", salaryIncome:src.salaryIncome, otherIncome:src.otherIncome, categories:src.categories.map(c=>({ ...c })), savingsActual:{}, txns:[] } }, active:id }; }),
     commit:()=>updateMonth(mm=>({ ...mm, status:"committed" })),
     setIncome:(s,o)=>updateMonth(mm=>({ ...mm, salaryIncome:s, otherIncome:o })),
     addCategory:c=>updateMonth(mm=>({ ...mm, categories:[...mm.categories, { id:"c"+Date.now(), ...c }] })),
@@ -356,16 +373,12 @@ export default function BudgetView({ budget, setBudget }) {
       <div style={{ display:"flex", flexDirection:"column", gap:5, marginTop:11 }}>
         {stat("Allocated", INR(c.budget))}{stat("Spent", INR(s))}{stat("Balance", INR(bal), bal<0?T.bad:T.good)}
       </div></div>; };
-  const prev=mShift(active,-1), next=mShift(active,1), hasPrev=!!budget.months[prev], hasNext=!!budget.months[next];
-  // month nav lives inside the (dark) budget card, so it's styled light
-  const navBtn=(on,dir,dlt)=><button onClick={()=>on?api.goto(dlt):api.createMonth(dlt)} aria-label={dir}
-    style={{ background:"#ffffff2e", border:"none", color:"#fff", width:30, height:30, borderRadius:9, fontSize:17, cursor:"pointer", fontFamily:"inherit", lineHeight:1 }}>{dir==="prev"?"‹":"›"}</button>;
 
   return <div style={{ display:"flex", flexDirection:"column" }}>
     {/* own header — month selection lives inside the Monthly budget card */}
     <div style={{ background:`linear-gradient(135deg, ${T.primary}, #075E8C)`, color:"#fff", borderRadius:16, padding:16, boxShadow:T.shadow }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8 }}>{navBtn(hasPrev,"prev",-1)}<span style={{ fontWeight:800, fontSize:15 }}>{m.label||mLabel(active)}</span>{navBtn(hasNext,"next",1)}</div>
+        <button onClick={()=>setModal({type:"months"})} style={{ background:"#ffffff2e", border:"none", color:"#fff", fontFamily:"inherit", fontWeight:800, fontSize:15, padding:"6px 12px", borderRadius:10, cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>{m.label||mLabel(active)} <span style={{ fontSize:11, opacity:.85 }}>▾</span></button>
         <span style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:20, background:"#ffffff2e", color:"#fff" }}>{committed?"Committed":"Draft"}</span>
       </div>
       <div style={{ fontSize:11.5, fontWeight:600, textTransform:"uppercase", letterSpacing:".05em", opacity:.85 }}>Monthly budget</div>
@@ -438,6 +451,7 @@ export default function BudgetView({ budget, setBudget }) {
        onAdd={()=>setModal({type:"spend", env:modal.cat, back:{type:"goal", cat:modal.cat}})}
        onEdit={t=>setModal({type:"spend", env:modal.cat, initial:t, back:{type:"goal", cat:modal.cat}})}
        onClose={()=>setModal(null)} />}
+    {modal?.type==="months" && <MonthPicker budget={budget} onPick={id=>{ api.setActive(id); setModal(null); }} onCreate={()=>{ api.createNext(); setModal(null); }} onClose={()=>setModal(null)} />}
     {modal?.type==="cat"    && <CatSheet api={api} initial={modal.initial} onClose={(cat)=>setModal(cat&&modal.spendAfter?{type:"spend", env:cat}:null)} />}
     {modal?.type==="report" && <ReportSheet m={m} onClose={()=>setModal(null)} />}
   </div>;
