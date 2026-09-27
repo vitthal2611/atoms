@@ -233,21 +233,24 @@ export default function BudgetView({ budget, setBudget }) {
   if (!m) return <div style={{ color:T.muted, textAlign:"center", padding:"40px 0" }}>No budget yet.</div>;
   const d = calc(m); const committed = m.status==="committed";
   const prev=mShift(active,-1), next=mShift(active,1), hasPrev=!!budget.months[prev], hasNext=!!budget.months[next];
+  // month nav lives inside the (dark) budget card, so it's styled light
   const navBtn=(on,dir,dlt)=><button onClick={()=>on?api.goto(dlt):api.createMonth(dlt)} aria-label={dir}
-    style={{ background:T.surf2, border:`1px solid ${T.border}`, color:on?T.text:T.muted, width:32, height:32, borderRadius:10, fontSize:17, cursor:"pointer", fontFamily:"inherit", opacity:on?1:.55 }}>{dir==="prev"?"‹":"›"}</button>;
+    style={{ background:"#ffffff2e", border:"none", color:"#fff", width:30, height:30, borderRadius:9, fontSize:17, cursor:"pointer", fontFamily:"inherit", lineHeight:1 }}>{dir==="prev"?"‹":"›"}</button>;
   const savingsActual = id => +(m.savingsActual?.[id]||0);
 
   return <div style={{ display:"flex", flexDirection:"column" }}>
-    {/* own header */}
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", paddingBottom:6 }}>
-      <div style={{ display:"flex", alignItems:"center", gap:10 }}>{navBtn(hasPrev,"prev",-1)}<span style={{ fontWeight:800, fontSize:17, color:T.text }}>{m.label||mLabel(active)}</span>{navBtn(hasNext,"next",1)}</div>
-      <span style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:20, background:committed?T.goodS:T.warnS, color:committed?T.good:T.warn }}>{committed?"Committed":"Draft"}</span>
-    </div>
-    <div style={{ background:`linear-gradient(135deg, ${T.primary}, #075E8C)`, color:"#fff", borderRadius:16, padding:16, boxShadow:T.shadow, position:"relative" }}>
-      <button onClick={()=>setModal({type:"income"})} style={{ position:"absolute", top:14, right:14, background:"#ffffff2e", border:"none", color:"#fff", borderRadius:8, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>Edit income</button>
+    {/* own header — month selection lives inside the Monthly budget card */}
+    <div style={{ background:`linear-gradient(135deg, ${T.primary}, #075E8C)`, color:"#fff", borderRadius:16, padding:16, boxShadow:T.shadow }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>{navBtn(hasPrev,"prev",-1)}<span style={{ fontWeight:800, fontSize:15 }}>{m.label||mLabel(active)}</span>{navBtn(hasNext,"next",1)}</div>
+        <span style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:20, background:"#ffffff2e", color:"#fff" }}>{committed?"Committed":"Draft"}</span>
+      </div>
       <div style={{ fontSize:11.5, fontWeight:600, textTransform:"uppercase", letterSpacing:".05em", opacity:.85 }}>Monthly budget</div>
       <div style={{ fontSize:30, fontWeight:800, letterSpacing:"-.02em", marginTop:2, fontVariantNumeric:"tabular-nums" }}>{INR(d.income)}</div>
-      <div style={{ fontSize:12, opacity:.9, marginTop:2 }}>Salary {INR(m.salaryIncome)} · Other {INR(m.otherIncome)}</div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", gap:8, marginTop:4 }}>
+        <div style={{ fontSize:12, opacity:.9 }}>Salary {INR(m.salaryIncome)} · Other {INR(m.otherIncome)}</div>
+        <button onClick={()=>setModal({type:"income"})} style={{ background:"#ffffff2e", border:"none", color:"#fff", borderRadius:8, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}>Edit income</button>
+      </div>
     </div>
     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:9, marginTop:12 }}>
       {["need","want","save"].map(k=><div key={k} style={card({ padding:"12px 11px" })}>
@@ -272,22 +275,25 @@ export default function BudgetView({ budget, setBudget }) {
       <div><button onClick={()=>setModal({type:"report"})} style={lnk}>Report</button> &nbsp; <button onClick={()=>setEditMode(v=>!v)} style={{ ...lnk, color:editMode?T.primary:T.primary }}>{editMode?"Done":"Edit"}</button></div>
     </div>
     {editMode && <div style={{ fontSize:12, color:T.muted, margin:"0 2px 8px" }}>Tap an envelope to edit its budget & icon, or add a new one below.</div>}
+    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:9 }}>
     {(m.categories||[]).map(c=>{ const s=c.bucket==="save"?savingsActual(c.id):(d.sp[c.id]||0); const bal=(+c.budget||0)-s, u=pct(s,c.budget);
       const st=c.bucket==="save"?(s>=c.budget&&c.budget>0?"done":u>=80?"good":"warn"):stOf(s,c.budget);
       const label=c.bucket==="save"?(s>=c.budget&&c.budget>0?"Funded":u>0?"Partial":"Empty"):(st==="bad"?"Overspent":st==="warn"?"Watch":"On track");
       const col=st==="bad"?T.bad:st==="warn"?T.warn:BK[c.bucket].c;
       return <div key={c.id} onClick={()=>editMode?setModal({type:"cat",initial:c}):setModal({type:"spend",env:c})}
-        style={{ ...card({ padding:"11px 12px", marginBottom:9 }), display:"flex", gap:11, alignItems:"center", cursor:"pointer" }}>
-        <div style={{ width:42, height:42, borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, background:BK[c.bucket].s, flexShrink:0 }}>{iconOf(c)}</div>
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", gap:8 }}>
-            <span style={{ fontWeight:600, fontSize:14, display:"flex", alignItems:"center", gap:6 }}><span style={{ width:7, height:7, borderRadius:"50%", background:BK[c.bucket].c }} />{c.name}</span>
-            <span style={{ fontWeight:700, fontSize:13, fontVariantNumeric:"tabular-nums" }}>{INR(s)} <span style={{ color:T.muted, fontWeight:500 }}>/ {INR(c.budget)}</span></span></div>
-          <Bar v={u} color={col} />
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:6 }}>
-            <span style={{ fontSize:11.5, color:T.text2, fontVariantNumeric:"tabular-nums" }}>{bal<0?<span style={{ color:T.bad, fontWeight:700 }}>{INR(bal)} over</span>:INR(bal)+" left"} · {u.toFixed(0)}%</span>
-            <span style={chip(st)}>{label}</span></div></div></div>; })}
-    {editMode && <button onClick={()=>setModal({type:"cat"})} style={{ ...ghostBtn, width:"100%", marginTop:4 }}>＋ New envelope</button>}
+        style={{ ...card({ padding:11 }), cursor:"pointer", minWidth:0 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:8 }}>
+          <div style={{ width:34, height:34, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17, background:BK[c.bucket].s, flexShrink:0 }}>{iconOf(c)}</div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontWeight:600, fontSize:13, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.name}</div>
+            <div style={{ fontSize:11, color:T.muted, fontVariantNumeric:"tabular-nums", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{INR(s)} / {INR(c.budget)}</div>
+          </div></div>
+        <Bar v={u} color={col} />
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:6, gap:6 }}>
+          <span style={{ fontSize:10.5, color:T.text2, fontVariantNumeric:"tabular-nums", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{bal<0?<span style={{ color:T.bad, fontWeight:700 }}>{INR(bal)} over</span>:INR(bal)+" left"}</span>
+          <span style={{ ...chip(st), flexShrink:0 }}>{label}</span></div></div>; })}
+    </div>
+    {editMode && <button onClick={()=>setModal({type:"cat"})} style={{ ...ghostBtn, width:"100%", marginTop:9 }}>＋ New envelope</button>}
 
     {/* recent spends */}
     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", margin:"20px 2px 8px" }}>
