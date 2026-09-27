@@ -218,17 +218,24 @@ function CatSheet({ api, initial, onClose }) {
   </Sheet>;
 }
 
-function MonthPicker({ budget, onPick, onCreate, onClose }) {
+function MonthPicker({ budget, onPick, onCreate, onDelete, onClose }) {
+  const [del,setDel]=useState(null);
   const ids=Object.keys(budget.months).sort(); const nextId=mShift(ids[ids.length-1],1);
   const incomeOf=mm=>(+mm.salaryIncome||0)+(+mm.otherIncome||0)+((mm.txns||[]).filter(t=>t.bucket==="income").reduce((a,t)=>a+(+t.amount||0),0));
   return <Sheet title="Your budgets" onClose={onClose}>
     <div style={{ fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".04em", margin:"2px 2px 6px" }}>{ids.length} month{ids.length===1?"":"s"} created</div>
     {ids.map(id=>{ const mm=budget.months[id], active=id===budget.active;
-      return <div key={id} onClick={()=>onPick(id)} style={{ display:"flex", alignItems:"center", gap:11, padding:"13px 12px", borderRadius:12, cursor:"pointer", border:`1px solid ${active?T.primary:"transparent"}`, background:active?T.primary+"14":"transparent", marginBottom:2 }}>
-        <div style={{ width:38, height:38, borderRadius:11, background:T.surf2, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>🗓️</div>
-        <div style={{ flex:1, minWidth:0 }}><div style={{ fontWeight:700, fontSize:15 }}>{mm.label||mLabel(id)}</div><div style={{ fontSize:11.5, color:T.muted, fontVariantNumeric:"tabular-nums" }}>{INR(incomeOf(mm))} budget</div></div>
+      if (del===id) return <div key={id} style={{ background:T.badS, border:`1px solid ${T.bad}55`, borderRadius:12, padding:12, marginBottom:2 }}>
+        <div style={{ fontSize:12.5, color:T.bad, fontWeight:600, marginBottom:10 }}>Delete {mm.label||mLabel(id)}? Its budget and all its transactions are removed.</div>
+        <div style={{ display:"flex", gap:10 }}><button onClick={()=>setDel(null)} style={{ ...ghostBtn, flex:1, padding:11 }}>Cancel</button>
+          <button onClick={()=>{ onDelete(id); setDel(null); }} style={{ flex:1, background:T.bad, color:"#fff", border:"none", borderRadius:13, padding:11, fontFamily:"inherit", fontWeight:800, fontSize:14, cursor:"pointer" }}>Delete</button></div></div>;
+      return <div key={id} style={{ display:"flex", alignItems:"center", gap:9, padding:"11px 12px", borderRadius:12, border:`1px solid ${active?T.primary:"transparent"}`, background:active?T.primary+"14":"transparent", marginBottom:2 }}>
+        <div onClick={()=>onPick(id)} style={{ display:"flex", alignItems:"center", gap:11, flex:1, minWidth:0, cursor:"pointer" }}>
+          <div style={{ width:38, height:38, borderRadius:11, background:T.surf2, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>🗓️</div>
+          <div style={{ flex:1, minWidth:0 }}><div style={{ fontWeight:700, fontSize:15 }}>{mm.label||mLabel(id)}</div><div style={{ fontSize:11.5, color:T.muted, fontVariantNumeric:"tabular-nums" }}>{INR(incomeOf(mm))} budget</div></div></div>
         {active ? <span style={{ color:T.primary, fontWeight:800 }}>✓</span>
           : <span style={{ fontSize:10.5, fontWeight:800, padding:"2px 8px", borderRadius:20, background:mm.status==="committed"?T.goodS:T.warnS, color:mm.status==="committed"?T.good:T.warn }}>{mm.status==="committed"?"Committed":"Draft"}</span>}
+        {ids.length>1 && <button onClick={()=>setDel(id)} aria-label={"Delete "+(mm.label||mLabel(id))} style={{ background:"none", border:"none", color:T.muted, fontSize:15, cursor:"pointer", padding:"4px 2px", flexShrink:0 }}>🗑️</button>}
       </div>; })}
     <button onClick={onCreate} style={{ width:"100%", marginTop:12, background:T.surf2, border:`1px dashed ${T.primary}72`, color:T.primary, borderRadius:13, padding:14, fontFamily:"inherit", fontWeight:800, fontSize:14, cursor:"pointer" }}>＋ Create {mLabel(nextId)}</button>
   </Sheet>;
@@ -315,6 +322,7 @@ export default function BudgetView({ budget, setBudget }) {
   const updateMonth = fn => setBudget(b => ({ ...b, months:{ ...b.months, [b.active]:fn(b.months[b.active]) } }));
   const api = {
     setActive:id=>setBudget(b=>({ ...b, active:id })),
+    deleteMonth:id=>setBudget(b=>{ const months={ ...b.months }; delete months[id]; const rem=Object.keys(months).sort(); if(!rem.length) return b; return { ...b, months, active:b.active===id?rem[rem.length-1]:b.active }; }),
     createNext:()=>setBudget(b=>{ const list=Object.keys(b.months).sort(); const last=list[list.length-1]; const id=mShift(last,1);
       if(b.months[id]) return { ...b, active:id };
       const src=b.months[last]; return { ...b, months:{ ...b.months, [id]:{ id, label:mLabel(id), status:"draft", salaryIncome:src.salaryIncome, otherIncome:src.otherIncome, categories:src.categories.map(c=>({ ...c })), savingsActual:{}, txns:[] } }, active:id }; }),
@@ -451,7 +459,7 @@ export default function BudgetView({ budget, setBudget }) {
        onAdd={()=>setModal({type:"spend", env:modal.cat, back:{type:"goal", cat:modal.cat}})}
        onEdit={t=>setModal({type:"spend", env:modal.cat, initial:t, back:{type:"goal", cat:modal.cat}})}
        onClose={()=>setModal(null)} />}
-    {modal?.type==="months" && <MonthPicker budget={budget} onPick={id=>{ api.setActive(id); setModal(null); }} onCreate={()=>{ api.createNext(); setModal(null); }} onClose={()=>setModal(null)} />}
+    {modal?.type==="months" && <MonthPicker budget={budget} onPick={id=>{ api.setActive(id); setModal(null); }} onCreate={()=>{ api.createNext(); setModal(null); }} onDelete={api.deleteMonth} onClose={()=>setModal(null)} />}
     {modal?.type==="cat"    && <CatSheet api={api} initial={modal.initial} onClose={(cat)=>setModal(cat&&modal.spendAfter?{type:"spend", env:cat}:null)} />}
     {modal?.type==="report" && <ReportSheet m={m} onClose={()=>setModal(null)} />}
   </div>;
