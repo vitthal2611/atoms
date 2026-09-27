@@ -165,13 +165,34 @@ function PickerSheet({ m, onPick, onNew, onClose }) {
 const pkBtn = { background:T.surf2, border:`1px solid ${T.border}`, borderRadius:14, padding:"12px 4px", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:5, fontFamily:"inherit" };
 const pkName = { fontSize:10.5, fontWeight:600, color:T.text2, textAlign:"center", lineHeight:1.2 };
 
-function IncomeSheet({ m, api, onClose }) {
-  const [s,setS]=useState(String(m.salaryIncome||"")); const [o,setO]=useState(String(m.otherIncome||""));
-  return <Sheet title="Monthly income" onClose={onClose}>
-    <div style={{ marginBottom:12 }}><label style={lab}>Salary (₹)</label><input autoFocus style={fld} type="number" value={s} onChange={e=>setS(e.target.value)} /></div>
-    <div style={{ marginBottom:14 }}><label style={lab}>Other income (₹)</label><input style={fld} type="number" value={o} onChange={e=>setO(e.target.value)} /></div>
-    <div style={{ display:"flex", gap:10 }}><button onClick={onClose} style={{ ...ghostBtn, flex:"0 0 38%" }}>Cancel</button>
-      <button onClick={()=>{ api.setIncome(Math.max(0,+s||0), Math.max(0,+o||0)); onClose(); }} style={primaryBtn}>Save</button></div>
+function IncomeSheet({ m, api, onAdd, onEdit, onClose }) {
+  const [editing,setEditing]=useState(null); const [tmp,setTmp]=useState("");
+  const entries=[...(m.txns||[])].filter(t=>t.bucket==="income").sort((a,b)=>b.date.localeCompare(a.date));
+  const total=(+m.salaryIncome||0)+(+m.otherIncome||0)+entries.reduce((a,t)=>a+(+t.amount||0),0);
+  const start=k=>{ setEditing(k); setTmp(String(k==="salary"?(m.salaryIncome||0):(m.otherIncome||0))); };
+  const save=()=>{ const v=Math.max(0,+tmp||0); if(editing==="salary") api.setIncome(v, +m.otherIncome||0); else api.setIncome(+m.salaryIncome||0, v); setEditing(null); };
+  const seclab=t=><div style={{ fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".04em", margin:"2px 2px 0" }}>{t}</div>;
+  const baseRow=(k,icon,label,val)=> editing===k
+    ? <div style={{ display:"flex", gap:8, alignItems:"center", padding:"10px 0", borderBottom:`1px solid ${T.border}` }}>
+        <input autoFocus type="number" value={tmp} onChange={e=>setTmp(e.target.value)} style={{ ...fld }} />
+        <button onClick={save} style={{ ...primaryBtn, width:"auto", padding:"11px 15px" }}>Save</button></div>
+    : <div onClick={()=>start(k)} style={{ display:"flex", alignItems:"center", gap:11, padding:"12px 0", borderBottom:`1px solid ${T.border}`, cursor:"pointer" }}>
+        <div style={{ width:36, height:36, borderRadius:10, background:T.incomeS, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17, flexShrink:0 }}>{icon}</div>
+        <div style={{ flex:1, minWidth:0 }}><div style={{ fontWeight:600, fontSize:14 }}>{label}</div><div style={{ fontSize:11.5, color:T.muted }}>Tap to edit</div></div>
+        <div style={{ fontWeight:700, fontSize:14, color:T.good, fontVariantNumeric:"tabular-nums" }}>{INR(val)}</div></div>;
+  return <Sheet title={"Income · "+(m.label||mLabel(m.id))} onClose={onClose}>
+    {seclab("Fixed income")}
+    {baseRow("salary","💼","Salary",m.salaryIncome||0)}
+    {baseRow("other","🏷️","Other income",m.otherIncome||0)}
+    <div style={{ margin:"16px 0 0" }}>{seclab("Income entries this month")}</div>
+    {entries.length ? entries.map(t=><div key={t.id} onClick={()=>onEdit(t)} style={{ display:"flex", alignItems:"center", gap:11, padding:"12px 0", borderBottom:`1px solid ${T.border}`, cursor:"pointer" }}>
+        <div style={{ width:36, height:36, borderRadius:10, background:T.incomeS, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17, flexShrink:0 }}>💵</div>
+        <div style={{ flex:1, minWidth:0 }}><div style={{ fontWeight:600, fontSize:14, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{t.desc||"Income"}</div><div style={{ fontSize:11.5, color:T.muted }}>{fmtD(t.date)}</div></div>
+        <div style={{ fontWeight:700, fontSize:14, color:T.good, fontVariantNumeric:"tabular-nums" }}>+{INR(t.amount)}</div></div>)
+      : <div style={{ fontSize:13, color:T.muted, padding:"12px 2px" }}>No extra income entries yet.</div>}
+    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", paddingTop:12, marginTop:4, borderTop:`2px solid ${T.border}`, fontSize:15, fontWeight:800 }}>
+      <span>Total income</span><span style={{ color:T.good, fontVariantNumeric:"tabular-nums" }}>{INR(total)}</span></div>
+    <button onClick={onAdd} style={{ ...ghostBtn, width:"100%", background:T.incomeS, color:T.good, borderColor:T.good+"4d", marginTop:14 }}>＋ Add income entry</button>
   </Sheet>;
 }
 
@@ -263,7 +284,7 @@ export default function BudgetView({ budget, setBudget }) {
       <div style={{ fontSize:30, fontWeight:800, letterSpacing:"-.02em", marginTop:2, fontVariantNumeric:"tabular-nums" }}>{INR(d.income)}</div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", gap:8, marginTop:4 }}>
         <div style={{ fontSize:12, opacity:.9 }}>Salary {INR(m.salaryIncome)} · Other {INR(m.otherIncome)}</div>
-        <button onClick={()=>setModal({type:"income"})} style={{ background:"#ffffff2e", border:"none", color:"#fff", borderRadius:8, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}>Edit income</button>
+        <button onClick={()=>setModal({type:"income"})} style={{ background:"#ffffff2e", border:"none", color:"#fff", borderRadius:8, padding:"5px 13px", fontSize:11.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}>Income ›</button>
       </div>
     </div>
     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:9, marginTop:12 }}>
@@ -323,9 +344,12 @@ export default function BudgetView({ budget, setBudget }) {
         <div style={{ fontWeight:700, fontSize:14, fontVariantNumeric:"tabular-nums", color:t.bucket==="income"?T.good:T.text }}>{t.bucket==="income"?"+":""}{INR(t.amount)}</div></div>; })}
 
     {/* modals */}
-    {modal?.type==="spend"  && <SpendSheet m={m} api={api} env={modal.env} initial={modal.initial} curMonth={curMonth} onClose={()=>setModal(null)} onChange={()=>setModal({type:"picker"})} />}
+    {modal?.type==="spend"  && <SpendSheet m={m} api={api} env={modal.env} initial={modal.initial} curMonth={curMonth} onClose={()=>setModal(modal.back?{type:modal.back}:null)} onChange={()=>setModal({type:"picker"})} />}
     {modal?.type==="picker" && <PickerSheet m={m} onPick={c=>setModal({type:"spend", env:c})} onNew={()=>setModal({type:"cat", spendAfter:true})} onClose={()=>setModal(null)} />}
-    {modal?.type==="income" && <IncomeSheet m={m} api={api} onClose={()=>setModal(null)} />}
+    {modal?.type==="income" && <IncomeSheet m={m} api={api}
+       onAdd={()=>setModal({type:"spend", env:{id:"",name:"Income",bucket:"income"}, back:"income"})}
+       onEdit={t=>setModal({type:"spend", env:{id:"",name:"Income",bucket:"income"}, initial:t, back:"income"})}
+       onClose={()=>setModal(null)} />}
     {modal?.type==="cat"    && <CatSheet api={api} initial={modal.initial} onClose={(cat)=>setModal(cat&&modal.spendAfter?{type:"spend", env:cat}:null)} />}
     {modal?.type==="report" && <ReportSheet m={m} onClose={()=>setModal(null)} />}
   </div>;
