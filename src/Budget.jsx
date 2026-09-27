@@ -26,6 +26,7 @@ const MON  = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov",
 const MONF = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const today = () => { const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
 const fmtD = iso => { const [y,m,d]=(iso||"").split("-"); return d?`${+d} ${MON[+m-1]}`:iso; };
+const fmtDFull = iso => { const [y,m,d]=(iso||"").split("-"); return d?`${+d} ${MON[+m-1]} ${y}`:iso; };
 const mShift = (id,delta) => { const [y,m]=id.split("-").map(Number); const d=new Date(y,m-1+delta,1); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); };
 const mLabel = id => { const [y,m]=id.split("-").map(Number); return MONF[m-1]+" "+y; };
 const EMO = ["🧾","🏦","🥛","💡","🚰","🔥","🧹","🛒","🥬","📶","⛽","🛡️","💊","🍽️","🛍️","🔧","💇","🎬","🎓","📈","🏘️","💰","☕","🎁","✈️","📚","🏥","👕","🐾","🏠","🚗","📱"];
@@ -220,6 +221,32 @@ function CatSheet({ api, initial, onClose }) {
   </Sheet>;
 }
 
+function TransactionsSheet({ m, onAdd, onEdit, onClose }) {
+  const [filter,setFilter]=useState("all");
+  const cat=id=>(m.categories||[]).find(c=>c.id===id);
+  const all=[...(m.txns||[])].sort((a,b)=>b.date.localeCompare(a.date));
+  const items=all.filter(t=>filter==="all"||t.bucket===filter);
+  const spent=all.filter(t=>t.bucket!=="income").reduce((a,t)=>a+(+t.amount||0),0);
+  const inc=all.filter(t=>t.bucket==="income").reduce((a,t)=>a+(+t.amount||0),0);
+  const fchip=(f,l)=><button key={f} onClick={()=>setFilter(f)} style={{ flex:1, padding:"8px 0", borderRadius:9, fontFamily:"inherit", fontSize:12.5, fontWeight:700, cursor:"pointer", border:`1px solid ${filter===f?T.primary:T.border}`, background:filter===f?T.primary:"transparent", color:filter===f?"#fff":T.text2 }}>{l}</button>;
+  let last=null;
+  return <Sheet title={"All transactions · "+(m.label||mLabel(m.id))} onClose={onClose}>
+    <button onClick={onAdd} style={{ ...primaryBtn, marginBottom:12 }}>＋ Add transaction</button>
+    <div style={{ display:"flex", gap:7, marginBottom:6 }}>{fchip("all","All")}{fchip("need","Needs")}{fchip("want","Wants")}{fchip("income","Income")}</div>
+    {items.length ? items.map(t=>{ const c=cat(t.categoryId), bk=BK[t.bucket]||BK.need, showDay=t.date!==last; last=t.date;
+      return <div key={t.id}>
+        {showDay && <div style={{ fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".03em", margin:"12px 2px 6px" }}>{fmtDFull(t.date)}</div>}
+        <div onClick={()=>onEdit(t)} style={{ display:"flex", alignItems:"center", gap:11, padding:"10px 0", borderBottom:`1px solid ${T.border}`, cursor:"pointer" }}>
+          <div style={{ width:36, height:36, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, background:bk.s, color:bk.c, flexShrink:0 }}>{t.bucket==="income"?"💵":(c?iconOf(c):"₹")}</div>
+          <div style={{ flex:1, minWidth:0 }}><div style={{ fontWeight:600, fontSize:13.5, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{t.desc||(c?c.name:t.bucket==="income"?"Income":"General")}</div>
+            <div style={{ fontSize:11.5, color:T.muted }}>{t.bucket==="income"?"Income":(c?c.name:"General")} · {BK[t.bucket].l}</div></div>
+          <div style={{ fontWeight:700, fontSize:14, fontVariantNumeric:"tabular-nums", color:t.bucket==="income"?T.good:T.text }}>{t.bucket==="income"?"+":""}{INR(t.amount)}</div></div>
+      </div>; })
+      : <div style={{ fontSize:13, color:T.muted, textAlign:"center", padding:"20px 0" }}>No transactions.</div>}
+    <div style={{ fontSize:12, color:T.muted, textAlign:"center", marginTop:12 }}>{all.length} transactions · spent {INR(spent)} · income +{INR(inc)}</div>
+  </Sheet>;
+}
+
 function ReportSheet({ m, onClose }) {
   const d=calc(m); const exp=(m.categories||[]).filter(c=>c.bucket!=="save");
   const rows=[...exp].sort((a,b)=>(d.sp[b.id]||0)-(d.sp[a.id]||0));
@@ -334,7 +361,8 @@ export default function BudgetView({ budget, setBudget }) {
 
     {/* recent spends */}
     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", margin:"20px 2px 8px" }}>
-      <span style={{ fontSize:13, fontWeight:800 }}>🧾 Recent spends</span><span style={{ fontSize:12, color:T.muted }}>tap to edit</span></div>
+      <span style={{ fontSize:13, fontWeight:800 }}>🧾 Recent transactions</span>
+      <button onClick={()=>setModal({type:"txns"})} style={lnk}>See all ({(m.txns||[]).length}) ›</button></div>
     {[...(m.txns||[])].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6).map(t=>{ const c=(m.categories||[]).find(x=>x.id===t.categoryId); const bk=BK[t.bucket]||BK.need;
       return <div key={t.id} onClick={()=>setModal({type:"spend", env:c||{id:"",name:"Income",bucket:t.bucket}, initial:t})}
         style={{ ...card({ padding:"10px 12px", marginBottom:8 }), display:"flex", alignItems:"center", gap:11, cursor:"pointer" }}>
@@ -345,7 +373,11 @@ export default function BudgetView({ budget, setBudget }) {
 
     {/* modals */}
     {modal?.type==="spend"  && <SpendSheet m={m} api={api} env={modal.env} initial={modal.initial} curMonth={curMonth} onClose={()=>setModal(modal.back?{type:modal.back}:null)} onChange={()=>setModal({type:"picker"})} />}
-    {modal?.type==="picker" && <PickerSheet m={m} onPick={c=>setModal({type:"spend", env:c})} onNew={()=>setModal({type:"cat", spendAfter:true})} onClose={()=>setModal(null)} />}
+    {modal?.type==="picker" && <PickerSheet m={m} onPick={c=>setModal({type:"spend", env:c, back:modal.back})} onNew={()=>setModal({type:"cat", spendAfter:true})} onClose={()=>setModal(modal.back?{type:modal.back}:null)} />}
+    {modal?.type==="txns"   && <TransactionsSheet m={m}
+       onAdd={()=>setModal({type:"picker", back:"txns"})}
+       onEdit={t=>setModal({type:"spend", env:(m.categories||[]).find(c=>c.id===t.categoryId)||{id:"",name:"Income",bucket:t.bucket}, initial:t, back:"txns"})}
+       onClose={()=>setModal(null)} />}
     {modal?.type==="income" && <IncomeSheet m={m} api={api}
        onAdd={()=>setModal({type:"spend", env:{id:"",name:"Income",bucket:"income"}, back:"income"})}
        onEdit={t=>setModal({type:"spend", env:{id:"",name:"Income",bucket:"income"}, initial:t, back:"income"})}
