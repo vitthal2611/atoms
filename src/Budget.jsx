@@ -32,6 +32,12 @@ const EMO = ["🧾","🏦","🥛","💡","🚰","🔥","🧹","🛒","🥬","�
 // icon fallback for envelopes saved before icons existed (same seed ids)
 const DEF_ICON = { ssy:"🎓",sip:"📈",re:"🏘️",emi:"🏦",milk:"🥛",elec:"💡",water:"🚰",gas:"🔥",help:"🧹",dmart:"🛒",veg:"🥬",sub:"📶",petrol:"⛽",ins:"🛡️",med:"💊",eat:"🍽️",shop:"🛍️",maint:"🔧",groom:"💇",ent:"🎬" };
 const iconOf = c => c.icon || DEF_ICON[c.id] || "₹";
+// Strip the native number-input spinner (up/down arrows) on the amount field.
+if (typeof document !== "undefined" && !document.getElementById("bud-css")) {
+  const st = document.createElement("style"); st.id = "bud-css";
+  st.textContent = ".bud-amt::-webkit-inner-spin-button,.bud-amt::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}.bud-amt{-moz-appearance:textfield}";
+  document.head.appendChild(st);
+}
 
 let _tid = 1;
 const tx = (date,desc,amount,cat,bucket) => ({ id:"t"+(_tid++), date, desc, amount, categoryId:cat, bucket });
@@ -125,10 +131,10 @@ function SpendSheet({ m, api, env, initial, curMonth, onClose, onChange }) {
     <div style={{ display:"flex", alignItems:"center", gap:11, background:T.surf2, borderRadius:13, padding:"11px 12px", marginBottom:14 }}>
       <div style={{ width:40, height:40, borderRadius:11, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, background:BK[env.bucket].s }}>{iconOf(env)}</div>
       <div><div style={{ fontWeight:700, fontSize:15, color:T.text }}>{env.name}</div><div style={{ fontSize:11.5, color:T.muted }}>{isInc?"Income":BK[env.bucket].l+" · envelope"}</div></div></div>
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:4, margin:"4px 0 16px" }}>
-      <span style={{ fontSize:34, fontWeight:800, color:T.muted }}>₹</span>
-      <input autoFocus type="number" inputMode="numeric" value={amt} onChange={e=>setAmt(e.target.value)} placeholder="0"
-        style={{ fontSize:40, fontWeight:800, border:"none", background:"none", outline:"none", color:T.text, width:"100%", maxWidth:220, textAlign:"center", fontFamily:"inherit" }} /></div>
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:2, margin:"6px 0 18px", maxWidth:"100%" }}>
+      <span style={{ fontSize:36, fontWeight:800, color:amt?T.text:T.muted, flexShrink:0 }}>₹</span>
+      <input autoFocus type="number" inputMode="numeric" className="bud-amt" value={amt} onChange={e=>setAmt(e.target.value)} placeholder="0"
+        style={{ fontSize:40, fontWeight:800, border:"none", background:"none", outline:"none", color:T.text, width:(Math.max(1,(amt||"").length)+0.6)+"ch", minWidth:"1.6ch", maxWidth:"72vw", textAlign:"left", fontFamily:"inherit", MozAppearance:"textfield", padding:0 }} /></div>
     <div style={{ marginBottom:12 }}><label style={lab}>Description</label><input style={fld} value={desc} onChange={e=>setDesc(e.target.value)} placeholder={isInc?"e.g. Freelance payment":"e.g. Weekend dinner"} /></div>
     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14, fontSize:13, color:T.text2 }}><span>Date</span>
       <input type="date" value={date} min={m.id+"-01"} max={m.id+"-31"} onChange={e=>setDate(e.target.value)} style={{ background:T.surf2, border:`1px solid ${T.border}`, borderRadius:9, padding:"7px 9px", color:T.text, fontFamily:"inherit", fontSize:13 }} /></div>
@@ -232,6 +238,9 @@ export default function BudgetView({ budget, setBudget }) {
   };
   if (!m) return <div style={{ color:T.muted, textAlign:"center", padding:"40px 0" }}>No budget yet.</div>;
   const d = calc(m); const committed = m.status==="committed";
+  // Frequently-used envelopes float to the top (most transactions this month first).
+  const useCount = {}; (m.txns||[]).forEach(t=>{ if(t.categoryId) useCount[t.categoryId]=(useCount[t.categoryId]||0)+1; });
+  const orderedCats = (m.categories||[]).map((c,i)=>({c,i})).sort((a,b)=>(useCount[b.c.id]||0)-(useCount[a.c.id]||0) || a.i-b.i).map(x=>x.c);
   const prev=mShift(active,-1), next=mShift(active,1), hasPrev=!!budget.months[prev], hasNext=!!budget.months[next];
   // month nav lives inside the (dark) budget card, so it's styled light
   const navBtn=(on,dir,dlt)=><button onClick={()=>on?api.goto(dlt):api.createMonth(dlt)} aria-label={dir}
@@ -276,7 +285,7 @@ export default function BudgetView({ budget, setBudget }) {
     </div>
     {editMode && <div style={{ fontSize:12, color:T.muted, margin:"0 2px 8px" }}>Tap an envelope to edit its budget & icon, or add a new one below.</div>}
     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
-    {(m.categories||[]).map(c=>{ const s=c.bucket==="save"?savingsActual(c.id):(d.sp[c.id]||0); const bal=(+c.budget||0)-s, u=pct(s,c.budget);
+    {orderedCats.map(c=>{ const s=c.bucket==="save"?savingsActual(c.id):(d.sp[c.id]||0); const bal=(+c.budget||0)-s, u=pct(s,c.budget);
       const st=c.bucket==="save"?(s>=c.budget&&c.budget>0?"done":u>=80?"good":"warn"):stOf(s,c.budget);
       const label=c.bucket==="save"?(s>=c.budget&&c.budget>0?"Funded":u>0?"Partial":"Empty"):(st==="bad"?"Overspent":st==="warn"?"Watch":"On track");
       const col=st==="bad"?T.bad:st==="warn"?T.warn:BK[c.bucket].c;
@@ -307,10 +316,6 @@ export default function BudgetView({ budget, setBudget }) {
         <div style={{ flex:1, minWidth:0 }}><div style={{ fontWeight:600, fontSize:13.5, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{t.desc||(c?c.name:"General")}</div>
           <div style={{ fontSize:11.5, color:T.muted }}>{fmtD(t.date)} · {t.bucket==="income"?"Income":(c?c.name:"General")} · {BK[t.bucket].l}</div></div>
         <div style={{ fontWeight:700, fontSize:14, fontVariantNumeric:"tabular-nums", color:t.bucket==="income"?T.good:T.text }}>{t.bucket==="income"?"+":""}{INR(t.amount)}</div></div>; })}
-
-    {committed && <button onClick={()=>setModal({type:"picker"})} aria-label="Add spend"
-      style={{ position:"fixed", left:"50%", transform:"translateX(-50%)", bottom:"calc(env(safe-area-inset-bottom,8px) + 74px)", zIndex:56, width:"calc(100% - 32px)", maxWidth:448,
-        background:T.primary, color:"#fff", border:"none", borderRadius:15, padding:16, fontFamily:"inherit", fontSize:16, fontWeight:800, cursor:"pointer", boxShadow:"0 8px 22px rgba(2,132,199,.4)" }}>＋ Add spend</button>}
 
     {/* modals */}
     {modal?.type==="spend"  && <SpendSheet m={m} api={api} env={modal.env} initial={modal.initial} curMonth={curMonth} onClose={()=>setModal(null)} onChange={()=>setModal({type:"picker"})} />}
