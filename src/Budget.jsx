@@ -328,9 +328,31 @@ export default function BudgetView({ budget, setBudget }) {
 
   if (!m) return <div style={{ color:T.muted, textAlign:"center", padding:"40px 0" }}>No budget yet.</div>;
   const d = calc(m); const committed = m.status==="committed";
-  // Frequently-used envelopes float to the top (most transactions this month first).
-  const useCount = {}; (m.txns||[]).forEach(t=>{ if(t.categoryId) useCount[t.categoryId]=(useCount[t.categoryId]||0)+1; });
-  const orderedCats = (m.categories||[]).map((c,i)=>({c,i})).sort((a,b)=>(useCount[b.c.id]||0)-(useCount[a.c.id]||0) || a.i-b.i).map(x=>x.c);
+  // The 4 most-recently-used envelopes (by latest transaction) pin to the top;
+  // the rest are ordered by attention — overspent / near-limit first.
+  const lastUsed = {}; (m.txns||[]).forEach(t=>{ if(t.categoryId && (!lastUsed[t.categoryId] || t.date>lastUsed[t.categoryId])) lastUsed[t.categoryId]=t.date; });
+  const allCats = m.categories||[];
+  const recentCats = allCats.filter(c=>lastUsed[c.id]).sort((a,b)=>lastUsed[b.id].localeCompare(lastUsed[a.id])).slice(0,4);
+  const recentIds = new Set(recentCats.map(c=>c.id));
+  const attn = c => { const u=pct(d.sp[c.id]||0,c.budget); return u>100?0:u>=80?1:2; };
+  const restCats = allCats.map((c,i)=>({c,i})).filter(x=>!recentIds.has(x.c.id)).sort((a,b)=>attn(a.c)-attn(b.c) || a.i-b.i).map(x=>x.c);
+  const sub = { fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".04em", margin:"0 2px 8px" };
+  const envCard = c => { const s=d.sp[c.id]||0, bal=(+c.budget||0)-s, u=pct(s,c.budget);
+    const st=c.bucket==="save"?(s>=c.budget&&c.budget>0?"done":u>=80?"good":"warn"):stOf(s,c.budget);
+    const label=c.bucket==="save"?(s>=c.budget&&c.budget>0?"Funded":u>0?"Partial":"Empty"):(st==="bad"?"Overspent":st==="warn"?"Watch":"On track");
+    const col=st==="bad"?T.bad:st==="warn"?T.warn:BK[c.bucket].c;
+    const stat=(l,v,vc)=><div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", gap:6 }}>
+      <span style={{ fontSize:11, color:T.muted }}>{l}</span><span style={{ fontSize:12, fontWeight:700, fontVariantNumeric:"tabular-nums", color:vc||T.text }}>{v}</span></div>;
+    return <div key={c.id} onClick={()=>editMode?setModal({type:"cat",initial:c}):setModal(c.bucket==="save"?{type:"goal",cat:c}:{type:"spend",env:c})}
+      style={{ ...card({ padding:13 }), cursor:"pointer", minWidth:0 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:11 }}>
+        <div style={{ width:32, height:32, borderRadius:9, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, background:BK[c.bucket].s, flexShrink:0 }}>{iconOf(c)}</div>
+        <span style={{ flex:1, minWidth:0, fontWeight:700, fontSize:13.5, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.name}</span>
+        <span style={{ ...chip(st), flexShrink:0 }}>{label}</span></div>
+      <Bar v={u} color={col} />
+      <div style={{ display:"flex", flexDirection:"column", gap:5, marginTop:11 }}>
+        {stat("Allocated", INR(c.budget))}{stat("Spent", INR(s))}{stat("Balance", INR(bal), bal<0?T.bad:T.good)}
+      </div></div>; };
   const prev=mShift(active,-1), next=mShift(active,1), hasPrev=!!budget.months[prev], hasNext=!!budget.months[next];
   // month nav lives inside the (dark) budget card, so it's styled light
   const navBtn=(on,dir,dlt)=><button onClick={()=>on?api.goto(dlt):api.createMonth(dlt)} aria-label={dir}
@@ -380,26 +402,10 @@ export default function BudgetView({ budget, setBudget }) {
       <div><button onClick={()=>setModal({type:"report"})} style={lnk}>Report</button> &nbsp; <button onClick={()=>setEditMode(v=>!v)} style={{ ...lnk, color:editMode?T.primary:T.primary }}>{editMode?"Done":"Edit"}</button></div>
     </div>
     {editMode && <div style={{ fontSize:12, color:T.muted, margin:"0 2px 8px" }}>Tap an envelope to edit its budget & icon, or add a new one below.</div>}
-    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
-    {orderedCats.map(c=>{ const s=d.sp[c.id]||0; const bal=(+c.budget||0)-s, u=pct(s,c.budget);
-      const st=c.bucket==="save"?(s>=c.budget&&c.budget>0?"done":u>=80?"good":"warn"):stOf(s,c.budget);
-      const label=c.bucket==="save"?(s>=c.budget&&c.budget>0?"Funded":u>0?"Partial":"Empty"):(st==="bad"?"Overspent":st==="warn"?"Watch":"On track");
-      const col=st==="bad"?T.bad:st==="warn"?T.warn:BK[c.bucket].c;
-      const stat=(l,v,vc)=><div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", gap:6 }}>
-        <span style={{ fontSize:11, color:T.muted }}>{l}</span><span style={{ fontSize:12, fontWeight:700, fontVariantNumeric:"tabular-nums", color:vc||T.text }}>{v}</span></div>;
-      return <div key={c.id} onClick={()=>editMode?setModal({type:"cat",initial:c}):setModal(c.bucket==="save"?{type:"goal",cat:c}:{type:"spend",env:c})}
-        style={{ ...card({ padding:13 }), cursor:"pointer", minWidth:0 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:11 }}>
-          <div style={{ width:32, height:32, borderRadius:9, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, background:BK[c.bucket].s, flexShrink:0 }}>{iconOf(c)}</div>
-          <span style={{ flex:1, minWidth:0, fontWeight:700, fontSize:13.5, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.name}</span>
-          <span style={{ ...chip(st), flexShrink:0 }}>{label}</span></div>
-        <Bar v={u} color={col} />
-        <div style={{ display:"flex", flexDirection:"column", gap:5, marginTop:11 }}>
-          {stat("Allocated", INR(c.budget))}
-          {stat("Spent", INR(s))}
-          {stat("Balance", INR(bal), bal<0?T.bad:T.good)}
-        </div></div>; })}
-    </div>
+    {recentCats.length>0 && restCats.length>0 && <div style={sub}>⭐ Recently used</div>}
+    {recentCats.length>0 && <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>{recentCats.map(envCard)}</div>}
+    {recentCats.length>0 && restCats.length>0 && <div style={{ ...sub, marginTop:16 }}>All envelopes</div>}
+    {restCats.length>0 && <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>{restCats.map(envCard)}</div>}
     {editMode && <button onClick={()=>setModal({type:"cat"})} style={{ ...ghostBtn, width:"100%", marginTop:11 }}>＋ New envelope</button>}
 
     {/* recent spends */}
