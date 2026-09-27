@@ -57,11 +57,7 @@ export function seedBudget() {
       { id:"groom",name:"Grooming",bucket:"want",budget:1500,icon:"💇" },{ id:"ent",name:"Entertainment",bucket:"want",budget:1500,icon:"🎬" },
     ],
     savingsActual:{},
-    txns:[ tx(mid+"-01","Opening balance",22000,"ssy","save"),tx(mid+"-01","Opening balance",20000,"sip","save"),tx(mid+"-01","Opening balance",10000,"re","save"),
-      tx(mid+"-01","EMI auto-debit",91393,"emi","need"),tx(mid+"-05","Insurance & school",20000,"ins","need"),tx(mid+"-01","Milk",2700,"milk","need"),
-      tx(mid+"-08","Electricity",2500,"elec","need"),tx(mid+"-03","Gas",4000,"gas","need"),tx(mid+"-12","DMart",3200,"dmart","need"),tx(mid+"-20","DMart",3000,"dmart","need"),
-      tx(mid+"-10","Petrol",2500,"petrol","need"),tx(mid+"-09","Dinner out",1700,"eat","want"),tx(mid+"-15","Lunch",1300,"eat","want"),tx(mid+"-19","Snacks",1000,"eat","want"),
-      tx(mid+"-11","Clothes",6000,"shop","want"),tx(mid+"-16","Salon",1400,"groom","want") ],
+    txns:[],   // no sample transactions — the user logs their own
   } } };
 }
 
@@ -242,8 +238,8 @@ function GoalSheet({ m, cat, onAdd, onEdit, onClose }) {
   </Sheet>;
 }
 
-function TransactionsSheet({ m, onAdd, onEdit, onClose }) {
-  const [filter,setFilter]=useState("all");
+function TransactionsSheet({ m, onAdd, onEdit, onClear, onClose }) {
+  const [filter,setFilter]=useState("all"); const [clr,setClr]=useState(false);
   const cat=id=>(m.categories||[]).find(c=>c.id===id);
   const all=[...(m.txns||[])].sort((a,b)=>b.date.localeCompare(a.date));
   const items=all.filter(t=>filter==="all"||t.bucket===filter);
@@ -265,6 +261,12 @@ function TransactionsSheet({ m, onAdd, onEdit, onClose }) {
       </div>; })
       : <div style={{ fontSize:13, color:T.muted, textAlign:"center", padding:"20px 0" }}>No transactions.</div>}
     <div style={{ fontSize:12, color:T.muted, textAlign:"center", marginTop:12 }}>{all.length} transactions · spent {INR(spent)} · income +{INR(inc)}</div>
+    {all.length>0 && (clr
+      ? <div style={{ marginTop:12, background:T.badS, border:`1px solid ${T.bad}55`, borderRadius:11, padding:12, textAlign:"center" }}>
+          <div style={{ fontSize:12.5, color:T.bad, fontWeight:600, marginBottom:10 }}>Delete all {all.length} transactions for {m.label||mLabel(m.id)}? This can't be undone.</div>
+          <div style={{ display:"flex", gap:10 }}><button onClick={()=>setClr(false)} style={{ ...ghostBtn, flex:1, padding:11 }}>Cancel</button>
+            <button onClick={()=>{ onClear(); setClr(false); }} style={{ flex:1, background:T.bad, color:"#fff", border:"none", borderRadius:13, padding:11, fontFamily:"inherit", fontWeight:800, fontSize:14, cursor:"pointer" }}>Delete all</button></div></div>
+      : <button onClick={()=>setClr(true)} style={{ display:"block", margin:"12px auto 0", background:"none", border:"none", color:T.bad, fontSize:12.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>Clear all transactions</button>)}
   </Sheet>;
 }
 
@@ -308,6 +310,7 @@ export default function BudgetView({ budget, setBudget }) {
     addTxn:t=>updateMonth(mm=>({ ...mm, txns:[...mm.txns, t] })),
     editTxn:(id,p)=>updateMonth(mm=>({ ...mm, txns:mm.txns.map(t=>t.id===id?{ ...t, ...p }:t) })),
     deleteTxn:id=>updateMonth(mm=>({ ...mm, txns:mm.txns.filter(t=>t.id!==id) })),
+    clearTxns:()=>updateMonth(mm=>({ ...mm, txns:[] })),
   };
   // One-time migration: older data funded savings via savingsActual (mark-funded).
   // Convert each into an opening Save contribution so savings are transaction-based.
@@ -426,7 +429,7 @@ export default function BudgetView({ budget, setBudget }) {
     {modal?.type==="txns"   && <TransactionsSheet m={m}
        onAdd={()=>setModal({type:"picker", back:{type:"txns"}})}
        onEdit={t=>setModal({type:"spend", env:(m.categories||[]).find(c=>c.id===t.categoryId)||{id:"",name:"Income",bucket:t.bucket}, initial:t, back:{type:"txns"}})}
-       onClose={()=>setModal(null)} />}
+       onClear={api.clearTxns} onClose={()=>setModal(null)} />}
     {modal?.type==="income" && <IncomeSheet m={m} api={api}
        onAdd={()=>setModal({type:"spend", env:{id:"",name:"Income",bucket:"income"}, back:{type:"income"}})}
        onEdit={t=>setModal({type:"spend", env:{id:"",name:"Income",bucket:"income"}, initial:t, back:{type:"income"}})}
