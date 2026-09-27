@@ -87,8 +87,11 @@ const ghostBtn = { background:T.surface, color:T.text2, border:`1px solid ${T.bo
 function Bar({ v, color }) { return <div style={{ height:7, borderRadius:5, background:T.surf2, overflow:"hidden", marginTop:8 }}><div style={{ height:"100%", width:Math.min(100,v)+"%", background:color, borderRadius:5 }} /></div>; }
 function Sheet({ title, onClose, children }) {
   return <div onClick={e=>{ if(e.target===e.currentTarget) onClose(); }} style={{ position:"fixed", inset:0, background:"rgba(10,20,28,.5)", zIndex:120, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-    <div style={{ background:T.surface, width:"100%", maxWidth:480, borderRadius:"20px 20px 0 0", padding:"18px 16px calc(22px + env(safe-area-inset-bottom,0px))", maxHeight:"92vh", overflow:"auto" }}>
-      <div style={{ fontWeight:800, fontSize:17, marginBottom:14, color:T.text }}>{title}</div>{children}</div></div>;
+    <div style={{ background:T.surface, width:"100%", maxWidth:480, boxSizing:"border-box", borderRadius:"20px 20px 0 0", padding:"16px 16px calc(22px + env(safe-area-inset-bottom,0px))", maxHeight:"92vh", overflowY:"auto", overflowX:"hidden" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginBottom:14 }}>
+        <div style={{ fontWeight:800, fontSize:17, color:T.text }}>{title}</div>
+        <button onClick={()=>onClose()} aria-label="Close" style={{ background:T.surf2, border:`1px solid ${T.border}`, color:T.text2, width:30, height:30, borderRadius:9, fontSize:15, lineHeight:1, cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}>✕</button>
+      </div>{children}</div></div>;
 }
 
 // ── spend sheet (envelope already chosen; transfer step inside) ──
@@ -146,7 +149,7 @@ function SpendSheet({ m, api, env, initial, curMonth, onClose, onChange }) {
   </Sheet>;
 }
 
-function PickerSheet({ m, onPick, onClose }) {
+function PickerSheet({ m, onPick, onNew, onClose }) {
   const grp = b => (m.categories||[]).filter(c=>c.bucket===b);
   const tile = c => <button key={c.id} onClick={()=>onPick(c)} style={pkBtn}><span style={{ fontSize:22 }}>{iconOf(c)}</span><span style={pkName}>{c.name}</span></button>;
   const sec = (l,color,items,extra) => items.length||extra ? <div key={l}><div style={{ fontSize:11, fontWeight:800, color, textTransform:"uppercase", letterSpacing:".04em", margin:"14px 2px 8px" }}>{l}</div>
@@ -156,6 +159,7 @@ function PickerSheet({ m, onPick, onClose }) {
     {sec("🛍️ Wants", T.want, grp("want"))}
     {sec("🐷 Savings", T.save, grp("save"))}
     {sec("💵 Income", T.good, [], <button onClick={()=>onPick({ id:"", name:"Income", bucket:"income" })} style={pkBtn}><span style={{ fontSize:22 }}>💵</span><span style={pkName}>Add income</span></button>)}
+    <button onClick={onNew} style={{ ...ghostBtn, width:"100%", marginTop:16 }}>＋ New custom category</button>
   </Sheet>;
 }
 const pkBtn = { background:T.surf2, border:`1px solid ${T.border}`, borderRadius:14, padding:"12px 4px", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:5, fontFamily:"inherit" };
@@ -177,7 +181,8 @@ function CatSheet({ api, initial, onClose }) {
   const [budget,setBudget]=useState(initial?String(initial.budget):""); const [icon,setIcon]=useState(initial?iconOf(initial):"🧾");
   const [err,setErr]=useState("");
   const save=()=>{ const nm=name.trim(); if(!nm) return setErr("Give it a name."); const b=Math.max(0,+budget||0);
-    if(isNew) api.addCategory({ name:nm, bucket, budget:b, icon }); else api.editCategory(initial.id,{ name:nm, bucket, budget:b, icon }); onClose(); };
+    if(isNew){ const cat={ id:"c"+Date.now(), name:nm, bucket, budget:b, icon }; api.addCategory(cat); onClose(cat); }
+    else { api.editCategory(initial.id,{ name:nm, bucket, budget:b, icon }); onClose(); } };
   const opt = (k,active,onClick,label,ic) => <button key={k} onClick={onClick} style={{ ...pkBtn, padding:"10px 4px", borderColor:active?BK[bucket].c:T.border, background:active?BK[bucket].s:T.surf2 }}>
     <span style={{ fontSize:20 }}>{ic}</span>{label&&<span style={pkName}>{label}</span>}</button>;
   return <Sheet title={isNew?"New envelope":"Edit envelope"} onClose={onClose}>
@@ -190,7 +195,7 @@ function CatSheet({ api, initial, onClose }) {
     {err && <div style={{ fontSize:12, color:T.bad, marginBottom:8 }}>{err}</div>}
     <div style={{ display:"flex", gap:10 }}>
       {!isNew && <button onClick={()=>{ api.deleteCategory(initial.id); onClose(); }} style={{ ...ghostBtn, color:T.bad, borderColor:T.bad+"55", flex:"0 0 auto" }}>Delete</button>}
-      <button onClick={onClose} style={{ ...ghostBtn, flex:"0 0 auto" }}>Cancel</button><button onClick={save} style={primaryBtn}>Save</button></div>
+      <button onClick={()=>onClose()} style={{ ...ghostBtn, flex:"0 0 auto" }}>Cancel</button><button onClick={save} style={primaryBtn}>Save</button></div>
   </Sheet>;
 }
 
@@ -319,9 +324,9 @@ export default function BudgetView({ budget, setBudget }) {
 
     {/* modals */}
     {modal?.type==="spend"  && <SpendSheet m={m} api={api} env={modal.env} initial={modal.initial} curMonth={curMonth} onClose={()=>setModal(null)} onChange={()=>setModal({type:"picker"})} />}
-    {modal?.type==="picker" && <PickerSheet m={m} onPick={c=>setModal({type:"spend", env:c})} onClose={()=>setModal(null)} />}
+    {modal?.type==="picker" && <PickerSheet m={m} onPick={c=>setModal({type:"spend", env:c})} onNew={()=>setModal({type:"cat", spendAfter:true})} onClose={()=>setModal(null)} />}
     {modal?.type==="income" && <IncomeSheet m={m} api={api} onClose={()=>setModal(null)} />}
-    {modal?.type==="cat"    && <CatSheet api={api} initial={modal.initial} onClose={()=>setModal(null)} />}
+    {modal?.type==="cat"    && <CatSheet api={api} initial={modal.initial} onClose={(cat)=>setModal(cat&&modal.spendAfter?{type:"spend", env:cat}:null)} />}
     {modal?.type==="report" && <ReportSheet m={m} onClose={()=>setModal(null)} />}
   </div>;
 }
