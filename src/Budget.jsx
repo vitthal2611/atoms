@@ -406,8 +406,9 @@ export default function BudgetView({ budget, setBudget }) {
     const st=c.bucket==="save"?(s>=c.budget&&c.budget>0?"done":u>=80?"good":"warn"):stOf(s,c.budget);
     const label=c.bucket==="save"?(s>=c.budget&&c.budget>0?"Funded":u>0?"Partial":"Empty"):(st==="bad"?"Overspent":st==="warn"?"Watch":"On track");
     const col=st==="bad"?T.bad:st==="warn"?T.warn:BK[c.bucket].c;
-    const stat=(l,v,vc)=><div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", gap:6 }}>
-      <span style={{ fontSize:11, color:T.muted }}>{l}</span><span style={{ fontSize:12, fontWeight:700, fontVariantNumeric:"tabular-nums", color:vc||T.text }}>{v}</span></div>;
+    const cell=(l,v,vc,al)=><div style={{ minWidth:0, textAlign:al }}>
+      <div style={{ fontSize:10, color:T.muted, textTransform:"uppercase", letterSpacing:".03em" }}>{l}</div>
+      <div style={{ fontSize:12.5, fontWeight:700, fontVariantNumeric:"tabular-nums", color:vc||T.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{v}</div></div>;
     return <div key={c.id} onClick={()=>editMode?setModal({type:"cat",initial:c}):setModal(c.bucket==="save"?{type:"goal",cat:c}:{type:"spend",env:c})}
       style={{ ...card({ padding:13 }), cursor:"pointer", minWidth:0 }}>
       <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:11 }}>
@@ -415,8 +416,8 @@ export default function BudgetView({ budget, setBudget }) {
         <span style={{ flex:1, minWidth:0, fontWeight:700, fontSize:13.5, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.name}</span>
         <span style={{ ...chip(st), flexShrink:0 }}>{label}</span></div>
       <Bar v={u} color={col} />
-      <div style={{ display:"flex", flexDirection:"column", gap:5, marginTop:11 }}>
-        {stat("Allocated", INR(c.budget))}{stat("Spent", INR(s))}{stat("Balance", INR(bal), bal<0?T.bad:T.good)}
+      <div style={{ display:"flex", justifyContent:"space-between", gap:6, marginTop:11 }}>
+        {cell("Alloc", INR(c.budget), null, "left")}{cell("Spent", INR(s), col, "center")}{cell("Balance", INR(bal), bal<0?T.bad:T.good, "right")}
       </div>
       {c.bucket!=="save" && <button onClick={e=>{ e.stopPropagation(); setModal({ type:"envtxns", cat:c }); }}
         style={{ marginTop:10, paddingTop:9, width:"100%", background:"none", border:"none", borderTop:`1px solid ${T.border}`, textAlign:"left", color:T.primary, fontFamily:"inherit", fontSize:11.5, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:5 }}>
