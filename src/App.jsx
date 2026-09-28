@@ -4031,8 +4031,8 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
 
             {/* Streak + votes — quiet evidence */}
             <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:11 }}>
-              <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:12, fontWeight:900, color: breaking ? "#3B6D11" : "#C2751A", background: breaking ? "#EAF3DE" : "#FBF0DA", borderRadius:20, padding:"3px 10px" }}>
-                <Ic name={breaking ? "check" : "flame"} size={12} color={breaking ? "#3B6D11" : "#C2751A"} /> {streak}
+              <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:12, fontWeight:900, color: breaking ? "#3B6D11" : "#B45309", background: breaking ? "#EAF3DE" : T.goldS, borderRadius:20, padding:"3px 10px", border:`1px solid ${!breaking&&streak>=7?"#F59E0B55":"transparent"}` }}>
+                <Ic name={breaking ? "check" : "flame"} size={12} color={breaking ? "#3B6D11" : "#B45309"} /> {streak}
               </span>
               <span style={{ fontSize:11.5, fontWeight:700, color:T.muted }}>{breaking ? "days clean" : "day streak"} · {votes} {breaking ? "resisted" : "votes cast"}</span>
             </div>
@@ -5059,8 +5059,9 @@ const HabitReview = memo(function HabitReview({ target, onApply, onSnooze, onFol
 // ─── STREAK BADGE — flame + streak; hover/tap shows a month-by-month breakdown ─
 function StreakBadge({ habit, allData, streak, isBad, bare = false }) {
   const [open, setOpen] = useState(false);
-  const fg = isBad ? "#3B6D11" : "#C2751A";
-  const bg = isBad ? "#EAF3DE" : "#FBF0DA";
+  const win = !isBad && streak >= 7;                 // a real run — let it pop
+  const fg = isBad ? "#3B6D11" : "#B45309";           // reserved gold "win" ink
+  const bg = isBad ? "#EAF3DE" : (win ? "#F59E0B26" : T.goldS);
   const openCal = (e) => { e.stopPropagation(); setOpen(true); };
   return (
     <>
@@ -5069,7 +5070,7 @@ function StreakBadge({ habit, allData, streak, isBad, bare = false }) {
         aria-label={`${streak} ${isBad ? "days clean" : "day"} streak. Open the check-in calendar.`}
         style={bare
         ? { display:"inline-flex", alignItems:"center", gap:3, fontSize:11.5, fontWeight:900, lineHeight:1, color:fg, cursor:"pointer" }
-        : { display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:900, lineHeight:1, color:fg, background:bg, borderRadius:20, padding:"3px 9px", cursor:"pointer" }}>
+        : { display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:900, lineHeight:1, color:fg, background:bg, borderRadius:20, padding:"3px 9px", cursor:"pointer", border:`1px solid ${win?"#F59E0B55":"transparent"}` }}>
         <Ic name={isBad ? "check" : "flame"} size={12} color={fg} />{streak}
       </span>
       {open && <HabitCalendarModal habit={habit} allData={allData} isBad={isBad} onClose={() => setOpen(false)} />}
