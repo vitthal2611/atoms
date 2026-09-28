@@ -429,6 +429,7 @@ export default function BudgetView({ budget, setBudget }) {
         🧾 {n} txn{n===1?"":"s"}<span style={{ marginLeft:"auto", opacity:.55 }}>›</span></button>}
     </div>; };
 
+  const pill = on => ({ display:"inline-flex", alignItems:"center", gap:5, fontFamily:"inherit", fontSize:12.5, fontWeight:700, padding:"6px 12px", borderRadius:20, cursor:"pointer", border:`1px solid ${on?T.primary:T.border}`, background:on?T.primary+"14":T.surf2, color:on?T.primary:T.text2 });
   return <div style={{ display:"flex", flexDirection:"column", padding:"12px 14px 0" }}>
     {/* own header — month selection lives inside the Monthly budget card */}
     <div style={{ background:`linear-gradient(135deg, ${T.primary}, #075E8C)`, color:"#fff", borderRadius:16, padding:16, boxShadow:T.shadow }}>
@@ -470,7 +471,9 @@ export default function BudgetView({ budget, setBudget }) {
     {/* envelopes */}
     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", margin:"20px 2px 8px" }}>
       <span style={{ fontSize:13, fontWeight:800 }}>📮 Envelopes</span>
-      <div><button onClick={()=>setModal({type:"report"})} style={lnk}>Report</button> &nbsp; <button onClick={()=>setEditMode(v=>!v)} style={{ ...lnk, color:editMode?T.primary:T.primary }}>{editMode?"Done":"Edit"}</button></div>
+      <div style={{ display:"flex", gap:8 }}>
+        <button onClick={()=>setModal({type:"report"})} style={pill(false)}>📊 Report</button>
+        <button onClick={()=>setEditMode(v=>!v)} style={pill(editMode)}>{editMode?"✓ Done":"✏️ Edit"}</button></div>
     </div>
     {editMode && <div style={{ fontSize:12, color:T.muted, margin:"0 2px 8px" }}>Tap an envelope to edit its budget & icon, or add a new one below.</div>}
     {recentCats.length>0 && restCats.length>0 && <div style={sub}>⭐ Recently used</div>}
