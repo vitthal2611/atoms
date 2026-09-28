@@ -398,21 +398,22 @@ function ReportSheet({ m, onClose }) {
       <tr class="tot"><td>Total saved</td><td></td><td>₹${IN(d.sa)}</td><td></td><td></td><td>${pct(d.sa,d.income).toFixed(1)}%</td></tr></tbody></table>
       <div class="banner">Income ₹${IN(d.income)} · spent ₹${IN(d.es)} · saved ₹${IN(d.sa)} · ₹${IN(left)} left</div></body></html>`);
     w.document.close(); w.focus(); setTimeout(()=>{ try{ w.print(); }catch(e){} },350); };
-  const th={ textAlign:"right", padding:"7px 4px", fontSize:10.5, textTransform:"uppercase", color:T.muted, borderBottom:`1px solid ${T.border}` };
-  const td={ textAlign:"right", padding:"7px 4px", fontSize:12.5, borderBottom:`1px solid ${T.border}`, fontVariantNumeric:"tabular-nums" };
+  const th={ textAlign:"right", padding:"7px 3px", fontSize:10, textTransform:"uppercase", color:T.muted, borderBottom:`1px solid ${T.border}` };
+  const td={ textAlign:"right", padding:"7px 3px", fontSize:12, borderBottom:`1px solid ${T.border}`, fontVariantNumeric:"tabular-nums" };
+  const expAlloc=(d.bbud.need||0)+(d.bbud.want||0), savAlloc=d.bbud.save||0;
   return <Sheet title={mLabel(m.id)+" report"} onClose={onClose}>
     <table style={{ width:"100%", borderCollapse:"collapse" }}><tbody>
-      <tr><th style={{ ...th, textAlign:"left" }}>Envelope</th><th style={th}>Spent</th><th style={th}>Balance</th><th style={th}>% inc</th></tr>
+      <tr><th style={{ ...th, textAlign:"left" }}>Envelope</th><th style={th}>Alloc</th><th style={th}>Spent</th><th style={th}>Balance</th><th style={th}>% inc</th></tr>
       {rows.map(c=>{ const v=d.sp[c.id]||0, bal=(+c.budget||0)-v; return <tr key={c.id}>
-        <td style={{ ...td, textAlign:"left" }}>{iconOf(c)} {c.name}</td><td style={{ ...td, fontWeight:600 }}>{INR(v)}</td>
+        <td style={{ ...td, textAlign:"left" }}>{iconOf(c)} {c.name}</td><td style={{ ...td, color:T.muted }}>{INR(c.budget)}</td><td style={{ ...td, fontWeight:600 }}>{INR(v)}</td>
         <td style={{ ...td, color:bal<0?T.bad:T.text2 }}>{INR(bal)}</td><td style={{ ...td, color:T.muted }}>{pct(v,d.income).toFixed(1)}</td></tr>; })}
-      <tr style={{ fontWeight:800 }}><td style={{ ...td, textAlign:"left" }}>Total spent</td><td style={td}>{INR(d.es)}</td><td style={td}></td><td style={{ ...td, color:T.muted }}>{pct(d.es,d.income).toFixed(1)}</td></tr>
+      <tr style={{ fontWeight:800 }}><td style={{ ...td, textAlign:"left" }}>Total spent</td><td style={{ ...td, color:T.muted }}>{INR(expAlloc)}</td><td style={td}>{INR(d.es)}</td><td style={td}></td><td style={{ ...td, color:T.muted }}>{pct(d.es,d.income).toFixed(1)}</td></tr>
       {sav.length>0 && <>
-        <tr><td colSpan={4} style={{ ...td, textAlign:"left", color:T.save, fontWeight:800, borderBottom:"none", paddingTop:13 }}>🐷 Savings</td></tr>
+        <tr><td colSpan={5} style={{ ...td, textAlign:"left", color:T.save, fontWeight:800, borderBottom:"none", paddingTop:13 }}>🐷 Savings</td></tr>
         {sav.map(c=>{ const v=d.sp[c.id]||0, bal=(+c.budget||0)-v; return <tr key={c.id}>
-          <td style={{ ...td, textAlign:"left" }}>{iconOf(c)} {c.name}</td><td style={{ ...td, fontWeight:600, color:T.save }}>{INR(v)}</td>
+          <td style={{ ...td, textAlign:"left" }}>{iconOf(c)} {c.name}</td><td style={{ ...td, color:T.muted }}>{INR(c.budget)}</td><td style={{ ...td, fontWeight:600, color:T.save }}>{INR(v)}</td>
           <td style={{ ...td, color:T.muted }}>{bal>0?INR(bal)+" to go":"✓ funded"}</td><td style={{ ...td, color:T.muted }}>{pct(v,d.income).toFixed(1)}</td></tr>; })}
-        <tr style={{ fontWeight:800 }}><td style={{ ...td, textAlign:"left", borderBottom:"none" }}>Total saved</td><td style={{ ...td, borderBottom:"none", color:T.save }}>{INR(d.sa)}</td><td style={{ ...td, borderBottom:"none" }}></td><td style={{ ...td, borderBottom:"none", color:T.muted }}>{pct(d.sa,d.income).toFixed(1)}</td></tr>
+        <tr style={{ fontWeight:800 }}><td style={{ ...td, textAlign:"left", borderBottom:"none" }}>Total saved</td><td style={{ ...td, borderBottom:"none", color:T.muted }}>{INR(savAlloc)}</td><td style={{ ...td, borderBottom:"none", color:T.save }}>{INR(d.sa)}</td><td style={{ ...td, borderBottom:"none" }}></td><td style={{ ...td, borderBottom:"none", color:T.muted }}>{pct(d.sa,d.income).toFixed(1)}</td></tr>
       </>}
     </tbody></table>
     <div style={{ background:left>=0?T.goodS:T.badS, color:left>=0?T.good:T.bad, borderRadius:11, padding:12, fontWeight:800, textAlign:"center", fontSize:14, marginTop:12, animation:"savingReveal 0.5s cubic-bezier(0.34,1.4,0.64,1) both" }}>
