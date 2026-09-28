@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 // is classified only by its envelope's bucket — Need / Want / Save / Income.
 // When a spend exceeds an envelope, prompt to transfer from another envelope.
 
-const T = {
+const LIGHT = {
   bg:"#F0F9FF", surface:"#FFFFFF", surf2:"#E9F1F7", border:"#DCE6EC",
   text:"#26333B", text2:"#4A6572", muted:"#5F6E7A",
   primary:"#0284C7", need:"#0284C7", want:"#B45309", save:"#7C3AED", income:"#15803D",
@@ -15,6 +15,20 @@ const T = {
   gold:"#F59E0B", goldS:"#F59E0B1a",
   shadow:"0 1px 2px rgba(16,40,60,.05), 0 8px 22px rgba(16,40,60,.05)",
 };
+const DARK = {
+  bg:"#0E1519", surface:"#16212A", surf2:"#1E2C35", border:"#2B3A44",
+  text:"#E8EEF2", text2:"#AEBBC4", muted:"#8798A4",
+  primary:"#2B8FD6", need:"#38BDF8", want:"#FBBF24", save:"#A78BFA", income:"#4ADE80",
+  needS:"#38BDF822", wantS:"#FBBF2422", saveS:"#A78BFA22", incomeS:"#4ADE8022",
+  good:"#4ADE80", goodS:"#4ADE8022", warn:"#FBBF24", warnS:"#FBBF2422", bad:"#F87171", badS:"#F8717122",
+  gold:"#FBBF24", goldS:"#FBBF2422",
+  shadow:"0 1px 2px rgba(0,0,0,.35), 0 10px 26px rgba(0,0,0,.5)",
+};
+const prefersDark = (() => {
+  try { const s = localStorage.getItem("atoms.theme"); if (s === "dark") return true; if (s === "light") return false; } catch {}
+  return typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+})();
+const T = prefersDark ? DARK : LIGHT;
 const BK = {
   need:  { l:"Need",   c:T.need,   s:T.needS,   i:"🧾" },
   want:  { l:"Want",   c:T.want,   s:T.wantS,   i:"🛍️" },

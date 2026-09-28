@@ -88,7 +88,7 @@ const _envMissing = Object.entries(_fbConfig).filter(([, v]) => !v).map(([k]) =>
 
 // ─── THEME PALETTE — Ocean Depth ─────────────────────────────────────────────
 // Defined early so ALL helpers and components can reference T safely.
-const T = {
+const LIGHT = {
   bg:      "#F0F9FF",
   surface: "#FFFFFF",
   surf2:   "#E9F1F7",   // calmer, less icy tint than the old cyan #E0F2FE
@@ -107,6 +107,32 @@ const T = {
   shadow:  "0 1px 2px rgba(16,40,60,.05), 0 8px 22px rgba(16,40,60,.05)", // one soft card shadow
   red:     "#EF4444",
 };
+const DARK = {
+  bg:      "#0E1519",
+  surface: "#16212A",
+  surf2:   "#1E2C35",
+  border:  "#2B3A44",
+  border2: "#3C5A68",
+  text:    "#E8EEF2",
+  text2:   "#AEBBC4",
+  muted:   "#8798A4",
+  accent:  "#38BDF8",
+  primary: "#2B8FD6",   // still reads with white button text; brighter than light for accents
+  green:   "#2B8FD6",
+  gold:    "#FBBF24",
+  goldS:   "#FBBF2422",
+  good:    "#4ADE80",
+  goodS:   "#4ADE8022",
+  shadow:  "0 1px 2px rgba(0,0,0,.35), 0 10px 26px rgba(0,0,0,.5)",
+  red:     "#F87171",
+};
+// Dark mode follows the OS/browser setting, chosen once at load. A stored
+// preference ("atoms.theme" = light|dark) overrides it so a manual toggle can win.
+const prefersDark = (() => {
+  try { const s = localStorage.getItem("atoms.theme"); if (s === "dark") return true; if (s === "light") return false; } catch {}
+  return typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+})();
+const T = prefersDark ? DARK : LIGHT;
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const IDENTITY_COLORS = ["#00C48C","#4E7AFF","#FF6B35","#FFB300","#8B5CF6","#FF3D8B","#00BBDD","#FF7043"];
@@ -2657,7 +2683,7 @@ export default function App() {
           position:"fixed",
           bottom:"calc(env(safe-area-inset-bottom,0px) + 72px)",
           left:"50%", transform:"translateX(-50%)",
-          background:T.text, color:"#fff", borderRadius:14,
+          background: prefersDark ? T.surf2 : T.text, color:"#fff", border: prefersDark ? `1px solid ${T.border}` : "none", borderRadius:14,
           padding:"12px 14px", display:"flex", alignItems:"center", gap:10,
           zIndex:998, boxShadow:"0 4px 24px #00000030",
           maxWidth:"calc(100vw - 32px)", width:390, fontSize:14, fontWeight:600,
@@ -5271,7 +5297,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
               const streakBadge = st > 0 ? <StreakBadge habit={habit} allData={allData} streak={st} isBad={bad} /> : null;
               return (
               <div key={habit.id} className={habit.id === justChecked ? "just-checked" : undefined} style={{
-                background: warnMissed ? "#FEF4F4" : T.surface, borderRadius:14,
+                background: warnMissed ? T.red+"14" : T.surface, borderRadius:14,
                 border: warnMissed
                   ? "1px solid #F0B4B4"
                   : habit.kind === "bad"
@@ -5796,8 +5822,9 @@ const S = {
 const css = `
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root { height: 100%; }
-/* The gutter beside the centered app column reads white on wide screens. */
-html, body { background: #ffffff; }
+/* The gutter beside the centered app column matches the app background. */
+:root { color-scheme: ${prefersDark ? "dark" : "light"}; }
+html, body { background: ${T.bg}; }
 #root ::-webkit-scrollbar { display: none; }
 #root * { scrollbar-width: none; }
 .habit-toggle:active { opacity: 0.7; transform: scale(0.98); }
