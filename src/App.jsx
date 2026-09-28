@@ -5244,7 +5244,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                   ? "1px solid #F0B4B4"
                   : habit.kind === "bad"
                   ? (habit.id === firstPendingId ? "1.5px solid #D4537E" : "1px solid #F4C0D1")
-                  : (habit.id === firstPendingId ? `1.5px solid ${T.primary}` : `1px solid #C7DDEB`),
+                  : (habit.id === firstPendingId ? `1.5px solid ${T.primary}` : `1px solid ${T.border}`),
                 // Left accent — red when missed yesterday, rose for bad habits, else the
                 // one consistent app colour (not per-identity).
                 borderLeft: `4px solid ${warnMissed ? "#E24B4A" : (habit.kind === "bad" ? "#D4537E" : T.primary)}`,
@@ -5252,7 +5252,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                   ? "0 6px 20px #E24B4A22"
                   : habit.id === firstPendingId
                   ? (habit.kind === "bad" ? "0 8px 22px #D4537E2e" : `0 8px 22px ${T.primary}2e`)
-                  : "0 1px 2px rgba(9,45,75,0.06), 0 5px 14px rgba(9,45,75,0.10)",
+                  : T.shadow,
                 overflow:"hidden",
               }}>
                 {/* Action-led: the action is the hero inside HabitRow; the trigger
