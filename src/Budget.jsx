@@ -97,15 +97,14 @@ function SpendSheet({ m, api, env, initial, curMonth, onClose, onChange }) {
   const isInc = env.bucket==="income";
   const [amt,setAmt]=useState(initial?String(initial.amount):"");
   const [desc,setDesc]=useState(initial?.desc||"");
-  const [dY,dM]=m.id.split("-").map(Number); const monthStart=m.id+"-01", monthEnd=m.id+"-"+String(new Date(dY,dM,0).getDate()).padStart(2,"0");
-  const t=today(), isCur=m.id===curMonth;
-  // Current month: only today and the previous 6 days are selectable (clamped to
-  // the month). Other months: the whole month. An older date being edited stays valid.
+  const t=today();
+  // A spend can be logged for today or any of the previous 6 days — a rolling
+  // 7-day window that can cross a month boundary (e.g. early in the month you can
+  // still backdate into last month). An older date being edited stays valid.
   const six=(()=>{ const d=new Date(); d.setDate(d.getDate()-6); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); })();
-  let dateMin=isCur ? (six>monthStart?six:monthStart) : monthStart;
-  let dateMax=isCur ? t : monthEnd;
+  let dateMin=six, dateMax=t;
   if(initial?.date){ if(initial.date<dateMin) dateMin=initial.date; if(initial.date>dateMax) dateMax=initial.date; }
-  const [date,setDate]=useState(initial?.date || (isCur ? t : monthStart));
+  const [date,setDate]=useState(initial?.date || t);
   const [err,setErr]=useState(""); const [xfer,setXfer]=useState(null); const [src,setSrc]=useState("");
   const spentOf = id => (m.txns||[]).filter(t=>t.categoryId===id && (!initial||t.id!==initial.id)).reduce((a,t)=>a+(+t.amount||0),0);
   const record = () => {
@@ -116,7 +115,8 @@ function SpendSheet({ m, api, env, initial, curMonth, onClose, onChange }) {
   const submit = () => {
     const a=+amt;
     if(!(a>0)) return setErr("Enter an amount.");
-    if(!date || date.slice(0,7)!==m.id) return setErr("Date must be within "+m.label+".");
+    if(!date) return setErr("Pick a date.");
+    if(!initial && (date<six || date>t)) return setErr("Pick today or a date within the last 6 days.");
     if(!isInc && env.bucket!=="save"){ const rem=(+env.budget||0)-spentOf(env.id); if(a>rem){ setXfer({ shortfall:Math.round(a-rem), rem }); setSrc(""); return; } }
     record();
   };
@@ -146,7 +146,7 @@ function SpendSheet({ m, api, env, initial, curMonth, onClose, onChange }) {
         style={{ fontSize:40, fontWeight:800, border:"none", background:"none", outline:"none", color:T.text, width:(Math.max(1,(amt||"").length)+0.6)+"ch", minWidth:"1.6ch", maxWidth:"72vw", textAlign:"left", fontFamily:"inherit", MozAppearance:"textfield", padding:0 }} /></div>
     <div style={{ marginBottom:12 }}><label style={lab}>Description</label><input style={fld} value={desc} onChange={e=>setDesc(e.target.value)} placeholder={isInc?"e.g. Freelance payment":"e.g. Weekend dinner"} /></div>
     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14, fontSize:13, color:T.text2 }}><span>Date</span>
-      <input type="date" value={date} min={m.id+"-01"} max={monthEnd} onChange={e=>setDate(e.target.value)} style={{ background:T.surf2, border:`1px solid ${T.border}`, borderRadius:9, padding:"7px 9px", color:T.text, fontFamily:"inherit", fontSize:13 }} /></div>
+      <input type="date" value={date} min={dateMin} max={dateMax} onChange={e=>setDate(e.target.value)} style={{ background:T.surf2, border:`1px solid ${T.border}`, borderRadius:9, padding:"7px 9px", color:T.text, fontFamily:"inherit", fontSize:13 }} /></div>
     {err && <div style={{ fontSize:12, color:T.bad, marginBottom:8 }}>{err}</div>}
     <div style={{ display:"flex", gap:10 }}>
       {initial ? <button onClick={()=>{ api.deleteTxn(initial.id); onClose(true); }} style={{ ...ghostBtn, color:T.bad, borderColor:T.bad+"55", flex:"0 0 auto" }}>Delete</button>
