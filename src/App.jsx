@@ -1260,6 +1260,7 @@ export default function App() {
   });
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
   const [justChecked,  setJustChecked]  = useState(null);
+  const [milestone,    setMilestone]   = useState(null);   // streak-milestone toast
   const [syncing,      setSyncing]     = useState(false);
   const [saveError,    setSaveError]   = useState(false);
   const [signInError,  setSignInError] = useState(null);
@@ -1372,6 +1373,7 @@ export default function App() {
   const streakDataRef       = useRef(null);   // tracks the data ref the cache was built against
   // ── Timers stored in refs so they can be cleared on re-fire or unmount ──
   const justCheckedTimerRef = useRef(null);
+  const milestoneTimerRef   = useRef(null);
   const undoTimerRef        = useRef(null);
   // Latest check-in data, read inside toggle without adding it to the callback deps
   // (keeps `toggle` stable so memo'd rows don't re-render on every check-in).
@@ -1688,6 +1690,21 @@ export default function App() {
     // (Habit-stacking "Ready now" completion notification removed — it fired on
     // nearly every check-in for chained routines; the in-card banner remains.)
   }, [selectedDate]);
+
+  // ── Streak-milestone toast — fires only when a check-in lands exactly on a
+  // milestone day (3/7/14/21/30/66/100), never on an ordinary check-in. ──
+  useEffect(() => {
+    if (!justChecked || selectedDate !== todayKey) return;
+    const h = allHabits.find(x => x.id === justChecked);
+    if (!h || h.kind === "bad") return;
+    if (dataRef.current[selectedDate]?.[h.id] !== true) return;   // a check, not an uncheck
+    const s = getStreakForHabit(h.id, h.frequency);
+    const hit = MILESTONES.find(m => m.days === s);
+    if (!hit) return;
+    clearTimeout(milestoneTimerRef.current);
+    setMilestone({ label: h.label, m: hit });
+    milestoneTimerRef.current = setTimeout(() => setMilestone(null), 4200);
+  }, [justChecked, selectedDate, todayKey, allHabits, getStreakForHabit]);
 
   // ── Quantity habits — bump the day's count toward the target. Storing `true`
   // once the target is reached keeps every done-check (streak/votes/%/calendar)
@@ -2622,6 +2639,17 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* ── Streak-milestone toast — the rare, earned celebration ── */}
+      {milestone && (
+        <div role="status" aria-live="polite" className="toast-in" onClick={()=>setMilestone(null)} style={{ ...S.toast, cursor:"pointer" }}>
+          <span aria-hidden="true" style={{ fontSize:26, animation:"pop 0.5s ease" }}>{milestone.m.emoji}</span>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontWeight:800, fontSize:15, color:T.text }}>{milestone.m.label} unlocked!</div>
+            <div style={{ fontSize:12.5, color:T.text2, marginTop:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{milestone.m.days}-day streak · {milestone.label}</div>
+          </div>
+        </div>
+      )}
 
       {/* ── Undo Delete Toast ── */}
       {undoDelete && (
@@ -5242,7 +5270,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
               const bad = habit.kind === "bad";
               const streakBadge = st > 0 ? <StreakBadge habit={habit} allData={allData} streak={st} isBad={bad} /> : null;
               return (
-              <div key={habit.id} style={{
+              <div key={habit.id} className={habit.id === justChecked ? "just-checked" : undefined} style={{
                 background: warnMissed ? "#FEF4F4" : T.surface, borderRadius:14,
                 border: warnMissed
                   ? "1px solid #F0B4B4"
@@ -5783,6 +5811,9 @@ html, body { background: #ffffff; }
 .toast-in-up { animation: fadeSlideUp 0.3s cubic-bezier(0.32,0.72,0,1) both; }
 .toast-in-center { animation: fadeScaleIn 0.25s cubic-bezier(0.34,1.56,0.64,1) both; }
 .pop { animation: pop 0.35s cubic-bezier(0.34,1.56,0.64,1) both; }
+@media (prefers-reduced-motion: no-preference) { .just-checked { animation: checkPop 0.45s cubic-bezier(0.34,1.4,0.64,1) both; } }
+@keyframes checkPop { 0% { transform: scale(1); } 32% { transform: scale(1.018); } 100% { transform: scale(1); } }
+@keyframes savingReveal { 0% { transform: scale(0.92); opacity: 0; } 60% { transform: scale(1.03); } 100% { transform: scale(1); opacity: 1; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pop { 0%,100% { transform: scale(1); } 50% { transform: scale(1.18); } }
 @keyframes breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.07); } }

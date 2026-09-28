@@ -362,7 +362,7 @@ function ReportSheet({ m, onClose }) {
         <td style={{ ...td, color:bal<0?T.bad:T.text2 }}>{INR(bal)}</td><td style={{ ...td, color:T.muted }}>{pct(v,d.income).toFixed(1)}</td></tr>; })}
       <tr style={{ fontWeight:800 }}><td style={{ ...td, textAlign:"left", borderBottom:"none" }}>Total spent</td><td style={{ ...td, borderBottom:"none" }}>{INR(d.es)}</td><td style={{ ...td, borderBottom:"none" }}></td><td style={{ ...td, borderBottom:"none", color:T.muted }}>{pct(d.es,d.income).toFixed(1)}</td></tr>
     </tbody></table>
-    <div style={{ background:d.balance>=0?T.goodS:T.badS, color:d.balance>=0?T.good:T.bad, borderRadius:11, padding:12, fontWeight:800, textAlign:"center", fontSize:14, marginTop:12 }}>
+    <div style={{ background:d.balance>=0?T.goodS:T.badS, color:d.balance>=0?T.good:T.bad, borderRadius:11, padding:12, fontWeight:800, textAlign:"center", fontSize:14, marginTop:12, animation:"savingReveal 0.5s cubic-bezier(0.34,1.4,0.64,1) both" }}>
       {d.balance>=0 ? `🎉 You saved ${INR(d.balance)} this month` : `Overspent by ${INR(-d.balance)} this month`}</div>
     <div style={{ fontSize:12, color:T.muted, textAlign:"center", marginTop:6 }}>Balance = income {INR(d.income)} − spent {INR(d.es)}. Nothing carries to next month.</div>
     <button onClick={onClose} style={{ ...primaryBtn, marginTop:14 }}>Close</button>
