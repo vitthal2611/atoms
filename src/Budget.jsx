@@ -97,7 +97,8 @@ function SpendSheet({ m, api, env, initial, curMonth, onClose, onChange }) {
   const isInc = env.bucket==="income";
   const [amt,setAmt]=useState(initial?String(initial.amount):"");
   const [desc,setDesc]=useState(initial?.desc||"");
-  const [date,setDate]=useState(initial?.date || (m.id===curMonth ? today() : m.id+"-15"));
+  const [dY,dM]=m.id.split("-").map(Number); const monthEnd=m.id+"-"+String(new Date(dY,dM,0).getDate()).padStart(2,"0");
+  const [date,setDate]=useState(initial?.date || (m.id===curMonth ? today() : m.id+"-01"));
   const [err,setErr]=useState(""); const [xfer,setXfer]=useState(null); const [src,setSrc]=useState("");
   const spentOf = id => (m.txns||[]).filter(t=>t.categoryId===id && (!initial||t.id!==initial.id)).reduce((a,t)=>a+(+t.amount||0),0);
   const record = () => {
@@ -138,7 +139,7 @@ function SpendSheet({ m, api, env, initial, curMonth, onClose, onChange }) {
         style={{ fontSize:40, fontWeight:800, border:"none", background:"none", outline:"none", color:T.text, width:(Math.max(1,(amt||"").length)+0.6)+"ch", minWidth:"1.6ch", maxWidth:"72vw", textAlign:"left", fontFamily:"inherit", MozAppearance:"textfield", padding:0 }} /></div>
     <div style={{ marginBottom:12 }}><label style={lab}>Description</label><input style={fld} value={desc} onChange={e=>setDesc(e.target.value)} placeholder={isInc?"e.g. Freelance payment":"e.g. Weekend dinner"} /></div>
     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14, fontSize:13, color:T.text2 }}><span>Date</span>
-      <input type="date" value={date} min={m.id+"-01"} max={m.id+"-31"} onChange={e=>setDate(e.target.value)} style={{ background:T.surf2, border:`1px solid ${T.border}`, borderRadius:9, padding:"7px 9px", color:T.text, fontFamily:"inherit", fontSize:13 }} /></div>
+      <input type="date" value={date} min={m.id+"-01"} max={monthEnd} onChange={e=>setDate(e.target.value)} style={{ background:T.surf2, border:`1px solid ${T.border}`, borderRadius:9, padding:"7px 9px", color:T.text, fontFamily:"inherit", fontSize:13 }} /></div>
     {err && <div style={{ fontSize:12, color:T.bad, marginBottom:8 }}>{err}</div>}
     <div style={{ display:"flex", gap:10 }}>
       {initial ? <button onClick={()=>{ api.deleteTxn(initial.id); onClose(true); }} style={{ ...ghostBtn, color:T.bad, borderColor:T.bad+"55", flex:"0 0 auto" }}>Delete</button>
