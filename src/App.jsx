@@ -3191,6 +3191,29 @@ const ManageView = memo(function ManageView({ identities, allData, onAddHabit, o
       <div style={{ ...S.card, marginTop:18 }}>
         <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.08em", textTransform:"uppercase", color:T.muted, marginBottom:12 }}>Account &amp; settings</div>
 
+        {/* Appearance — Light / Dark / System. Writes localStorage("atoms.theme")
+            and reloads, since the theme is chosen once at module load. */}
+        {(() => {
+          const cur = (() => { try { return localStorage.getItem("atoms.theme") || "system"; } catch { return "system"; } })();
+          const setTheme = v => { try { if (v === "system") localStorage.removeItem("atoms.theme"); else localStorage.setItem("atoms.theme", v); } catch {} location.reload(); };
+          const opt = (v, label, icon) => (
+            <button key={v} onClick={() => setTheme(v)} aria-pressed={cur === v}
+              style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:5, padding:"10px 0", borderRadius:11, cursor:"pointer", fontFamily:"inherit", fontSize:12.5, fontWeight:700, border:`1px solid ${cur===v?T.primary:T.border}`, background: cur===v?T.primary+"14":"transparent", color: cur===v?T.primary:T.text2, WebkitTapHighlightColor:"transparent" }}>
+              <Ic name={icon} size={18} color={cur===v?T.primary:T.muted} />{label}
+            </button>
+          );
+          return (
+            <div style={{ display:"flex", alignItems:"center", gap:10, paddingBottom:12, marginBottom:12, borderBottom:`1px solid ${T.surf2}`, flexWrap:"wrap" }}>
+              <span style={{ fontSize:18 }} aria-hidden="true">🎨</span>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:14, fontWeight:700, color:T.text }}>Appearance</div>
+                <div style={{ fontSize:12, color:T.muted, marginTop:1, lineHeight:1.4 }}>System follows your device. The app reloads to apply.</div>
+              </div>
+              <div style={{ display:"flex", gap:8, width:"100%" }}>{opt("system","System","gear")}{opt("light","Light","sun")}{opt("dark","Dark","moon")}</div>
+            </div>
+          );
+        })()}
+
         {/* Habit reminders — always shown. On devices where web push isn't available
             in a browser tab (notably iPhone), guide the user to install the app first. */}
         <div style={{ display:"flex", alignItems:"center", gap:10, paddingBottom:12, marginBottom:12, borderBottom:`1px solid ${T.surf2}` }}>
@@ -3383,6 +3406,7 @@ const IC_PATHS = {
   wallet: <><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H17a2 2 0 0 1 2 2v1"/><path d="M3 7.5V17a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H5.5"/><circle cx="16.5" cy="13" r="1.25" fill="currentColor" stroke="none"/></>,
   gear:   <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></>,
   chart:  <><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6" rx="1"/><rect x="12" y="8" width="3" height="10" rx="1"/><rect x="17" y="5" width="3" height="13" rx="1"/></>,
+  moon:   <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>,
 };
 // `fill` lets an outline glyph render solid — used by the Big 3 star toggle
 const Ic = ({ name, size = 13, color = "currentColor", fill = "none", style }) => (
