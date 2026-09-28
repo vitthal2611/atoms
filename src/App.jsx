@@ -3737,7 +3737,17 @@ function VotesBadge({ habit, allData, votes, total, color, isBad }) {
 
 // ─── HABIT ROW ────────────────────────────────────────────────────────────────
 // One habit on the timeline: cue → action → coaching (identity header is above).
-function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, adjustCount, count = 0, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, habitOps, active = false, stackLabels = null, readOnly = false }) {
+// Only re-render a card when its OWN visible state changes — a habit's streak,
+// review stats and reward depend solely on that habit's data, so toggling one
+// habit no longer re-renders every other card. allData/history/streakBadge/menu
+// are intentionally excluded: they're derived from the compared props (streak,
+// checked…) or from this habit's own slice, so skipping them is safe.
+function habitRowEqual(a, b) {
+  const K = ["habit","identity","checked","missed","warnMissedYesterday","streak","count","note","habitNotes","first","showIdentity","hideTime","votes","voteTotal","active","stackLabels","readOnly","toggle","adjustCount","onMiss","setHabitNote","onEdit","habitOps"];
+  for (let i = 0; i < K.length; i++) if (a[K[i]] !== b[K[i]]) return false;
+  return true;
+}
+const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, adjustCount, count = 0, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, habitOps, active = false, stackLabels = null, readOnly = false }) {
   const next = getNextMilestone(streak);
   // Environment prep tick (Law 3) — a per-day, per-device convenience in localStorage.
   const [prepped, setPrepped] = useState(() => { try { return localStorage.getItem(`atoms:prep:${habit.id}:${getTodayKey()}`) === "1"; } catch { return false; } });
@@ -4145,7 +4155,7 @@ function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, strea
       )}
     </div>
   );
-}
+}, habitRowEqual);
 
 // ─── FOCUS MODE — one habit at a time, full screen ────────────────────────────
 // A slot's worth of habits as a flow instead of a list: Skip / Done / 2-min.
