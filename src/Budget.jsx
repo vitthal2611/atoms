@@ -418,7 +418,18 @@ function ReportSheet({ m, onClose }) {
     </tbody></table>
     <div style={{ background:left>=0?T.goodS:T.badS, color:left>=0?T.good:T.bad, borderRadius:11, padding:12, fontWeight:800, textAlign:"center", fontSize:14, marginTop:12, animation:"savingReveal 0.5s cubic-bezier(0.34,1.4,0.64,1) both" }}>
       {left<0 ? `Overspent by ${INR(-left)} this month` : d.sa>0 ? `🎉 You saved ${INR(d.sa)} this month` : `🎉 ${INR(left)} left unspent this month`}</div>
-    <div style={{ fontSize:12, color:T.muted, textAlign:"center", marginTop:6, lineHeight:1.5 }}>Income {INR(d.income)} · spent {INR(d.es)} · saved {INR(d.sa)} · {INR(left)} left. Nothing carries to next month.</div>
+    <div style={{ display:"flex", gap:8, marginTop:10 }}>
+      <div style={{ flex:1, background:T.surf2, borderRadius:12, padding:"10px 6px", textAlign:"center" }}>
+        <div style={{ fontSize:10, color:T.muted, textTransform:"uppercase", letterSpacing:".03em" }}>Spent</div>
+        <div style={{ fontSize:15, fontWeight:800, marginTop:2, fontVariantNumeric:"tabular-nums" }}>{INR(d.es)}</div></div>
+      <div style={{ flex:1, background:T.surf2, borderRadius:12, padding:"10px 6px", textAlign:"center" }}>
+        <div style={{ fontSize:10, color:T.muted, textTransform:"uppercase", letterSpacing:".03em" }}>Saved</div>
+        <div style={{ fontSize:15, fontWeight:800, marginTop:2, fontVariantNumeric:"tabular-nums", color:T.save }}>{INR(d.sa)}</div></div>
+      <div style={{ flex:1.25, background:left<0?T.badS:T.goodS, border:`1.5px solid ${left<0?T.bad:T.good}`, borderRadius:12, padding:"10px 6px", textAlign:"center" }}>
+        <div style={{ fontSize:10, color:left<0?T.bad:T.good, textTransform:"uppercase", letterSpacing:".03em", fontWeight:800 }}>Left this month</div>
+        <div style={{ fontSize:18, fontWeight:800, marginTop:2, fontVariantNumeric:"tabular-nums", color:left<0?T.bad:T.good }}>{INR(left)}</div></div>
+    </div>
+    <div style={{ fontSize:11.5, color:T.muted, textAlign:"center", marginTop:7 }}>Income {INR(d.income)}. Nothing carries to next month.</div>
     <div style={{ display:"flex", gap:8, marginTop:14 }}>
       <button onClick={downloadCSV} style={{ ...ghostBtn, flex:1, padding:12, fontSize:13.5, display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}><Ic name="download" size={16} color={T.text2} /> CSV</button>
       <button onClick={printReport} style={{ ...ghostBtn, flex:1, padding:12, fontSize:13.5, display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}><Ic name="printer" size={16} color={T.text2} /> Print / PDF</button>
