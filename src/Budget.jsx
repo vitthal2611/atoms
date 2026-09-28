@@ -410,7 +410,15 @@ export default function BudgetView({ budget, setBudget }) {
     setBudget(b => ({ ...b, months }));
   }, [budget, setBudget]);
 
-  if (!m) return <div style={{ color:T.muted, textAlign:"center", padding:"40px 0" }}>No budget yet.</div>;
+  if (!m) {
+    const ids = Object.keys(budget?.months || {});
+    return <div style={{ display:"flex", flexDirection:"column", alignItems:"center", textAlign:"center", padding:"48px 20px" }}>
+      <div aria-hidden="true" style={{ width:84, height:84, borderRadius:24, background:T.primary+"14", display:"flex", alignItems:"center", justifyContent:"center", fontSize:40, marginBottom:16, boxShadow:T.shadow }}>📮</div>
+      <div style={{ fontSize:19, fontWeight:800, color:T.text, marginBottom:7 }}>Plan your first month</div>
+      <div style={{ fontSize:14, color:T.muted, lineHeight:1.6, maxWidth:280, marginBottom:22 }}>Give every rupee a job — split your income into Need, Want and Save envelopes.</div>
+      <button onClick={()=>{ setBudget(ids.length ? b=>({ ...b, active: ids[ids.length-1] }) : seedBudget()); }} style={{ ...primaryBtn, maxWidth:280 }}>{ids.length ? "Open my budget" : "Create my budget"}</button>
+    </div>;
+  }
   const d = calc(m); const committed = m.status==="committed";
   // The 4 most-recently-used envelopes (by latest transaction) pin to the top;
   // the rest are ordered by attention — overspent / near-limit first.
@@ -478,8 +486,8 @@ export default function BudgetView({ budget, setBudget }) {
         {d.unalloc<0 ? `⚠ Over-allocated by ${INR(-d.unalloc)}` : d.unalloc>0 ? `${INR(d.unalloc)} left to allocate` : "✓ Every rupee allocated"}</div></div>
 
     {!committed && <div style={{ marginTop:12, background:T.warnS, border:`1px solid ${T.warn}55`, borderRadius:13, padding:13 }}>
-      <div style={{ fontWeight:700, color:T.warn }}>This month is a draft</div>
-      <div style={{ margin:"5px 0 10px", fontSize:12.5, color:T.text2, lineHeight:1.5 }}>Income {INR(d.income)} · allocated {INR(d.allocated)}. Nothing carries over from last month. Commit to start logging.</div>
+      <div style={{ fontWeight:700, color:T.warn }}>You're still planning this month</div>
+      <div style={{ margin:"5px 0 10px", fontSize:12.5, color:T.text2, lineHeight:1.5 }}>Income {INR(d.income)} · allocated {INR(d.allocated)}. You start fresh — nothing carries over. Commit when you're ready to track spending.</div>
       <button onClick={api.commit} style={{ background:T.primary, color:"#fff", border:"none", borderRadius:10, padding:"10px 15px", fontWeight:700, fontSize:13.5, cursor:"pointer", fontFamily:"inherit" }}>Commit {m.label||mLabel(active)}</button></div>}
 
     {/* envelopes */}

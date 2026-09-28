@@ -5191,8 +5191,8 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
     return (
       <div style={{...S.content, alignItems:"center", paddingTop:40, textAlign:"center"}}>
         {/* Day navigator lives in the sticky header now */}
-        <div style={{fontSize:52,marginBottom:16}} aria-hidden="true">🌱</div>
-        <div style={{fontSize:20,fontWeight:700,color:T.text,marginBottom:8}}>Create your first habit</div>
+        <div aria-hidden="true" style={{ width:88, height:88, borderRadius:24, background:T.good+"14", display:"flex", alignItems:"center", justifyContent:"center", fontSize:44, marginBottom:18, boxShadow:T.shadow }}>🌱</div>
+        <div style={{fontSize:20,fontWeight:700,color:T.text,marginBottom:8}}>Become who you want to be</div>
         <div style={{fontSize:16,color:T.muted,lineHeight:1.7,maxWidth:280,marginBottom:28}}>
           Name a small habit and who it makes you become — you'll set the identity right inside, as part of the habit.
         </div>
