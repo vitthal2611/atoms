@@ -7,12 +7,13 @@ import { useState, useEffect } from "react";
 // When a spend exceeds an envelope, prompt to transfer from another envelope.
 
 const T = {
-  bg:"#F0F9FF", surface:"#FFFFFF", surf2:"#E0F2FE", border:"#D6E9F2",
+  bg:"#F0F9FF", surface:"#FFFFFF", surf2:"#E9F1F7", border:"#DCE6EC",
   text:"#26333B", text2:"#4A6572", muted:"#5F6E7A",
   primary:"#0284C7", need:"#0284C7", want:"#B45309", save:"#7C3AED", income:"#15803D",
   needS:"#0284C714", wantS:"#B4530914", saveS:"#7C3AED14", incomeS:"#15803D14",
   good:"#15803D", goodS:"#15803D14", warn:"#B45309", warnS:"#B4530914", bad:"#DC2626", badS:"#DC262614",
-  shadow:"0 1px 2px rgba(16,40,60,.05), 0 6px 18px rgba(16,40,60,.06)",
+  gold:"#F59E0B", goldS:"#F59E0B1a",
+  shadow:"0 1px 2px rgba(16,40,60,.05), 0 8px 22px rgba(16,40,60,.05)",
 };
 const BK = {
   need:  { l:"Need",   c:T.need,   s:T.needS,   i:"🧾" },

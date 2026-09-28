@@ -91,8 +91,8 @@ const _envMissing = Object.entries(_fbConfig).filter(([, v]) => !v).map(([k]) =>
 const T = {
   bg:      "#F0F9FF",
   surface: "#FFFFFF",
-  surf2:   "#E0F2FE",
-  border:  "#D6E9F2",   // softer hairline than the old cyan #BAE6FD
+  surf2:   "#E9F1F7",   // calmer, less icy tint than the old cyan #E0F2FE
+  border:  "#DCE6EC",   // warmer neutral hairline (was cyan #D6E9F2)
   border2: "#7DD3FC",
   text:    "#26333B",   // warm charcoal — calmer than the old ocean blue #0C4A6E
   text2:   "#4A6572",   // muted slate for secondary text
@@ -100,7 +100,11 @@ const T = {
   accent:  "#0EA5E9",
   primary: "#0284C7",   // was called "green" — renamed for semantic clarity
   green:   "#0284C7",   // alias kept for any legacy references
-  gold:    "#F59E0B",
+  gold:    "#F59E0B",   // reserved "win" accent — streaks & milestones only
+  goldS:   "#F59E0B1a", // soft gold tint for win chips
+  good:    "#15803D",   // success green (shared with Budget)
+  goodS:   "#15803D14",
+  shadow:  "0 1px 2px rgba(16,40,60,.05), 0 8px 22px rgba(16,40,60,.05)", // one soft card shadow
   red:     "#EF4444",
 };
 
