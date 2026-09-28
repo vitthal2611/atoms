@@ -88,6 +88,19 @@ const chip = k => { const c=k==="bad"?T.bad:k==="warn"?T.warn:k==="done"?T.save:
   return { fontSize:10, fontWeight:800, padding:"2px 8px", borderRadius:20, background:s, color:c, whiteSpace:"nowrap" }; };
 const primaryBtn = { width:"100%", background:T.primary, color:"#fff", border:"none", borderRadius:13, padding:15, fontFamily:"inherit", fontWeight:800, fontSize:15, cursor:"pointer" };
 const ghostBtn = { background:T.surface, color:T.text2, border:`1px solid ${T.border}`, borderRadius:13, padding:15, fontFamily:"inherit", fontWeight:800, fontSize:15, cursor:"pointer" };
+// Crisp inline-SVG icons for UI chrome (nav/buttons/headers). User-chosen glyphs
+// (envelope & bucket emoji) stay as emoji — this is only for system chrome.
+const BIC = {
+  chart:  <><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6" rx="1"/><rect x="12" y="8" width="3" height="10" rx="1"/><rect x="17" y="5" width="3" height="13" rx="1"/></>,
+  pencil: <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>,
+  check:  <path d="M20 6L9 17l-5-5"/>,
+  mail:   <><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 7l8.5 6 8.5-6"/></>,
+  spend:  <><circle cx="12" cy="12" r="9"/><path d="M12 8v6M9.2 11.2 12 14l2.8-2.8"/></>,
+  wallet: <><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H17a2 2 0 0 1 2 2v1"/><path d="M3 7.5V17a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H5.5"/><circle cx="16.5" cy="13" r="1.25" fill="currentColor" stroke="none"/></>,
+};
+const Ic = ({ name, size=14, color="currentColor", style }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink:0, ...style }}>{BIC[name]}</svg>
+);
 function Bar({ v, color }) { return <div style={{ height:7, borderRadius:5, background:T.surf2, overflow:"hidden", marginTop:8 }}><div style={{ height:"100%", width:Math.min(100,v)+"%", background:color, borderRadius:5 }} /></div>; }
 function Sheet({ title, onClose, children }) {
   return <div onClick={e=>{ if(e.target===e.currentTarget) onClose(); }} style={{ position:"fixed", inset:0, background:"rgba(10,20,28,.5)", zIndex:120, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
@@ -452,8 +465,8 @@ export default function BudgetView({ budget, setBudget }) {
         <div style={{ fontSize:11, color:T.muted, marginTop:1 }}>{pct(k==="save"?d.sa:d.bk[k],d.income).toFixed(0)}% · of {INR(d.bbud[k])}</div></div>)}
     </div>
     <div style={{ display:"flex", gap:9, marginTop:9 }}>
-      <div style={{ ...card({ padding:"10px 12px" }), flex:1, display:"flex", alignItems:"center", gap:9 }}><span style={{ fontSize:17 }}>💸</span><div><div style={{ fontSize:11, color:T.muted, fontWeight:600 }}>Spent</div><div style={{ fontSize:15, fontWeight:800, fontVariantNumeric:"tabular-nums" }}>{INR(d.es)}</div></div></div>
-      <div style={{ ...card({ padding:"10px 12px" }), flex:1, display:"flex", alignItems:"center", gap:9 }}><span style={{ fontSize:17 }}>🏦</span><div><div style={{ fontSize:11, color:T.muted, fontWeight:600 }}>Balance</div><div style={{ fontSize:15, fontWeight:800, fontVariantNumeric:"tabular-nums", color:d.balance<0?T.bad:T.good }}>{INR(d.balance)}</div></div></div>
+      <div style={{ ...card({ padding:"10px 12px" }), flex:1, display:"flex", alignItems:"center", gap:9 }}><Ic name="spend" size={19} color={T.muted} /><div><div style={{ fontSize:11, color:T.muted, fontWeight:600 }}>Spent</div><div style={{ fontSize:15, fontWeight:800, fontVariantNumeric:"tabular-nums" }}>{INR(d.es)}</div></div></div>
+      <div style={{ ...card({ padding:"10px 12px" }), flex:1, display:"flex", alignItems:"center", gap:9 }}><Ic name="wallet" size={19} color={T.muted} /><div><div style={{ fontSize:11, color:T.muted, fontWeight:600 }}>Balance</div><div style={{ fontSize:15, fontWeight:800, fontVariantNumeric:"tabular-nums", color:d.balance<0?T.bad:T.good }}>{INR(d.balance)}</div></div></div>
     </div>
     <div style={{ ...card({ padding:"12px 13px", marginTop:9 }) }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:8 }}>
@@ -471,10 +484,10 @@ export default function BudgetView({ budget, setBudget }) {
 
     {/* envelopes */}
     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", margin:"20px 2px 8px" }}>
-      <span style={{ fontSize:13, fontWeight:800 }}>📮 Envelopes</span>
+      <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:13, fontWeight:800 }}><Ic name="mail" size={16} color={T.text} /> Envelopes</span>
       <div style={{ display:"flex", gap:8 }}>
-        <button onClick={()=>setModal({type:"report"})} style={pill(false)}>📊 Report</button>
-        <button onClick={()=>setEditMode(v=>!v)} style={pill(editMode)}>{editMode?"✓ Done":"✏️ Edit"}</button></div>
+        <button onClick={()=>setModal({type:"report"})} style={pill(false)}><Ic name="chart" size={14} color={T.text2} /> Report</button>
+        <button onClick={()=>setEditMode(v=>!v)} style={pill(editMode)}><Ic name={editMode?"check":"pencil"} size={14} color={editMode?T.primary:T.text2} /> {editMode?"Done":"Edit"}</button></div>
     </div>
     {editMode && <div style={{ fontSize:12, color:T.muted, margin:"0 2px 8px" }}>Tap an envelope to edit its budget & icon, or add a new one below.</div>}
     {recentCats.length>0 && restCats.length>0 && <div style={sub}>⭐ Recently used</div>}
