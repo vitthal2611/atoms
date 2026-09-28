@@ -111,6 +111,8 @@ const BIC = {
   mail:   <><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 7l8.5 6 8.5-6"/></>,
   spend:  <><circle cx="12" cy="12" r="9"/><path d="M12 8v6M9.2 11.2 12 14l2.8-2.8"/></>,
   wallet: <><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H17a2 2 0 0 1 2 2v1"/><path d="M3 7.5V17a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H5.5"/><circle cx="16.5" cy="13" r="1.25" fill="currentColor" stroke="none"/></>,
+  download: <><path d="M12 3v12"/><path d="M7 11l5 4 5-4"/><path d="M5 21h14"/></>,
+  printer:  <><path d="M6 9V3h12v6"/><rect x="5" y="9" width="14" height="8" rx="2"/><path d="M8 15h8v6H8z"/></>,
 };
 const Ic = ({ name, size=14, color="currentColor", style }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink:0, ...style }}>{BIC[name]}</svg>
@@ -369,6 +371,33 @@ function ReportSheet({ m, onClose }) {
   const sav=(m.categories||[]).filter(c=>c.bucket==="save");
   const rows=[...exp].sort((a,b)=>(d.sp[b.id]||0)-(d.sp[a.id]||0));
   const left=d.balance;   // income − spent − saved (what's still unspent)
+  const R=n=>Math.round(n), IN=n=>R(n).toLocaleString("en-IN");
+  const expo=[...rows.map(c=>({ n:c.name, b:BK[c.bucket]?.l||c.bucket, s:d.sp[c.id]||0, a:+c.budget||0 })),
+              ...sav.map(c=>({ n:c.name, b:"Save", s:d.sp[c.id]||0, a:+c.budget||0 }))];
+  const fname=mLabel(m.id).replace(/\s+/g,"-").toLowerCase();
+  const downloadCSV=()=>{ const esc=s=>`"${String(s).replace(/"/g,'""')}"`;
+    const lines=[["Envelope","Bucket","Spent","Allocated","Balance","% of income"]];
+    expo.forEach(r=>lines.push([r.n,r.b,R(r.s),R(r.a),R(r.a-r.s),pct(r.s,d.income).toFixed(1)]));
+    lines.push([],["Income","",R(d.income)],["Total spent","",R(d.es)],["Total saved","",R(d.sa)],["Left unspent","",R(left)]);
+    const csv=lines.map(r=>r.map(esc).join(",")).join("\r\n");
+    const u=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
+    const a=document.createElement("a"); a.href=u; a.download=`atoms-budget-${fname}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),1500); };
+  const printReport=()=>{ const w=window.open("","_blank");
+    if(!w){ alert("Allow pop-ups for this site to print the report."); return; }
+    const rowsHTML=expo.map(r=>`<tr><td>${r.n}</td><td>${r.b}</td><td>₹${IN(r.s)}</td><td>₹${IN(r.a)}</td><td>₹${IN(r.a-r.s)}</td><td>${pct(r.s,d.income).toFixed(1)}%</td></tr>`).join("");
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${mLabel(m.id)} budget report</title>
+      <style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1a2730;max-width:660px;margin:24px auto;padding:0 16px}
+      h1{font-size:20px;margin:0 0 2px}.sub{color:#5F6E7A;font-size:13px;margin-bottom:18px}
+      table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px 6px;text-align:right;border-bottom:1px solid #e5ecf1}
+      th:first-child,td:first-child{text-align:left}th{color:#5F6E7A;font-size:11px;text-transform:uppercase}
+      tr.tot td{font-weight:700;border-top:2px solid #cdd9e1}
+      .banner{margin-top:16px;padding:12px;border-radius:10px;background:#15803d14;color:#15803D;font-weight:700;text-align:center}</style></head>
+      <body><h1>${mLabel(m.id)} · budget report</h1><div class="sub">Income ₹${IN(d.income)} · generated ${new Date().toLocaleDateString()}</div>
+      <table><thead><tr><th>Envelope</th><th>Bucket</th><th>Spent</th><th>Allocated</th><th>Balance</th><th>% inc</th></tr></thead><tbody>${rowsHTML}
+      <tr class="tot"><td>Total spent</td><td></td><td>₹${IN(d.es)}</td><td></td><td></td><td>${pct(d.es,d.income).toFixed(1)}%</td></tr>
+      <tr class="tot"><td>Total saved</td><td></td><td>₹${IN(d.sa)}</td><td></td><td></td><td>${pct(d.sa,d.income).toFixed(1)}%</td></tr></tbody></table>
+      <div class="banner">Income ₹${IN(d.income)} · spent ₹${IN(d.es)} · saved ₹${IN(d.sa)} · ₹${IN(left)} left</div></body></html>`);
+    w.document.close(); w.focus(); setTimeout(()=>{ try{ w.print(); }catch(e){} },350); };
   const th={ textAlign:"right", padding:"7px 4px", fontSize:10.5, textTransform:"uppercase", color:T.muted, borderBottom:`1px solid ${T.border}` };
   const td={ textAlign:"right", padding:"7px 4px", fontSize:12.5, borderBottom:`1px solid ${T.border}`, fontVariantNumeric:"tabular-nums" };
   return <Sheet title={mLabel(m.id)+" report"} onClose={onClose}>
@@ -389,7 +418,11 @@ function ReportSheet({ m, onClose }) {
     <div style={{ background:left>=0?T.goodS:T.badS, color:left>=0?T.good:T.bad, borderRadius:11, padding:12, fontWeight:800, textAlign:"center", fontSize:14, marginTop:12, animation:"savingReveal 0.5s cubic-bezier(0.34,1.4,0.64,1) both" }}>
       {left<0 ? `Overspent by ${INR(-left)} this month` : d.sa>0 ? `🎉 You saved ${INR(d.sa)} this month` : `🎉 ${INR(left)} left unspent this month`}</div>
     <div style={{ fontSize:12, color:T.muted, textAlign:"center", marginTop:6, lineHeight:1.5 }}>Income {INR(d.income)} · spent {INR(d.es)} · saved {INR(d.sa)} · {INR(left)} left. Nothing carries to next month.</div>
-    <button onClick={onClose} style={{ ...primaryBtn, marginTop:14 }}>Close</button>
+    <div style={{ display:"flex", gap:8, marginTop:14 }}>
+      <button onClick={downloadCSV} style={{ ...ghostBtn, flex:1, padding:12, fontSize:13.5, display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}><Ic name="download" size={16} color={T.text2} /> CSV</button>
+      <button onClick={printReport} style={{ ...ghostBtn, flex:1, padding:12, fontSize:13.5, display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}><Ic name="printer" size={16} color={T.text2} /> Print / PDF</button>
+    </div>
+    <button onClick={onClose} style={{ ...primaryBtn, marginTop:10 }}>Close</button>
   </Sheet>;
 }
 
