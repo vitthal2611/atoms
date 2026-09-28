@@ -1,7 +1,7 @@
 {
-  "name": "Atomic Habits Tracker",
-  "short_name": "Habits",
-  "description": "Track your identity-based atomic habits.",
+  "name": "Atoms — Habits & Budget",
+  "short_name": "Atoms",
+  "description": "Build better habits and budget your money — one small step at a time.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#F0F9FF",
