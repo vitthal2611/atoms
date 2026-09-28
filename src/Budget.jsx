@@ -97,8 +97,15 @@ function SpendSheet({ m, api, env, initial, curMonth, onClose, onChange }) {
   const isInc = env.bucket==="income";
   const [amt,setAmt]=useState(initial?String(initial.amount):"");
   const [desc,setDesc]=useState(initial?.desc||"");
-  const [dY,dM]=m.id.split("-").map(Number); const monthEnd=m.id+"-"+String(new Date(dY,dM,0).getDate()).padStart(2,"0");
-  const [date,setDate]=useState(initial?.date || (m.id===curMonth ? today() : m.id+"-01"));
+  const [dY,dM]=m.id.split("-").map(Number); const monthStart=m.id+"-01", monthEnd=m.id+"-"+String(new Date(dY,dM,0).getDate()).padStart(2,"0");
+  const t=today(), isCur=m.id===curMonth;
+  // Current month: only today and the previous 6 days are selectable (clamped to
+  // the month). Other months: the whole month. An older date being edited stays valid.
+  const six=(()=>{ const d=new Date(); d.setDate(d.getDate()-6); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); })();
+  let dateMin=isCur ? (six>monthStart?six:monthStart) : monthStart;
+  let dateMax=isCur ? t : monthEnd;
+  if(initial?.date){ if(initial.date<dateMin) dateMin=initial.date; if(initial.date>dateMax) dateMax=initial.date; }
+  const [date,setDate]=useState(initial?.date || (isCur ? t : monthStart));
   const [err,setErr]=useState(""); const [xfer,setXfer]=useState(null); const [src,setSrc]=useState("");
   const spentOf = id => (m.txns||[]).filter(t=>t.categoryId===id && (!initial||t.id!==initial.id)).reduce((a,t)=>a+(+t.amount||0),0);
   const record = () => {
