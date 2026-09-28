@@ -270,17 +270,20 @@ function GoalSheet({ m, cat, onAdd, onEdit, onClose }) {
 }
 
 function TransactionsSheet({ m, onAdd, onEdit, onClear, onClose }) {
-  const [filter,setFilter]=useState("all"); const [clr,setClr]=useState(false);
+  const [filter,setFilter]=useState("all"); const [envF,setEnvF]=useState("all"); const [clr,setClr]=useState(false);
   const cat=id=>(m.categories||[]).find(c=>c.id===id);
   const all=[...(m.txns||[])].sort((a,b)=>b.date.localeCompare(a.date));
-  const items=all.filter(t=>filter==="all"||t.bucket===filter);
+  const items=all.filter(t=>(filter==="all"||t.bucket===filter)&&(envF==="all"||t.categoryId===envF));
   const spent=all.filter(t=>t.bucket!=="income").reduce((a,t)=>a+(+t.amount||0),0);
   const inc=all.filter(t=>t.bucket==="income").reduce((a,t)=>a+(+t.amount||0),0);
   const fchip=(f,l)=><button key={f} onClick={()=>setFilter(f)} style={{ flex:1, padding:"8px 0", borderRadius:9, fontFamily:"inherit", fontSize:12.5, fontWeight:700, cursor:"pointer", border:`1px solid ${filter===f?T.primary:T.border}`, background:filter===f?T.primary:"transparent", color:filter===f?"#fff":T.text2 }}>{l}</button>;
   let last=null;
   return <Sheet title={"All transactions · "+(m.label||mLabel(m.id))} onClose={onClose}>
     <button onClick={onAdd} style={{ ...primaryBtn, marginBottom:12 }}>＋ Add transaction</button>
-    <div style={{ display:"flex", gap:6, marginBottom:6 }}>{fchip("all","All")}{fchip("need","Needs")}{fchip("want","Wants")}{fchip("save","Save")}{fchip("income","Income")}</div>
+    <div style={{ display:"flex", gap:6, marginBottom:8 }}>{fchip("all","All")}{fchip("need","Needs")}{fchip("want","Wants")}{fchip("save","Save")}{fchip("income","Income")}</div>
+    <select value={envF} onChange={e=>setEnvF(e.target.value)} style={{ width:"100%", marginBottom:6, background:T.surf2, border:`1px solid ${T.border}`, borderRadius:9, padding:"8px 9px", color:T.text, fontFamily:"inherit", fontSize:12.5, fontWeight:600 }}>
+      <option value="all">All envelopes</option>
+      {(m.categories||[]).map(c=><option key={c.id} value={c.id}>{iconOf(c)} {c.name}</option>)}</select>
     {items.length ? items.map(t=>{ const c=cat(t.categoryId), bk=BK[t.bucket]||BK.need, showDay=t.date!==last; last=t.date;
       return <div key={t.id}>
         {showDay && <div style={{ fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".03em", margin:"12px 2px 6px" }}>{fmtDFull(t.date)}</div>}
@@ -298,6 +301,32 @@ function TransactionsSheet({ m, onAdd, onEdit, onClear, onClose }) {
           <div style={{ display:"flex", gap:10 }}><button onClick={()=>setClr(false)} style={{ ...ghostBtn, flex:1, padding:11 }}>Cancel</button>
             <button onClick={()=>{ onClear(); setClr(false); }} style={{ flex:1, background:T.bad, color:"#fff", border:"none", borderRadius:13, padding:11, fontFamily:"inherit", fontWeight:800, fontSize:14, cursor:"pointer" }}>Delete all</button></div></div>
       : <button onClick={()=>setClr(true)} style={{ display:"block", margin:"12px auto 0", background:"none", border:"none", color:T.bad, fontSize:12.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>Clear all transactions</button>)}
+  </Sheet>;
+}
+
+function EnvTxnSheet({ m, cat, onAdd, onEdit, onClose }) {
+  const items=[...(m.txns||[])].filter(t=>t.categoryId===cat.id).sort((a,b)=>b.date.localeCompare(a.date));
+  const spent=items.reduce((a,t)=>a+(+t.amount||0),0);
+  const alloc=+cat.budget||0, bal=alloc-spent, bk=BK[cat.bucket]||BK.need;
+  const stat=(k,v,vc)=><div style={{ flex:1, background:T.surf2, borderRadius:12, padding:"9px 8px", textAlign:"center", minWidth:0 }}>
+    <div style={{ fontSize:10, fontWeight:700, color:T.muted, textTransform:"uppercase", letterSpacing:".03em" }}>{k}</div>
+    <div style={{ fontSize:15, fontWeight:800, marginTop:2, fontVariantNumeric:"tabular-nums", color:vc||T.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{v}</div></div>;
+  let last=null;
+  return <Sheet title={iconOf(cat)+"  "+cat.name} onClose={onClose}>
+    <div style={{ fontSize:12, color:T.muted, margin:"-6px 0 12px" }}>{bk.l} · envelope</div>
+    <div style={{ display:"flex", gap:8, marginBottom:14 }}>{stat("Allocated",INR(alloc))}{stat("Spent",INR(spent),bk.c)}{stat("Balance",INR(bal),bal<0?T.bad:T.good)}</div>
+    <button onClick={onAdd} style={{ ...primaryBtn, marginBottom:4 }}>＋ Add spend to {cat.name}</button>
+    {items.length ? items.map(t=>{ const showDay=t.date!==last; last=t.date;
+      return <div key={t.id}>
+        {showDay && <div style={{ fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".03em", margin:"12px 2px 6px" }}>{fmtDFull(t.date)}</div>}
+        <div onClick={()=>onEdit(t)} style={{ display:"flex", alignItems:"center", gap:11, padding:"10px 0", borderBottom:`1px solid ${T.border}`, cursor:"pointer" }}>
+          <div style={{ width:36, height:36, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, background:bk.s, color:bk.c, flexShrink:0 }}>{iconOf(cat)}</div>
+          <div style={{ flex:1, minWidth:0 }}><div style={{ fontWeight:600, fontSize:13.5, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{t.desc||cat.name}</div>
+            <div style={{ fontSize:11.5, color:T.muted }}>{fmtD(t.date)} · {bk.l}</div></div>
+          <div style={{ fontWeight:700, fontSize:14, fontVariantNumeric:"tabular-nums" }}>{INR(t.amount)}</div></div>
+      </div>; })
+      : <div style={{ fontSize:13, color:T.muted, textAlign:"center", padding:"22px 0" }}>No transactions in this envelope yet.</div>}
+    <div style={{ fontSize:12, color:T.muted, textAlign:"center", marginTop:12 }}>{items.length} transaction{items.length===1?"":"s"} · {INR(spent)}</div>
   </Sheet>;
 }
 
@@ -373,7 +402,7 @@ export default function BudgetView({ budget, setBudget }) {
   const attn = c => { const u=pct(d.sp[c.id]||0,c.budget); return u>100?0:u>=80?1:2; };
   const restCats = allCats.map((c,i)=>({c,i})).filter(x=>!recentIds.has(x.c.id)).sort((a,b)=>attn(a.c)-attn(b.c) || a.i-b.i).map(x=>x.c);
   const sub = { fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".04em", margin:"0 2px 8px" };
-  const envCard = c => { const s=d.sp[c.id]||0, bal=(+c.budget||0)-s, u=pct(s,c.budget);
+  const envCard = c => { const s=d.sp[c.id]||0, bal=(+c.budget||0)-s, u=pct(s,c.budget); const n=(m.txns||[]).filter(t=>t.categoryId===c.id).length;
     const st=c.bucket==="save"?(s>=c.budget&&c.budget>0?"done":u>=80?"good":"warn"):stOf(s,c.budget);
     const label=c.bucket==="save"?(s>=c.budget&&c.budget>0?"Funded":u>0?"Partial":"Empty"):(st==="bad"?"Overspent":st==="warn"?"Watch":"On track");
     const col=st==="bad"?T.bad:st==="warn"?T.warn:BK[c.bucket].c;
@@ -388,7 +417,11 @@ export default function BudgetView({ budget, setBudget }) {
       <Bar v={u} color={col} />
       <div style={{ display:"flex", flexDirection:"column", gap:5, marginTop:11 }}>
         {stat("Allocated", INR(c.budget))}{stat("Spent", INR(s))}{stat("Balance", INR(bal), bal<0?T.bad:T.good)}
-      </div></div>; };
+      </div>
+      {c.bucket!=="save" && <button onClick={e=>{ e.stopPropagation(); setModal({ type:"envtxns", cat:c }); }}
+        style={{ marginTop:10, paddingTop:9, width:"100%", background:"none", border:"none", borderTop:`1px solid ${T.border}`, textAlign:"left", color:T.primary, fontFamily:"inherit", fontSize:11.5, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:5 }}>
+        🧾 {n} txn{n===1?"":"s"}<span style={{ marginLeft:"auto", opacity:.55 }}>›</span></button>}
+    </div>; };
 
   return <div style={{ display:"flex", flexDirection:"column" }}>
     {/* own header — month selection lives inside the Monthly budget card */}
@@ -459,6 +492,10 @@ export default function BudgetView({ budget, setBudget }) {
        onAdd={()=>setModal({type:"picker", back:{type:"txns"}})}
        onEdit={t=>setModal({type:"spend", env:(m.categories||[]).find(c=>c.id===t.categoryId)||{id:"",name:"Income",bucket:t.bucket}, initial:t, back:{type:"txns"}})}
        onClear={api.clearTxns} onClose={()=>setModal(null)} />}
+    {modal?.type==="envtxns" && <EnvTxnSheet m={m} cat={modal.cat}
+       onAdd={()=>setModal({type:"spend", env:modal.cat, back:{type:"envtxns", cat:modal.cat}})}
+       onEdit={t=>setModal({type:"spend", env:modal.cat, initial:t, back:{type:"envtxns", cat:modal.cat}})}
+       onClose={()=>setModal(null)} />}
     {modal?.type==="income" && <IncomeSheet m={m} api={api}
        onAdd={()=>setModal({type:"spend", env:{id:"",name:"Income",bucket:"income"}, back:{type:"income"}})}
        onEdit={t=>setModal({type:"spend", env:{id:"",name:"Income",bucket:"income"}, initial:t, back:{type:"income"}})}
