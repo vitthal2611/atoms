@@ -424,7 +424,7 @@ export default function BudgetView({ budget, setBudget }) {
         🧾 {n} txn{n===1?"":"s"}<span style={{ marginLeft:"auto", opacity:.55 }}>›</span></button>}
     </div>; };
 
-  return <div style={{ display:"flex", flexDirection:"column" }}>
+  return <div style={{ display:"flex", flexDirection:"column", padding:"12px 14px 0" }}>
     {/* own header — month selection lives inside the Monthly budget card */}
     <div style={{ background:`linear-gradient(135deg, ${T.primary}, #075E8C)`, color:"#fff", borderRadius:16, padding:16, boxShadow:T.shadow }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
