@@ -21,6 +21,11 @@ const BK = {
   income:{ l:"Income", c:T.income, s:T.incomeS, i:"💵" },
 };
 const INR = n => (n<0?"-":"")+"₹"+Math.abs(Math.round(n)).toLocaleString("en-IN");
+// Compact ₹ for tight spots: 12000→₹12k, 9260→₹9.3k, 217000→₹2.2L, 820→₹820
+const INRk = n => { const s=n<0?"-":"", a=Math.abs(n);
+  if(a>=1e5){ const v=a/1e5; return s+"₹"+(v>=10?Math.round(v):v.toFixed(1).replace(/\.0$/,""))+"L"; }
+  if(a>=1000){ const v=a/1000; return s+"₹"+(v>=100?Math.round(v):v.toFixed(1).replace(/\.0$/,""))+"k"; }
+  return s+"₹"+Math.round(a); };
 const pct = (a,b) => b>0 ? a/b*100 : 0;
 const MON  = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const MONF = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -417,7 +422,7 @@ export default function BudgetView({ budget, setBudget }) {
         <span style={{ ...chip(st), flexShrink:0 }}>{label}</span></div>
       <Bar v={u} color={col} />
       <div style={{ display:"flex", justifyContent:"space-between", gap:6, marginTop:11 }}>
-        {cell("Allocated", INR(c.budget), null, "left")}{cell("Spent", INR(s), col, "center")}{cell("Balance", INR(bal), bal<0?T.bad:T.good, "right")}
+        {cell("Alloc", INRk(c.budget), null, "left")}{cell("Spent", INRk(s), col, "center")}{cell("Balance", INRk(bal), bal<0?T.bad:T.good, "right")}
       </div>
       {c.bucket!=="save" && <button onClick={e=>{ e.stopPropagation(); setModal({ type:"envtxns", cat:c }); }}
         style={{ marginTop:10, paddingTop:9, width:"100%", background:"none", border:"none", borderTop:`1px solid ${T.border}`, textAlign:"left", color:T.primary, fontFamily:"inherit", fontSize:11.5, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:5 }}>
@@ -469,9 +474,9 @@ export default function BudgetView({ budget, setBudget }) {
     </div>
     {editMode && <div style={{ fontSize:12, color:T.muted, margin:"0 2px 8px" }}>Tap an envelope to edit its budget & icon, or add a new one below.</div>}
     {recentCats.length>0 && restCats.length>0 && <div style={sub}>⭐ Recently used</div>}
-    {recentCats.length>0 && <div style={{ display:"grid", gridTemplateColumns:"1fr", gap:10 }}>{recentCats.map(envCard)}</div>}
+    {recentCats.length>0 && <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>{recentCats.map(envCard)}</div>}
     {recentCats.length>0 && restCats.length>0 && <div style={{ ...sub, marginTop:16 }}>All envelopes</div>}
-    {restCats.length>0 && <div style={{ display:"grid", gridTemplateColumns:"1fr", gap:10 }}>{restCats.map(envCard)}</div>}
+    {restCats.length>0 && <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>{restCats.map(envCard)}</div>}
     {editMode && <button onClick={()=>setModal({type:"cat"})} style={{ ...ghostBtn, width:"100%", marginTop:11 }}>＋ New envelope</button>}
 
     {/* recent spends */}
