@@ -496,9 +496,17 @@ export default function BudgetView({ budget, setBudget }) {
   const allCats = m.categories||[];
   const recentCats = allCats.filter(c=>lastUsed[c.id]).sort((a,b)=>lastUsed[b.id].localeCompare(lastUsed[a.id])).slice(0,4);
   const recentIds = new Set(recentCats.map(c=>c.id));
-  const attn = c => { const u=pct(d.sp[c.id]||0,c.budget); return u>100?0:u>=80?1:2; };
-  const restCats = allCats.map((c,i)=>({c,i})).filter(x=>!recentIds.has(x.c.id)).sort((a,b)=>attn(a.c)-attn(b.c) || a.i-b.i).map(x=>x.c);
+  const restCats = allCats.filter(c=>!recentIds.has(c.id));
   const sub = { fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".04em", margin:"0 2px 8px" };
+  // Non-recent envelopes grouped by bucket, sorted A→Z within each group.
+  const bucketSec = bucket => { const cs=restCats.filter(c=>c.bucket===bucket).sort((a,b)=>(a.name||"").localeCompare(b.name||"")); if(!cs.length) return null;
+    const meta=BK[bucket], title=bucket==="save"?"Save":meta.l+"s";
+    return [
+      <div key={bucket+"-l"} style={{ ...sub, color:meta.c, marginTop:16, display:"flex", alignItems:"center" }}><span>{meta.i} {title}</span>
+        <span style={{ marginLeft:"auto", color:T.muted, fontWeight:600, fontSize:11, textTransform:"none", letterSpacing:0, fontVariantNumeric:"tabular-nums" }}>{INR(d.bk[bucket]||0)} / {INR(d.bbud[bucket]||0)}</span></div>,
+      <div key={bucket+"-g"} style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>{cs.map(envCard)}</div>
+    ];
+  };
   const envCard = c => { const s=d.sp[c.id]||0, bal=(+c.budget||0)-s, u=pct(s,c.budget); const n=(m.txns||[]).filter(t=>t.categoryId===c.id).length;
     const st=c.bucket==="save"?(s>=c.budget&&c.budget>0?"done":u>=80?"good":"warn"):stOf(s,c.budget);
     const label=c.bucket==="save"?(s>=c.budget&&c.budget>0?"Funded":u>0?"Partial":"Empty"):(st==="bad"?"Overspent":st==="warn"?"Watch":"On track");
@@ -570,8 +578,9 @@ export default function BudgetView({ budget, setBudget }) {
     {editMode && <div style={{ fontSize:12, color:T.muted, margin:"0 2px 8px" }}>Tap an envelope to edit its budget & icon, or add a new one below.</div>}
     {recentCats.length>0 && restCats.length>0 && <div style={sub}>⭐ Recently used</div>}
     {recentCats.length>0 && <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>{recentCats.map(envCard)}</div>}
-    {recentCats.length>0 && restCats.length>0 && <div style={{ ...sub, marginTop:16 }}>All envelopes</div>}
-    {restCats.length>0 && <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>{restCats.map(envCard)}</div>}
+    {bucketSec("need")}
+    {bucketSec("want")}
+    {bucketSec("save")}
     {editMode && <button onClick={()=>setModal({type:"cat"})} style={{ ...ghostBtn, width:"100%", marginTop:11 }}>＋ New envelope</button>}
 
     {/* recent spends */}
