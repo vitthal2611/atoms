@@ -112,11 +112,18 @@ const parseCSV = text => { const rows=[]; let row=[], f="", q=false;
   if(f!==""||row.length){ row.push(f); if(row.some(x=>x.trim()!=="")) rows.push(row); } return rows; };
 const parseBudgetCSV = text => { const rows=parseCSV(text); if(!rows.length) return [];
   const head=rows[0].map(h=>h.trim().toLowerCase()); const hasHead=head.includes("month");
-  const idx=n=>head.indexOf(n); const DEF={month:0,type:1,date:2,envelope:3,bucket:4,amount:5,note:6};
-  const col=(r,n)=>{ const i=hasHead?idx(n):DEF[n]; return i>=0&&i<r.length?String(r[i]).trim():""; };
+  const base={month:0,type:1,date:2,envelope:3,bucket:4,amount:5,note:6};
+  const idx=n=>hasHead?head.indexOf(n):base[n];
   const out=[];
-  for(let k=hasHead?1:0;k<rows.length;k++){ const r=rows[k]; const month=mIdOf(col(r,"month")); if(!month) continue;
-    out.push({ month, type:col(r,"type").toLowerCase(), date:col(r,"date"), envelope:col(r,"envelope"), bucket:col(r,"bucket"), amount:+String(col(r,"amount")).replace(/[^0-9.\-]/g,"")||0, note:col(r,"note") }); }
+  for(let k=hasHead?1:0;k<rows.length;k++){ const r=rows[k];
+    // Unquoted thousands separators (e.g. 2,17,774) split the Amount cell into
+    // extra columns; everything after Amount shifts right by that surplus.
+    const extra=Math.max(0, r.length-(hasHead?head.length:7));
+    const ai=idx("amount");
+    const cell=n=>{ let i=idx(n); if(i<0) return ""; if(extra>0 && ai>=0 && i>ai) i+=extra; return i>=0&&i<r.length?String(r[i]).trim():""; };
+    const amtRaw=(ai>=0 && extra>0) ? r.slice(ai, ai+extra+1).map(x=>String(x).trim()).join("") : cell("amount");
+    const month=mIdOf(cell("month")); if(!month) continue;
+    out.push({ month, type:cell("type").toLowerCase(), date:cell("date"), envelope:cell("envelope"), bucket:cell("bucket"), amount:+String(amtRaw).replace(/[^0-9.\-]/g,"")||0, note:cell("note") }); }
   return out; };
 const importBudgetRows = (budget, rows) => { const months={ ...(budget?.months||{}) };
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
