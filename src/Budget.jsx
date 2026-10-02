@@ -296,6 +296,7 @@ function IncomeSheet({ m, api, onImport, onAdd, onEdit, onClose }) {
   return <Sheet title={"Income · "+(m.label||mLabel(m.id))} onClose={onClose}>
     {seclab("Fixed income")}
     {baseRow("salary","💼","Salary",m.salaryIncome||0)}
+    {(+m.otherIncome>0) && baseRow("other","🏷️","Other income (tap to clear)",m.otherIncome)}
     <div style={{ margin:"16px 0 0" }}>{seclab("Income entries this month")}</div>
     {entries.length ? entries.map(t=><div key={t.id} onClick={()=>onEdit(t)} style={{ display:"flex", alignItems:"center", gap:11, padding:"12px 0", borderBottom:`1px solid ${T.border}`, cursor:"pointer" }}>
         <div style={{ width:36, height:36, borderRadius:10, background:T.incomeS, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17, flexShrink:0 }}>💵</div>
@@ -640,7 +641,7 @@ export default function BudgetView({ budget, setBudget }) {
       <div style={{ fontSize:11.5, fontWeight:600, textTransform:"uppercase", letterSpacing:".05em", opacity:.85 }}>Monthly budget</div>
       <div style={{ fontSize:30, fontWeight:800, letterSpacing:"-.02em", marginTop:2, fontVariantNumeric:"tabular-nums" }}>{INR(d.income)}</div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", gap:8, marginTop:4 }}>
-        <div style={{ fontSize:12, opacity:.9 }}>Salary {INR(m.salaryIncome)} · Other {INR(m.otherIncome)}</div>
+        <div style={{ fontSize:12, opacity:.9 }}>Salary {INR(m.salaryIncome)}{(+m.otherIncome>0)?` · Other ${INR(m.otherIncome)}`:""}{(() => { const n=(m.txns||[]).filter(t=>t.bucket==="income").length; return n?` · ${n} entr${n===1?"y":"ies"}`:""; })()}</div>
         <button onClick={()=>setModal({type:"income"})} style={{ background:"#ffffff2e", border:"none", color:"#fff", borderRadius:8, padding:"5px 13px", fontSize:11.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}>Income ›</button>
       </div>
     </div>
