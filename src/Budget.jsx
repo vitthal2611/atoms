@@ -255,8 +255,21 @@ function PickerSheet({ m, onPick, onNew, onClose }) {
 const pkBtn = { background:T.surf2, border:`1px solid ${T.border}`, borderRadius:14, padding:"12px 4px", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:5, fontFamily:"inherit" };
 const pkName = { fontSize:10.5, fontWeight:600, color:T.text2, textAlign:"center", lineHeight:1.2 };
 
+// Reusable "Import from CSV" button + result note. onImport(text) returns row count.
+function ImportCSVBtn({ onImport, hint }) {
+  const [imp,setImp]=useState("");
+  return <>
+    <label style={{ ...ghostBtn, width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:7, fontSize:14, cursor:"pointer" }}>
+      <Ic name="download" size={16} color={T.text2} style={{ transform:"rotate(180deg)" }} /> Import from CSV
+      <input type="file" accept=".csv,text/csv,text/plain" style={{ display:"none" }} onChange={e=>{ const f=e.target.files&&e.target.files[0]; if(f){ const rd=new FileReader(); rd.onload=()=>{ const n=onImport(String(rd.result||"")); setImp(n>0?`Imported ${n} row${n===1?"":"s"}.`:"No valid rows found — check the columns."); }; rd.readAsText(f); } e.target.value=""; }} />
+    </label>
+    {imp && <div style={{ fontSize:12, color:T.good, textAlign:"center", marginTop:8, fontWeight:600 }}>{imp}</div>}
+    {hint && <div style={{ fontSize:11.5, color:T.muted, textAlign:"center", marginTop:8, lineHeight:1.5 }}>{hint}</div>}
+  </>;
+}
+
 function IncomeSheet({ m, api, onImport, onAdd, onEdit, onClose }) {
-  const [editing,setEditing]=useState(null); const [tmp,setTmp]=useState(""); const [imp,setImp]=useState("");
+  const [editing,setEditing]=useState(null); const [tmp,setTmp]=useState("");
   const entries=[...(m.txns||[])].filter(t=>t.bucket==="income").sort((a,b)=>b.date.localeCompare(a.date));
   const total=(+m.salaryIncome||0)+(+m.otherIncome||0)+entries.reduce((a,t)=>a+(+t.amount||0),0);
   const start=k=>{ setEditing(k); setTmp(String(k==="salary"?(m.salaryIncome||0):(m.otherIncome||0))); };
@@ -283,14 +296,7 @@ function IncomeSheet({ m, api, onImport, onAdd, onEdit, onClose }) {
     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", paddingTop:12, marginTop:4, borderTop:`2px solid ${T.border}`, fontSize:15, fontWeight:800 }}>
       <span>Total income</span><span style={{ color:T.good, fontVariantNumeric:"tabular-nums" }}>{INR(total)}</span></div>
     <button onClick={onAdd} style={{ ...ghostBtn, width:"100%", background:T.incomeS, color:T.good, borderColor:T.good+"4d", marginTop:14 }}>＋ Add income entry</button>
-    {onImport && <>
-      <label style={{ ...ghostBtn, width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:7, marginTop:9, fontSize:14, cursor:"pointer" }}>
-        <Ic name="download" size={16} color={T.text2} style={{ transform:"rotate(180deg)" }} /> Import from CSV
-        <input type="file" accept=".csv,text/csv,text/plain" style={{ display:"none" }} onChange={e=>{ const f=e.target.files&&e.target.files[0]; if(f){ const rd=new FileReader(); rd.onload=()=>{ const n=onImport(String(rd.result||"")); setImp(n>0?`Imported ${n} row${n===1?"":"s"}.`:"No valid rows found — check the columns."); }; rd.readAsText(f); } e.target.value=""; }} />
-      </label>
-      {imp && <div style={{ fontSize:12, color:T.good, textAlign:"center", marginTop:8, fontWeight:600 }}>{imp}</div>}
-      <div style={{ fontSize:11.5, color:T.muted, textAlign:"center", marginTop:8, lineHeight:1.5 }}>Income row format: <b>Month,income,,Salary,Income,&lt;amount&gt;</b> (one per month). Fills income, budgets & spends for every month in the file.</div>
-    </>}
+    {onImport && <div style={{ marginTop:9 }}><ImportCSVBtn onImport={onImport} hint={<>Income row: <b>Month,income,,Salary,Income,&lt;amount&gt;</b> — one per month, for Salary and/or Other.</>} /></div>}
   </Sheet>;
 }
 
@@ -375,7 +381,7 @@ function GoalSheet({ m, cat, onAdd, onEdit, onClose }) {
   </Sheet>;
 }
 
-function TransactionsSheet({ m, onAdd, onEdit, onClear, onClose }) {
+function TransactionsSheet({ m, onAdd, onEdit, onClear, onImport, onClose }) {
   const [filter,setFilter]=useState("all"); const [envF,setEnvF]=useState("all"); const [clr,setClr]=useState(false);
   const cat=id=>(m.categories||[]).find(c=>c.id===id);
   const all=[...(m.txns||[])].sort((a,b)=>b.date.localeCompare(a.date));
@@ -407,6 +413,7 @@ function TransactionsSheet({ m, onAdd, onEdit, onClear, onClose }) {
           <div style={{ display:"flex", gap:10 }}><button onClick={()=>setClr(false)} style={{ ...ghostBtn, flex:1, padding:11 }}>Cancel</button>
             <button onClick={()=>{ onClear(); setClr(false); }} style={{ flex:1, background:T.bad, color:"#fff", border:"none", borderRadius:13, padding:11, fontFamily:"inherit", fontWeight:800, fontSize:14, cursor:"pointer" }}>Delete all</button></div></div>
       : <button onClick={()=>setClr(true)} style={{ display:"block", margin:"12px auto 0", background:"none", border:"none", color:T.bad, fontSize:12.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>Clear all transactions</button>)}
+    {onImport && <div style={{ marginTop:16, paddingTop:14, borderTop:`1px solid ${T.border}` }}><ImportCSVBtn onImport={onImport} hint={<>Spend row: <b>Month,spend,Date,Envelope,Bucket,Amount,Note</b>. Imports spends (and budgets/income) for every month in the file.</>} /></div>}
   </Sheet>;
 }
 
@@ -659,6 +666,7 @@ export default function BudgetView({ budget, setBudget }) {
     {bucketSec("want")}
     {bucketSec("save")}
     {editMode && <button onClick={()=>setModal({type:"cat"})} style={{ ...ghostBtn, width:"100%", marginTop:11 }}>＋ New envelope</button>}
+    {editMode && <div style={{ marginTop:9 }}><ImportCSVBtn onImport={importCSV} hint={<>Budget row: <b>Month,budget,,Envelope,Bucket,Amount</b> (sets the envelope's allocation).</>} /></div>}
 
     {/* recent spends */}
     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", margin:"20px 2px 8px" }}>
@@ -678,7 +686,7 @@ export default function BudgetView({ budget, setBudget }) {
     {modal?.type==="txns"   && <TransactionsSheet m={m}
        onAdd={()=>setModal({type:"picker", back:{type:"txns"}})}
        onEdit={t=>setModal({type:"spend", env:(m.categories||[]).find(c=>c.id===t.categoryId)||{id:"",name:"Income",bucket:t.bucket}, initial:t, back:{type:"txns"}})}
-       onClear={api.clearTxns} onClose={()=>setModal(null)} />}
+       onClear={api.clearTxns} onImport={importCSV} onClose={()=>setModal(null)} />}
     {modal?.type==="envtxns" && <EnvTxnSheet m={m} cat={modal.cat}
        onAdd={()=>setModal({type:"spend", env:modal.cat, back:{type:"envtxns", cat:modal.cat}})}
        onEdit={t=>setModal({type:"spend", env:modal.cat, initial:t, back:{type:"envtxns", cat:modal.cat}})}
