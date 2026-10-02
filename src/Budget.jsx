@@ -94,6 +94,55 @@ function calc(m) {
 }
 const stOf = (s,b) => { const u=pct(s,b); return u>100?"bad":u>=80?"warn":"good"; };
 
+// ═══ CSV IMPORT / EXPORT ═══════════════════════════════════════════════════════
+// Template columns: Month,Type,Date,Envelope,Bucket,Amount,Note
+//   Type income → sets Salary/Other for the month  (Envelope = Salary | Other)
+//   Type budget → sets an envelope's monthly allocation (Bucket = Need|Want|Save)
+//   Type spend  → a transaction (Date YYYY-MM-DD, Envelope, Bucket, Amount, Note)
+const normBucket = s => { s=(s||"").trim().toLowerCase(); return s.startsWith("need")?"need":s.startsWith("want")?"want":s.startsWith("sav")?"save":s.startsWith("inc")?"income":"need"; };
+const mIdOf = s => { s=(s||"").trim(); let m=s.match(/^(\d{4})[-/](\d{1,2})$/); if(m) return m[1]+"-"+String(+m[2]).padStart(2,"0");
+  m=s.match(/^([A-Za-z]{3,})\.?\s+(\d{4})$/); if(m){ const i=MON.findIndex(x=>x.toLowerCase()===m[1].slice(0,3).toLowerCase()); if(i>=0) return m[2]+"-"+String(i+1).padStart(2,"0"); } return ""; };
+const parseCSV = text => { const rows=[]; let row=[], f="", q=false;
+  for(let i=0;i<text.length;i++){ const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){ f+='"'; i++; } else q=false; } else f+=c; }
+    else if(c==='"') q=true;
+    else if(c===','){ row.push(f); f=""; }
+    else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n') i++; row.push(f); if(row.some(x=>x.trim()!=="")) rows.push(row); row=[]; f=""; }
+    else f+=c; }
+  if(f!==""||row.length){ row.push(f); if(row.some(x=>x.trim()!=="")) rows.push(row); } return rows; };
+const parseBudgetCSV = text => { const rows=parseCSV(text); if(!rows.length) return [];
+  const head=rows[0].map(h=>h.trim().toLowerCase()); const hasHead=head.includes("month");
+  const idx=n=>head.indexOf(n); const DEF={month:0,type:1,date:2,envelope:3,bucket:4,amount:5,note:6};
+  const col=(r,n)=>{ const i=hasHead?idx(n):DEF[n]; return i>=0&&i<r.length?String(r[i]).trim():""; };
+  const out=[];
+  for(let k=hasHead?1:0;k<rows.length;k++){ const r=rows[k]; const month=mIdOf(col(r,"month")); if(!month) continue;
+    out.push({ month, type:col(r,"type").toLowerCase(), date:col(r,"date"), envelope:col(r,"envelope"), bucket:col(r,"bucket"), amount:+String(col(r,"amount")).replace(/[^0-9.\-]/g,"")||0, note:col(r,"note") }); }
+  return out; };
+const importBudgetRows = (budget, rows) => { const months={ ...(budget?.months||{}) };
+  const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+  for(const r of rows){ const id=r.month;
+    const base=months[id]||{ id, label:mLabel(id), status:"committed", salaryIncome:0, otherIncome:0, categories:[], savingsActual:{}, txns:[] };
+    const mm={ ...base, categories:(base.categories||[]).map(c=>({ ...c })), txns:[...(base.txns||[])] };
+    const bk=normBucket(r.bucket);
+    const ensure=(name,bucket)=>{ let c=mm.categories.find(x=>(x.name||"").toLowerCase()===(name||"").toLowerCase()); if(!c){ c={ id:"c"+uid(), name:name||"Envelope", bucket:bucket||"need", budget:0 }; mm.categories.push(c); } return c; };
+    const type=r.type||(r.date?"spend":(bk==="income"||/salary|other/i.test(r.envelope)?"income":"budget"));
+    if(type==="income"){ if(/other/i.test(r.envelope)) mm.otherIncome=r.amount; else mm.salaryIncome=r.amount; }
+    else if(type==="budget"){ const c=ensure(r.envelope, bk==="income"?"need":bk); c.budget=r.amount; if(bk!=="income") c.bucket=bk; }
+    else { if(bk==="income"){ mm.txns.push({ id:"t"+uid(), date:r.date||id+"-01", desc:r.note||"Income", amount:r.amount, categoryId:"", bucket:"income" }); }
+      else { const c=ensure(r.envelope, bk); mm.txns.push({ id:"t"+uid(), date:(r.date&&r.date.length>=7)?r.date:id+"-01", desc:r.note||"", amount:r.amount, categoryId:c.id, bucket:c.bucket }); } }
+    months[id]=mm; }
+  const active=(budget?.active&&months[budget.active])?budget.active:Object.keys(months).sort().pop();
+  return { ...(budget||{}), active, months }; };
+const budgetToCSV = budget => { const esc=s=>{ s=String(s==null?"":s); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
+  const BL={need:"Need",want:"Want",save:"Save",income:"Income"};
+  const lines=[["Month","Type","Date","Envelope","Bucket","Amount","Note"]];
+  Object.keys(budget?.months||{}).sort().forEach(id=>{ const mm=budget.months[id];
+    if(+mm.salaryIncome>0) lines.push([id,"income","","Salary","Income",Math.round(mm.salaryIncome),""]);
+    if(+mm.otherIncome>0) lines.push([id,"income","","Other","Income",Math.round(mm.otherIncome),""]);
+    (mm.categories||[]).forEach(c=>lines.push([id,"budget","",c.name,BL[c.bucket]||"Need",Math.round(+c.budget||0),""]));
+    (mm.txns||[]).forEach(t=>{ const c=(mm.categories||[]).find(x=>x.id===t.categoryId); lines.push([id,"spend",t.date||"",c?c.name:(t.bucket==="income"?"Income":""),BL[t.bucket]||"Need",Math.round(+t.amount||0),t.desc||""]); }); });
+  return lines.map(r=>r.map(esc).join(",")).join("\r\n"); };
+
 // ── shared bits ──
 const card = extra => ({ background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, padding:14, boxShadow:T.shadow, ...(extra||{}) });
 const fld = { width:"100%", background:T.surf2, border:`1px solid ${T.border}`, borderRadius:11, padding:12, color:T.text, fontFamily:"inherit", fontSize:15, outline:"none", boxSizing:"border-box" };
@@ -261,8 +310,8 @@ function CatSheet({ api, initial, onClose }) {
   </Sheet>;
 }
 
-function MonthPicker({ budget, onPick, onCreate, onDelete, onClose }) {
-  const [del,setDel]=useState(null);
+function MonthPicker({ budget, onPick, onCreate, onDelete, onImport, onExport, onClose }) {
+  const [del,setDel]=useState(null); const [msg,setMsg]=useState("");
   const ids=Object.keys(budget.months).sort(); const nextId=mShift(ids[ids.length-1],1);
   const incomeOf=mm=>(+mm.salaryIncome||0)+(+mm.otherIncome||0)+((mm.txns||[]).filter(t=>t.bucket==="income").reduce((a,t)=>a+(+t.amount||0),0));
   return <Sheet title="Your budgets" onClose={onClose}>
@@ -281,6 +330,17 @@ function MonthPicker({ budget, onPick, onCreate, onDelete, onClose }) {
         {ids.length>1 && <button onClick={()=>setDel(id)} aria-label={"Delete "+(mm.label||mLabel(id))} style={{ background:"none", border:"none", color:T.muted, fontSize:15, cursor:"pointer", padding:"4px 2px", flexShrink:0 }}>🗑️</button>}
       </div>; })}
     <button onClick={onCreate} style={{ width:"100%", marginTop:12, background:T.surf2, border:`1px dashed ${T.primary}72`, color:T.primary, borderRadius:13, padding:14, fontFamily:"inherit", fontWeight:800, fontSize:14, cursor:"pointer" }}>＋ Create {mLabel(nextId)}</button>
+    <div style={{ height:1, background:T.border, margin:"16px 0 12px" }} />
+    <div style={{ fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".04em", margin:"0 2px 8px" }}>Import / export</div>
+    <div style={{ display:"flex", gap:8 }}>
+      <label style={{ ...ghostBtn, flex:1, padding:12, fontSize:13.5, display:"flex", alignItems:"center", justifyContent:"center", gap:6, cursor:"pointer" }}>
+        <Ic name="download" size={16} color={T.text2} style={{ transform:"rotate(180deg)" }} /> Import CSV
+        <input type="file" accept=".csv,text/csv,text/plain" style={{ display:"none" }} onChange={e=>{ const f=e.target.files&&e.target.files[0]; if(f){ const rd=new FileReader(); rd.onload=()=>{ const n=onImport(String(rd.result||"")); setMsg(n>0?`Imported ${n} row${n===1?"":"s"}.`:"No valid rows found — check the columns."); }; rd.readAsText(f); } e.target.value=""; }} />
+      </label>
+      <button onClick={onExport} style={{ ...ghostBtn, flex:1, padding:12, fontSize:13.5, display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}><Ic name="download" size={16} color={T.text2} /> Export CSV</button>
+    </div>
+    {msg && <div style={{ fontSize:12, color:T.good, textAlign:"center", marginTop:9, fontWeight:600 }}>{msg}</div>}
+    <div style={{ fontSize:11.5, color:T.muted, textAlign:"center", marginTop:9, lineHeight:1.5 }}>Columns: Month, Type (income/budget/spend), Date, Envelope, Bucket, Amount, Note. Export then edit to see the format.</div>
   </Sheet>;
 }
 
@@ -462,7 +522,10 @@ export default function BudgetView({ budget, setBudget }) {
     editTxn:(id,p)=>updateMonth(mm=>({ ...mm, txns:mm.txns.map(t=>t.id===id?{ ...t, ...p }:t) })),
     deleteTxn:id=>updateMonth(mm=>({ ...mm, txns:mm.txns.filter(t=>t.id!==id) })),
     clearTxns:()=>updateMonth(mm=>({ ...mm, txns:[] })),
+    importRows:rows=>setBudget(b=>importBudgetRows(b, rows)),
   };
+  const importCSV = text => { const rows=parseBudgetCSV(text); if(rows.length) api.importRows(rows); return rows.length; };
+  const exportCSV = () => { const u=URL.createObjectURL(new Blob([budgetToCSV(budget)],{type:"text/csv;charset=utf-8"})); const a=document.createElement("a"); a.href=u; a.download="atoms-budget-export.csv"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),1500); };
   // One-time migration: older data funded savings via savingsActual (mark-funded).
   // Convert each into an opening Save contribution so savings are transaction-based.
   useEffect(() => {
@@ -614,7 +677,7 @@ export default function BudgetView({ budget, setBudget }) {
        onAdd={()=>setModal({type:"spend", env:modal.cat, back:{type:"goal", cat:modal.cat}})}
        onEdit={t=>setModal({type:"spend", env:modal.cat, initial:t, back:{type:"goal", cat:modal.cat}})}
        onClose={()=>setModal(null)} />}
-    {modal?.type==="months" && <MonthPicker budget={budget} onPick={id=>{ api.setActive(id); setModal(null); }} onCreate={()=>{ api.createNext(); setModal(null); }} onDelete={api.deleteMonth} onClose={()=>setModal(null)} />}
+    {modal?.type==="months" && <MonthPicker budget={budget} onPick={id=>{ api.setActive(id); setModal(null); }} onCreate={()=>{ api.createNext(); setModal(null); }} onDelete={api.deleteMonth} onImport={importCSV} onExport={exportCSV} onClose={()=>setModal(null)} />}
     {modal?.type==="cat"    && <CatSheet api={api} initial={modal.initial} onClose={(cat)=>setModal(cat&&modal.spendAfter?{type:"spend", env:cat}:null)} />}
     {modal?.type==="report" && <ReportSheet m={m} onClose={()=>setModal(null)} />}
   </div>;
