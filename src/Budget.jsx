@@ -149,7 +149,7 @@ const budgetToCSV = budget => { const esc=s=>{ s=String(s==null?"":s); return /[
     if(+mm.salaryIncome>0) lines.push([id,"income","","Salary","Income",Math.round(mm.salaryIncome),""]);
     if(+mm.otherIncome>0) lines.push([id,"income","","Other","Income",Math.round(mm.otherIncome),""]);
     (mm.categories||[]).forEach(c=>lines.push([id,"budget","",c.name,BL[c.bucket]||"Need",Math.round(+c.budget||0),""]));
-    (mm.txns||[]).forEach(t=>{ if(t.bucket==="income"){ lines.push([id,"income","",t.desc||"Income","Income",Math.round(+t.amount||0),""]); return; }
+    (mm.txns||[]).forEach(t=>{ if(t.bucket==="income"){ lines.push([id,"income",t.date||"",t.desc||"Income","Income",Math.round(+t.amount||0),""]); return; }
       const c=(mm.categories||[]).find(x=>x.id===t.categoryId); lines.push([id,"spend",t.date||"",c?c.name:"",BL[t.bucket]||"Need",Math.round(+t.amount||0),t.desc||""]); }); });
   return lines.map(r=>r.map(esc).join(",")).join("\r\n"); };
 
