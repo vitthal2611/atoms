@@ -544,6 +544,7 @@ function ReportSheet({ m, onClose }) {
 export default function BudgetView({ budget, setBudget }) {
   const [modal, setModal] = useState(null);   // {type, ...}
   const [editMode, setEditMode] = useState(false);
+  const [impNote, setImpNote] = useState("");
   const active = budget?.active; const m = budget?.months?.[active];
   const curMonth = today().slice(0,7);
   const updateMonth = fn => setBudget(b => ({ ...b, months:{ ...b.months, [b.active]:fn(b.months[b.active]) } }));
@@ -683,9 +684,12 @@ export default function BudgetView({ budget, setBudget }) {
     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", margin:"20px 2px 8px" }}>
       <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:13, fontWeight:800 }}><Ic name="mail" size={16} color={T.text} /> Envelopes</span>
       <div style={{ display:"flex", gap:8 }}>
+        <label style={{ ...pill(false), cursor:"pointer" }}><Ic name="download" size={14} color={T.text2} style={{ transform:"rotate(180deg)" }} /> Import
+          <input type="file" accept=".csv,text/csv,text/plain" style={{ display:"none" }} onChange={e=>{ const f=e.target.files&&e.target.files[0]; if(f){ const rd=new FileReader(); rd.onload=()=>{ const n=importCSV(String(rd.result||"")); setImpNote(n>0?`Imported ${n} row${n===1?"":"s"}`:"No valid rows found — check the columns"); setTimeout(()=>setImpNote(""),4500); }; rd.readAsText(f); } e.target.value=""; }} /></label>
         <button onClick={()=>setModal({type:"report"})} style={pill(false)}><Ic name="chart" size={14} color={T.text2} /> Report</button>
         <button onClick={()=>setEditMode(v=>!v)} style={pill(editMode)}><Ic name={editMode?"check":"pencil"} size={14} color={editMode?T.primary:T.text2} /> {editMode?"Done":"Edit"}</button></div>
     </div>
+    {impNote && <div style={{ fontSize:12, color:T.good, fontWeight:700, textAlign:"right", margin:"-2px 2px 8px" }}>{impNote}</div>}
     {editMode && <div style={{ fontSize:12, color:T.muted, margin:"0 2px 8px" }}>Tap an envelope to edit its budget & icon, or add a new one below.</div>}
     {recentCats.length>0 && restCats.length>0 && <div style={sub}>⭐ Recently used</div>}
     {recentCats.length>0 && <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>{recentCats.map(envCard)}</div>}
