@@ -310,9 +310,9 @@ function CatSheet({ api, initial, onClose }) {
   </Sheet>;
 }
 
-function MonthPicker({ budget, onPick, onCreate, onDelete, onImport, onExport, onClose }) {
+function MonthPicker({ budget, onPick, onCreate, onCreatePrev, onDelete, onImport, onExport, onClose }) {
   const [del,setDel]=useState(null); const [msg,setMsg]=useState("");
-  const ids=Object.keys(budget.months).sort(); const nextId=mShift(ids[ids.length-1],1);
+  const ids=Object.keys(budget.months).sort(); const nextId=mShift(ids[ids.length-1],1); const prevId=mShift(ids[0],-1);
   const incomeOf=mm=>(+mm.salaryIncome||0)+(+mm.otherIncome||0)+((mm.txns||[]).filter(t=>t.bucket==="income").reduce((a,t)=>a+(+t.amount||0),0));
   return <Sheet title="Your budgets" onClose={onClose}>
     <div style={{ fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".04em", margin:"2px 2px 6px" }}>{ids.length} month{ids.length===1?"":"s"} created</div>
@@ -329,7 +329,10 @@ function MonthPicker({ budget, onPick, onCreate, onDelete, onImport, onExport, o
           : <span style={{ fontSize:10.5, fontWeight:800, padding:"2px 8px", borderRadius:20, background:mm.status==="committed"?T.goodS:T.warnS, color:mm.status==="committed"?T.good:T.warn }}>{mm.status==="committed"?"Committed":"Draft"}</span>}
         {ids.length>1 && <button onClick={()=>setDel(id)} aria-label={"Delete "+(mm.label||mLabel(id))} style={{ background:"none", border:"none", color:T.muted, fontSize:15, cursor:"pointer", padding:"4px 2px", flexShrink:0 }}>🗑️</button>}
       </div>; })}
-    <button onClick={onCreate} style={{ width:"100%", marginTop:12, background:T.surf2, border:`1px dashed ${T.primary}72`, color:T.primary, borderRadius:13, padding:14, fontFamily:"inherit", fontWeight:800, fontSize:14, cursor:"pointer" }}>＋ Create {mLabel(nextId)}</button>
+    <div style={{ display:"flex", gap:8, marginTop:12 }}>
+      <button onClick={onCreatePrev} style={{ flex:1, background:T.surf2, border:`1px dashed ${T.primary}72`, color:T.primary, borderRadius:13, padding:"14px 8px", fontFamily:"inherit", fontWeight:800, fontSize:13.5, cursor:"pointer" }}>＋ {mLabel(prevId)}<div style={{ fontSize:10.5, fontWeight:600, color:T.muted, marginTop:2 }}>earlier month</div></button>
+      <button onClick={onCreate} style={{ flex:1, background:T.surf2, border:`1px dashed ${T.primary}72`, color:T.primary, borderRadius:13, padding:"14px 8px", fontFamily:"inherit", fontWeight:800, fontSize:13.5, cursor:"pointer" }}>＋ {mLabel(nextId)}<div style={{ fontSize:10.5, fontWeight:600, color:T.muted, marginTop:2 }}>next month</div></button>
+    </div>
     <div style={{ height:1, background:T.border, margin:"16px 0 12px" }} />
     <div style={{ fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".04em", margin:"0 2px 8px" }}>Import / export</div>
     <div style={{ display:"flex", gap:8 }}>
@@ -512,6 +515,9 @@ export default function BudgetView({ budget, setBudget }) {
     createNext:()=>setBudget(b=>{ const list=Object.keys(b.months).sort(); const last=list[list.length-1]; const id=mShift(last,1);
       if(b.months[id]) return { ...b, active:id };
       const src=b.months[last]; return { ...b, months:{ ...b.months, [id]:{ id, label:mLabel(id), status:"draft", salaryIncome:src.salaryIncome, otherIncome:src.otherIncome, categories:src.categories.map(c=>({ ...c })), savingsActual:{}, txns:[] } }, active:id }; }),
+    createPrev:()=>setBudget(b=>{ const list=Object.keys(b.months).sort(); const first=list[0]; const id=mShift(first,-1);
+      if(b.months[id]) return { ...b, active:id };
+      const src=b.months[first]; return { ...b, months:{ ...b.months, [id]:{ id, label:mLabel(id), status:"draft", salaryIncome:src.salaryIncome, otherIncome:src.otherIncome, categories:src.categories.map(c=>({ ...c })), savingsActual:{}, txns:[] } }, active:id }; }),
     commit:()=>updateMonth(mm=>({ ...mm, status:"committed" })),
     setIncome:(s,o)=>updateMonth(mm=>({ ...mm, salaryIncome:s, otherIncome:o })),
     addCategory:c=>updateMonth(mm=>({ ...mm, categories:[...mm.categories, { id:"c"+Date.now(), ...c }] })),
@@ -677,7 +683,7 @@ export default function BudgetView({ budget, setBudget }) {
        onAdd={()=>setModal({type:"spend", env:modal.cat, back:{type:"goal", cat:modal.cat}})}
        onEdit={t=>setModal({type:"spend", env:modal.cat, initial:t, back:{type:"goal", cat:modal.cat}})}
        onClose={()=>setModal(null)} />}
-    {modal?.type==="months" && <MonthPicker budget={budget} onPick={id=>{ api.setActive(id); setModal(null); }} onCreate={()=>{ api.createNext(); setModal(null); }} onDelete={api.deleteMonth} onImport={importCSV} onExport={exportCSV} onClose={()=>setModal(null)} />}
+    {modal?.type==="months" && <MonthPicker budget={budget} onPick={id=>{ api.setActive(id); setModal(null); }} onCreate={()=>{ api.createNext(); setModal(null); }} onCreatePrev={()=>{ api.createPrev(); setModal(null); }} onDelete={api.deleteMonth} onImport={importCSV} onExport={exportCSV} onClose={()=>setModal(null)} />}
     {modal?.type==="cat"    && <CatSheet api={api} initial={modal.initial} onClose={(cat)=>setModal(cat&&modal.spendAfter?{type:"spend", env:cat}:null)} />}
     {modal?.type==="report" && <ReportSheet m={m} onClose={()=>setModal(null)} />}
   </div>;
