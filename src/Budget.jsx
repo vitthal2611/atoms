@@ -405,7 +405,7 @@ function GoalSheet({ m, cat, onAdd, onEdit, onClose }) {
   </Sheet>;
 }
 
-function TransactionsSheet({ m, onAdd, onEdit, onClear, onImport, onClose }) {
+function TransactionsSheet({ m, onAdd, onEdit, onClear, onDelete, onImport, onClose }) {
   const [filter,setFilter]=useState("all"); const [envF,setEnvF]=useState("all"); const [clr,setClr]=useState(false);
   const cat=id=>(m.categories||[]).find(c=>c.id===id);
   const all=[...(m.txns||[])].sort((a,b)=>b.date.localeCompare(a.date));
@@ -431,12 +431,17 @@ function TransactionsSheet({ m, onAdd, onEdit, onClear, onImport, onClose }) {
       </div>; })
       : <div style={{ fontSize:13, color:T.muted, textAlign:"center", padding:"20px 0" }}>No transactions.</div>}
     <div style={{ fontSize:12, color:T.muted, textAlign:"center", marginTop:12 }}>{all.length} transactions · spent {INR(spent)} · income +{INR(inc)}</div>
-    {all.length>0 && (clr
+    {(() => { const filtered = filter!=="all" || envF!=="all";
+      const label = envF!=="all" ? (cat(envF)?.name||"") : filter!=="all" ? (filter==="income"?"income":(BK[filter]?.l||filter)) : "";
+      const del = () => { if(onDelete) onDelete(items.map(t=>t.id)); else if(!filtered) onClear(); setClr(false); };
+      if(!items.length) return null;
+      return clr
       ? <div style={{ marginTop:12, background:T.badS, border:`1px solid ${T.bad}55`, borderRadius:11, padding:12, textAlign:"center" }}>
-          <div style={{ fontSize:12.5, color:T.bad, fontWeight:600, marginBottom:10 }}>Delete all {all.length} transactions for {m.label||mLabel(m.id)}? This can't be undone.</div>
+          <div style={{ fontSize:12.5, color:T.bad, fontWeight:600, marginBottom:10 }}>Delete {items.length} {label} transaction{items.length===1?"":"s"} for {m.label||mLabel(m.id)}? This can't be undone.</div>
           <div style={{ display:"flex", gap:10 }}><button onClick={()=>setClr(false)} style={{ ...ghostBtn, flex:1, padding:11 }}>Cancel</button>
-            <button onClick={()=>{ onClear(); setClr(false); }} style={{ flex:1, background:T.bad, color:"#fff", border:"none", borderRadius:13, padding:11, fontFamily:"inherit", fontWeight:800, fontSize:14, cursor:"pointer" }}>Delete all</button></div></div>
-      : <button onClick={()=>setClr(true)} style={{ display:"block", margin:"12px auto 0", background:"none", border:"none", color:T.bad, fontSize:12.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>Clear all transactions</button>)}
+            <button onClick={del} style={{ flex:1, background:T.bad, color:"#fff", border:"none", borderRadius:13, padding:11, fontFamily:"inherit", fontWeight:800, fontSize:14, cursor:"pointer" }}>Delete {items.length}</button></div></div>
+      : <button onClick={()=>setClr(true)} style={{ display:"block", margin:"12px auto 0", background:"none", border:"none", color:T.bad, fontSize:12.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>{filtered?`Delete these ${items.length} ${label} transactions`:"Clear all transactions"}</button>;
+    })()}
     {onImport && <div style={{ marginTop:16, paddingTop:14, borderTop:`1px solid ${T.border}` }}><ImportCSVBtn onImport={onImport} hint={<>Spend row: <b>Month,spend,Date,Envelope,Bucket,Amount,Note</b>. Imports spends (and budgets/income) for every month in the file.</>} /></div>}
   </Sheet>;
 }
@@ -571,6 +576,7 @@ export default function BudgetView({ budget, setBudget }) {
     editTxn:(id,p)=>updateMonth(mm=>({ ...mm, txns:mm.txns.map(t=>t.id===id?{ ...t, ...p }:t) })),
     deleteTxn:id=>updateMonth(mm=>({ ...mm, txns:mm.txns.filter(t=>t.id!==id) })),
     clearTxns:()=>updateMonth(mm=>({ ...mm, txns:[] })),
+    deleteTxns:(ids)=>{ const s=new Set(ids); updateMonth(mm=>({ ...mm, txns:(mm.txns||[]).filter(t=>!s.has(t.id)) })); },
     clearIncome:()=>updateMonth(mm=>({ ...mm, otherIncome:0, txns:(mm.txns||[]).filter(t=>t.bucket!=="income") })),
     importRows:rows=>setBudget(b=>importBudgetRows(b, rows)),
   };
@@ -719,7 +725,7 @@ export default function BudgetView({ budget, setBudget }) {
     {modal?.type==="txns"   && <TransactionsSheet m={m}
        onAdd={()=>setModal({type:"picker", back:{type:"txns"}})}
        onEdit={t=>setModal({type:"spend", env:(m.categories||[]).find(c=>c.id===t.categoryId)||{id:"",name:"Income",bucket:t.bucket}, initial:t, back:{type:"txns"}})}
-       onClear={api.clearTxns} onImport={importCSV} onClose={()=>setModal(null)} />}
+       onClear={api.clearTxns} onDelete={api.deleteTxns} onImport={importCSV} onClose={()=>setModal(null)} />}
     {modal?.type==="envtxns" && <EnvTxnSheet m={m} cat={modal.cat}
        onAdd={()=>setModal({type:"spend", env:modal.cat, back:{type:"envtxns", cat:modal.cat}})}
        onEdit={t=>setModal({type:"spend", env:modal.cat, initial:t, back:{type:"envtxns", cat:modal.cat}})}
