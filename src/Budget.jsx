@@ -273,7 +273,7 @@ function ImportCSVBtn({ onImport, hint }) {
 }
 
 function IncomeSheet({ m, api, onImport, onAdd, onEdit, onClose }) {
-  const [editing,setEditing]=useState(null); const [tmp,setTmp]=useState("");
+  const [editing,setEditing]=useState(null); const [tmp,setTmp]=useState(""); const [clr,setClr]=useState(false);
   const entries=[...(m.txns||[])].filter(t=>t.bucket==="income").sort((a,b)=>b.date.localeCompare(a.date));
   const total=(+m.salaryIncome||0)+(+m.otherIncome||0)+entries.reduce((a,t)=>a+(+t.amount||0),0);
   const start=k=>{ setEditing(k); setTmp(String(k==="salary"?(m.salaryIncome||0):(m.otherIncome||0))); };
@@ -300,7 +300,13 @@ function IncomeSheet({ m, api, onImport, onAdd, onEdit, onClose }) {
     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", paddingTop:12, marginTop:4, borderTop:`2px solid ${T.border}`, fontSize:15, fontWeight:800 }}>
       <span>Total income</span><span style={{ color:T.good, fontVariantNumeric:"tabular-nums" }}>{INR(total)}</span></div>
     <button onClick={onAdd} style={{ ...ghostBtn, width:"100%", background:T.incomeS, color:T.good, borderColor:T.good+"4d", marginTop:14 }}>＋ Add income entry</button>
-    {onImport && <div style={{ marginTop:9 }}><ImportCSVBtn onImport={onImport} hint={<>Income row: <b>Month,income,,Salary,Income,&lt;amount&gt;</b> — one per month, for Salary and/or Other.</>} /></div>}
+    {entries.length>0 && (clr
+      ? <div style={{ marginTop:12, background:T.badS, border:`1px solid ${T.bad}55`, borderRadius:11, padding:12, textAlign:"center" }}>
+          <div style={{ fontSize:12.5, color:T.bad, fontWeight:600, marginBottom:10 }}>Delete all {entries.length} income {entries.length===1?"entry":"entries"} for {m.label||mLabel(m.id)}? Salary & Other are kept. This can't be undone.</div>
+          <div style={{ display:"flex", gap:10 }}><button onClick={()=>setClr(false)} style={{ ...ghostBtn, flex:1, padding:11 }}>Cancel</button>
+            <button onClick={()=>{ api.clearIncome(); setClr(false); }} style={{ flex:1, background:T.bad, color:"#fff", border:"none", borderRadius:13, padding:11, fontFamily:"inherit", fontWeight:800, fontSize:14, cursor:"pointer" }}>Delete all</button></div></div>
+      : <button onClick={()=>setClr(true)} style={{ display:"block", margin:"12px auto 0", background:"none", border:"none", color:T.bad, fontSize:12.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>Clear all income entries</button>)}
+    {onImport && <div style={{ marginTop:14 }}><ImportCSVBtn onImport={onImport} hint={<>Income row: <b>Month,income,,Salary,Income,&lt;amount&gt;</b> — one per month, for Salary and/or Other.</>} /></div>}
   </Sheet>;
 }
 
@@ -547,6 +553,7 @@ export default function BudgetView({ budget, setBudget }) {
     editTxn:(id,p)=>updateMonth(mm=>({ ...mm, txns:mm.txns.map(t=>t.id===id?{ ...t, ...p }:t) })),
     deleteTxn:id=>updateMonth(mm=>({ ...mm, txns:mm.txns.filter(t=>t.id!==id) })),
     clearTxns:()=>updateMonth(mm=>({ ...mm, txns:[] })),
+    clearIncome:()=>updateMonth(mm=>({ ...mm, txns:(mm.txns||[]).filter(t=>t.bucket!=="income") })),
     importRows:rows=>setBudget(b=>importBudgetRows(b, rows)),
   };
   const importCSV = text => { const rows=parseBudgetCSV(text); if(rows.length) api.importRows(rows); return rows.length; };
