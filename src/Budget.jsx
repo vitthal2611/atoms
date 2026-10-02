@@ -340,7 +340,7 @@ function CatSheet({ api, initial, onClose }) {
   </Sheet>;
 }
 
-function MonthPicker({ budget, onPick, onCreate, onCreatePrev, onCreateMonth, onDelete, onImport, onExport, onClose }) {
+function MonthPicker({ budget, onPick, onCreate, onCreatePrev, onCreateMonth, onDelete, onImport, onExport, onExportMonth, onClose }) {
   const [del,setDel]=useState(null); const [msg,setMsg]=useState(""); const [pick,setPick]=useState("");
   const ids=Object.keys(budget.months).sort(); const nextId=mShift(ids[ids.length-1],1); const prevId=mShift(ids[0],-1);
   const incomeOf=mm=>(+mm.salaryIncome||0)+(+mm.otherIncome||0)+((mm.txns||[]).filter(t=>t.bucket==="income").reduce((a,t)=>a+(+t.amount||0),0));
@@ -357,6 +357,7 @@ function MonthPicker({ budget, onPick, onCreate, onCreatePrev, onCreateMonth, on
           <div style={{ flex:1, minWidth:0 }}><div style={{ fontWeight:700, fontSize:15 }}>{mm.label||mLabel(id)}</div><div style={{ fontSize:11.5, color:T.muted, fontVariantNumeric:"tabular-nums" }}>{INR(incomeOf(mm))} budget</div></div></div>
         {active ? <span style={{ color:T.primary, fontWeight:800 }}>✓</span>
           : <span style={{ fontSize:10.5, fontWeight:800, padding:"2px 8px", borderRadius:20, background:mm.status==="committed"?T.goodS:T.warnS, color:mm.status==="committed"?T.good:T.warn }}>{mm.status==="committed"?"Committed":"Draft"}</span>}
+        <button onClick={()=>onExportMonth(id)} aria-label={"Export "+(mm.label||mLabel(id))} title="Export this month" style={{ background:"none", border:"none", color:T.muted, cursor:"pointer", padding:"4px 3px", flexShrink:0, display:"flex", alignItems:"center" }}><Ic name="download" size={16} color={T.muted} /></button>
         {ids.length>1 && <button onClick={()=>setDel(id)} aria-label={"Delete "+(mm.label||mLabel(id))} style={{ background:"none", border:"none", color:T.muted, fontSize:15, cursor:"pointer", padding:"4px 2px", flexShrink:0 }}>🗑️</button>}
       </div>; })}
     <div style={{ display:"flex", gap:8, marginTop:12 }}>
@@ -574,7 +575,8 @@ export default function BudgetView({ budget, setBudget }) {
     importRows:rows=>setBudget(b=>importBudgetRows(b, rows)),
   };
   const importCSV = text => { const rows=parseBudgetCSV(text); if(rows.length) api.importRows(rows); return rows.length; };
-  const exportCSV = () => { const u=URL.createObjectURL(new Blob([budgetToCSV(budget)],{type:"text/csv;charset=utf-8"})); const a=document.createElement("a"); a.href=u; a.download="atoms-budget-export.csv"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),1500); };
+  const exportCSV = (id) => { const src = id ? { ...budget, months:{ [id]: budget.months[id] } } : budget;
+    const u=URL.createObjectURL(new Blob([budgetToCSV(src)],{type:"text/csv;charset=utf-8"})); const a=document.createElement("a"); a.href=u; a.download=id?`atoms-budget-${id}.csv`:"atoms-budget-export.csv"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),1500); };
   // One-time migration: older data funded savings via savingsActual (mark-funded).
   // Convert each into an opening Save contribution so savings are transaction-based.
   useEffect(() => {
@@ -730,7 +732,7 @@ export default function BudgetView({ budget, setBudget }) {
        onAdd={()=>setModal({type:"spend", env:modal.cat, back:{type:"goal", cat:modal.cat}})}
        onEdit={t=>setModal({type:"spend", env:modal.cat, initial:t, back:{type:"goal", cat:modal.cat}})}
        onClose={()=>setModal(null)} />}
-    {modal?.type==="months" && <MonthPicker budget={budget} onPick={id=>{ api.setActive(id); setModal(null); }} onCreate={()=>{ api.createNext(); setModal(null); }} onCreatePrev={()=>{ api.createPrev(); setModal(null); }} onCreateMonth={id=>{ api.createMonth(id); setModal(null); }} onDelete={api.deleteMonth} onImport={importCSV} onExport={exportCSV} onClose={()=>setModal(null)} />}
+    {modal?.type==="months" && <MonthPicker budget={budget} onPick={id=>{ api.setActive(id); setModal(null); }} onCreate={()=>{ api.createNext(); setModal(null); }} onCreatePrev={()=>{ api.createPrev(); setModal(null); }} onCreateMonth={id=>{ api.createMonth(id); setModal(null); }} onDelete={api.deleteMonth} onImport={importCSV} onExport={exportCSV} onExportMonth={exportCSV} onClose={()=>setModal(null)} />}
     {modal?.type==="cat"    && <CatSheet api={api} initial={modal.initial} onClose={(cat)=>setModal(cat&&modal.spendAfter?{type:"spend", env:cat}:null)} />}
     {modal?.type==="report" && <ReportSheet m={m} onClose={()=>setModal(null)} />}
   </div>;
