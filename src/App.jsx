@@ -1449,7 +1449,6 @@ export default function App() {
       // slow/partial load can't overwrite cloud data with empty state.
       const pending = new Set(["id", "ci", "dt", "hn", "st", "bg"]);
       const markLoaded = key => {
-        setDataLoading(false);
         if (pending.has(key)) { pending.delete(key); if (pending.size === 0) hasLoadedRef.current = true; }
       };
 
@@ -1457,10 +1456,18 @@ export default function App() {
       // incoming snapshot never echoes straight back out as a spurious save.
       const sub = (ref, key, apply) => onSnapshot(
         ref,
+        { includeMetadataChanges: true },
         snap => {
           // Skip our own not-yet-acknowledged local writes — we already hold that state.
           if (!snap.metadata.hasPendingWrites) apply(snap);
-          markLoaded(key);
+          // Paint as soon as anything arrives (cache or server) — keeps hydration instant.
+          setDataLoading(false);
+          // CRITICAL (data-loss fix): enable saves ONLY after the SERVER confirms this
+          // doc, never on a cache snapshot. Flipping hasLoadedRef on an empty/cold cache
+          // let a fresh device save blank state over the real cloud data. With
+          // includeMetadataChanges the server snapshot still arrives even when its data
+          // matches the cache, so markLoaded always eventually fires.
+          if (!snap.metadata.fromCache) markLoaded(key);
         },
         err => { console.error("Live sync failed (" + key + "):", err); setSaveError(true); setDataLoading(false); }
       );
