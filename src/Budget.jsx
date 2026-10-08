@@ -649,11 +649,14 @@ export default function BudgetView({ budget, setBudget }) {
   const carryOn = !!budget?.carryOver;
   const carryIn = carryOn ? Object.keys(budget.months||{}).sort().filter(id=>id<active).reduce((a,id)=>a+calc(budget.months[id]).balance,0) : 0;
   const runBal = d.balance + carryIn;
-  // The 4 most-recently-used envelopes (by latest transaction) pin to the top;
-  // the rest are ordered by attention — overspent / near-limit first.
+  // Up to 6 most-recently-used envelopes (by latest transaction) pin to the top,
+  // then shown alphabetically; the rest are grouped by bucket below.
   const lastUsed = {}; (m.txns||[]).forEach(t=>{ if(t.categoryId && (!lastUsed[t.categoryId] || t.date>lastUsed[t.categoryId])) lastUsed[t.categoryId]=t.date; });
   const allCats = m.categories||[];
-  const recentCats = allCats.filter(c=>lastUsed[c.id]).sort((a,b)=>lastUsed[b.id].localeCompare(lastUsed[a.id])).slice(0,4);
+  const recentCats = allCats.filter(c=>lastUsed[c.id])
+    .sort((a,b)=>lastUsed[b.id].localeCompare(lastUsed[a.id]))   // pick the 6 most recent
+    .slice(0,6)
+    .sort((a,b)=>(a.name||"").localeCompare(b.name||""));        // ...then display A→Z
   const recentIds = new Set(recentCats.map(c=>c.id));
   const restCats = allCats.filter(c=>!recentIds.has(c.id));
   const sub = { fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".04em", margin:"0 2px 8px" };
