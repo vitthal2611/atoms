@@ -192,13 +192,10 @@ function SpendSheet({ m, api, env, initial, curMonth, onClose, onChange }) {
   const [amt,setAmt]=useState(initial?String(initial.amount):"");
   const [desc,setDesc]=useState(initial?.desc||"");
   const t=today();
-  // A spend can be logged for today or any of the previous 6 days — a rolling
-  // 7-day window that can cross a month boundary (e.g. early in the month you can
-  // still backdate into last month). An older date being edited stays valid.
-  const six=(()=>{ const d=new Date(); d.setDate(d.getDate()-6); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); })();
-  let dateMin=six, dateMax=t;
+  // Back-date freely: any date up to today is allowed (no lower limit); no future dates.
+  let dateMin="2000-01-01", dateMax=t;
   if(initial?.date){ if(initial.date<dateMin) dateMin=initial.date; if(initial.date>dateMax) dateMax=initial.date; }
-  const [date,setDate]=useState(initial?.date || t);
+  const [date,setDate]=useState(initial?.date || (t.slice(0,7)===m.id ? t : m.id+"-01"));
   const [err,setErr]=useState(""); const [xfer,setXfer]=useState(null); const [src,setSrc]=useState("");
   const spentOf = id => (m.txns||[]).filter(t=>t.categoryId===id && (!initial||t.id!==initial.id)).reduce((a,t)=>a+(+t.amount||0),0);
   const record = () => {
@@ -210,7 +207,7 @@ function SpendSheet({ m, api, env, initial, curMonth, onClose, onChange }) {
     const a=+amt;
     if(!(a>0)) return setErr("Enter an amount.");
     if(!date) return setErr("Pick a date.");
-    if(!initial && (date<six || date>t)) return setErr("Pick today or a date within the last 6 days.");
+    if(!initial && date>t) return setErr("Can't pick a future date.");
     if(!isInc && env.bucket!=="save"){ const rem=(+env.budget||0)-spentOf(env.id); if(a>rem){ setXfer({ shortfall:Math.round(a-rem), rem }); setSrc(""); return; } }
     record();
   };
