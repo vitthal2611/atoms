@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 // ─── BUDGET PLANNER ──────────────────────────────────────────────────────────
 // Single-screen envelope budgeting in ₹, its own tab (no habit chrome, no
@@ -200,7 +200,8 @@ function SpendSheet({ m, api, env, initial, curMonth, onClose, onChange }) {
   const spentOf = id => (m.txns||[]).filter(t=>t.categoryId===id && (!initial||t.id!==initial.id)).reduce((a,t)=>a+(+t.amount||0),0);
   const record = () => {
     const v={ date, desc:desc.trim(), amount:+amt, bucket:env.bucket, categoryId:isInc?"":env.id };
-    if(initial) api.editTxn(initial.id,v); else api.addTxn({ id:"t"+Date.now(), ...v });
+    const envInfo = isInc ? null : { name:env.name, bucket:env.bucket, budget:env.budget, icon:env.icon };
+    if(initial) api.editTxn(initial.id, v, envInfo); else api.addTxn({ id:"t"+Date.now(), ...v }, envInfo);
     onClose(true);
   };
   const submit = () => {
@@ -560,6 +561,23 @@ export default function BudgetView({ budget, setBudget }) {
   const active = budget?.active; const m = budget?.months?.[active];
   const curMonth = today().slice(0,7);
   const updateMonth = fn => setBudget(b => ({ ...b, months:{ ...b.months, [b.active]:fn(b.months[b.active]) } }));
+  // Place a transaction into the month matching its date (creating that month, and
+  // resolving/creating its envelope by name, when needed). Back-dating files correctly.
+  const placeTxn = (b, t, env) => {
+    const mid = (t.date||"").slice(0,7) || b.active; const months = { ...b.months };
+    let mm = months[mid];
+    if(!mm){ const src=b.months[b.active]; mm={ id:mid, label:mLabel(mid), status:"committed", salaryIncome:0, otherIncome:0, categories:(src?.categories||[]).map(c=>({ ...c })), savingsActual:{}, txns:[] }; }
+    else mm={ ...mm, categories:[...(mm.categories||[])], txns:[...(mm.txns||[])] };
+    let catId = t.bucket==="income" ? "" : t.categoryId;
+    if(t.bucket!=="income" && env && env.name){ let c=mm.categories.find(x=>(x.name||"").toLowerCase()===(env.name||"").toLowerCase());
+      if(!c){ c={ id:"c"+Date.now().toString(36)+Math.random().toString(36).slice(2,5), name:env.name, bucket:env.bucket||"need", budget:+env.budget||0, ...(env.icon?{icon:env.icon}:{}) }; mm.categories.push(c); }
+      catId=c.id; }
+    mm.txns=[...mm.txns, { ...t, categoryId:catId }]; months[mid]=mm; return { ...b, months };
+  };
+  const stripTxn = (b, id) => { const months={ ...b.months };
+    for(const k of Object.keys(months)){ if((months[k].txns||[]).some(t=>t.id===id)){ months[k]={ ...months[k], txns:months[k].txns.filter(t=>t.id!==id) }; break; } }
+    return { ...b, months };
+  };
   const api = {
     setActive:id=>setBudget(b=>({ ...b, active:id })),
     deleteMonth:id=>setBudget(b=>{ const months={ ...b.months }; delete months[id]; const rem=Object.keys(months).sort(); if(!rem.length) return b; return { ...b, months, active:b.active===id?rem[rem.length-1]:b.active }; }),
@@ -578,8 +596,8 @@ export default function BudgetView({ budget, setBudget }) {
     editCategory:(id,p)=>updateMonth(mm=>({ ...mm, categories:mm.categories.map(c=>c.id===id?{ ...c, ...p }:c) })),
     deleteCategory:id=>updateMonth(mm=>({ ...mm, categories:mm.categories.filter(c=>c.id!==id), txns:mm.txns.filter(t=>t.categoryId!==id) })),
     transfer:(from,to,a)=>updateMonth(mm=>({ ...mm, categories:mm.categories.map(c=>c.id===from?{ ...c, budget:(+c.budget||0)-a }:c.id===to?{ ...c, budget:(+c.budget||0)+a }:c) })),
-    addTxn:t=>updateMonth(mm=>({ ...mm, txns:[...mm.txns, t] })),
-    editTxn:(id,p)=>updateMonth(mm=>({ ...mm, txns:mm.txns.map(t=>t.id===id?{ ...t, ...p }:t) })),
+    addTxn:(t,env)=>setBudget(b=>placeTxn(b, t, env)),
+    editTxn:(id,p,env)=>setBudget(b=>{ let ex=null; for(const k of Object.keys(b.months||{})){ const f=(b.months[k].txns||[]).find(t=>t.id===id); if(f){ ex=f; break; } } if(!ex) return b; return placeTxn(stripTxn(b, id), { ...ex, ...p }, env); }),
     deleteTxn:id=>updateMonth(mm=>({ ...mm, txns:mm.txns.filter(t=>t.id!==id) })),
     clearTxns:()=>updateMonth(mm=>({ ...mm, txns:[] })),
     deleteTxns:(ids)=>{ const s=new Set(ids); updateMonth(mm=>({ ...mm, txns:(mm.txns||[]).filter(t=>!s.has(t.id)) })); },
@@ -590,6 +608,15 @@ export default function BudgetView({ budget, setBudget }) {
   const importCSV = text => { const rows=parseBudgetCSV(text); if(rows.length) api.importRows(rows); return rows.length; };
   const exportCSV = (id) => { const src = id ? { ...budget, months:{ [id]: budget.months[id] } } : budget;
     const u=URL.createObjectURL(new Blob([budgetToCSV(src)],{type:"text/csv;charset=utf-8"})); const a=document.createElement("a"); a.href=u; a.download=id?`atoms-budget-${id}.csv`:"atoms-budget-export.csv"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),1500); };
+  // On first load, default the active month to the current calendar month when it exists.
+  const didInitActive = useRef(false);
+  useEffect(() => {
+    if (didInitActive.current || !budget?.months) return;
+    didInitActive.current = true;
+    const cur = today().slice(0,7);
+    if (budget.months[cur] && budget.active !== cur) setBudget(b => ({ ...b, active:cur }));
+  }, [budget, setBudget]);
+
   // One-time migration: older data funded savings via savingsActual (mark-funded).
   // Convert each into an opening Save contribution so savings are transaction-based.
   useEffect(() => {
