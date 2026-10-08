@@ -340,7 +340,7 @@ function CatSheet({ api, initial, onClose }) {
   </Sheet>;
 }
 
-function MonthPicker({ budget, onPick, onCreate, onCreatePrev, onCreateMonth, onDelete, onImport, onExport, onExportMonth, onClose }) {
+function MonthPicker({ budget, onPick, onCreate, onCreatePrev, onCreateMonth, onDelete, onImport, onExport, onExportMonth, carryOver, onToggleCarry, onClose }) {
   const [del,setDel]=useState(null); const [msg,setMsg]=useState(""); const [pick,setPick]=useState("");
   const ids=Object.keys(budget.months).sort(); const nextId=mShift(ids[ids.length-1],1); const prevId=mShift(ids[0],-1);
   const incomeOf=mm=>(+mm.salaryIncome||0)+(+mm.otherIncome||0)+((mm.txns||[]).filter(t=>t.bucket==="income").reduce((a,t)=>a+(+t.amount||0),0));
@@ -372,6 +372,15 @@ function MonthPicker({ budget, onPick, onCreate, onCreatePrev, onCreateMonth, on
     </div>
     {pick && budget.months[pick] && <div style={{ fontSize:11.5, color:T.muted, margin:"6px 2px 0" }}>{mLabel(pick)} already exists — pick a different month.</div>}
     <div style={{ height:1, background:T.border, margin:"16px 0 12px" }} />
+    <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4 }}>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontSize:13.5, fontWeight:700, color:T.text }}>Carry over leftover</div>
+        <div style={{ fontSize:11.5, color:T.muted, lineHeight:1.4, marginTop:1 }}>Each month opens with the previous month's balance, so Balance runs cumulatively.</div>
+      </div>
+      <button onClick={()=>onToggleCarry(!carryOver)} aria-pressed={carryOver} aria-label="Carry over leftover" style={{ flexShrink:0, width:46, height:26, borderRadius:20, border:"none", cursor:"pointer", background:carryOver?T.primary:T.border, position:"relative" }}>
+        <span style={{ position:"absolute", top:3, left:carryOver?23:3, width:20, height:20, borderRadius:"50%", background:"#fff", transition:"left .15s" }} /></button>
+    </div>
+    <div style={{ height:1, background:T.border, margin:"12px 0 12px" }} />
     <div style={{ fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".04em", margin:"0 2px 8px" }}>Import / export</div>
     <div style={{ display:"flex", gap:8 }}>
       <label style={{ ...ghostBtn, flex:1, padding:12, fontSize:13.5, display:"flex", alignItems:"center", justifyContent:"center", gap:6, cursor:"pointer" }}>
@@ -579,6 +588,7 @@ export default function BudgetView({ budget, setBudget }) {
     deleteTxns:(ids)=>{ const s=new Set(ids); updateMonth(mm=>({ ...mm, txns:(mm.txns||[]).filter(t=>!s.has(t.id)) })); },
     clearIncome:()=>updateMonth(mm=>({ ...mm, otherIncome:0, txns:(mm.txns||[]).filter(t=>t.bucket!=="income") })),
     importRows:rows=>setBudget(b=>importBudgetRows(b, rows)),
+    setCarry:v=>setBudget(b=>({ ...b, carryOver:!!v })),
   };
   const importCSV = text => { const rows=parseBudgetCSV(text); if(rows.length) api.importRows(rows); return rows.length; };
   const exportCSV = (id) => { const src = id ? { ...budget, months:{ [id]: budget.months[id] } } : budget;
@@ -610,6 +620,11 @@ export default function BudgetView({ budget, setBudget }) {
     </div>;
   }
   const d = calc(m); const committed = m.status==="committed";
+  // Optional carry-over: this month opens with the sum of every earlier month's
+  // leftover (income − spent − saved), so Balance runs cumulatively.
+  const carryOn = !!budget?.carryOver;
+  const carryIn = carryOn ? Object.keys(budget.months||{}).sort().filter(id=>id<active).reduce((a,id)=>a+calc(budget.months[id]).balance,0) : 0;
+  const runBal = d.balance + carryIn;
   // The 4 most-recently-used envelopes (by latest transaction) pin to the top;
   // the rest are ordered by attention — overspent / near-limit first.
   const lastUsed = {}; (m.txns||[]).forEach(t=>{ if(t.categoryId && (!lastUsed[t.categoryId] || t.date>lastUsed[t.categoryId])) lastUsed[t.categoryId]=t.date; });
@@ -672,8 +687,9 @@ export default function BudgetView({ budget, setBudget }) {
     </div>
     <div style={{ display:"flex", gap:9, marginTop:9 }}>
       <div style={{ ...card({ padding:"10px 12px" }), flex:1, display:"flex", alignItems:"center", gap:9 }}><Ic name="spend" size={19} color={T.muted} /><div><div style={{ fontSize:11, color:T.muted, fontWeight:600 }}>Spent</div><div style={{ fontSize:15, fontWeight:800, fontVariantNumeric:"tabular-nums" }}>{INR(d.es)}</div></div></div>
-      <div style={{ ...card({ padding:"10px 12px" }), flex:1, display:"flex", alignItems:"center", gap:9 }}><Ic name="wallet" size={19} color={T.muted} /><div><div style={{ fontSize:11, color:T.muted, fontWeight:600 }}>Balance</div><div style={{ fontSize:15, fontWeight:800, fontVariantNumeric:"tabular-nums", color:d.balance<0?T.bad:T.good }}>{INR(d.balance)}</div></div></div>
+      <div style={{ ...card({ padding:"10px 12px" }), flex:1, display:"flex", alignItems:"center", gap:9 }}><Ic name="wallet" size={19} color={T.muted} /><div><div style={{ fontSize:11, color:T.muted, fontWeight:600 }}>{carryOn?"Balance (running)":"Balance"}</div><div style={{ fontSize:15, fontWeight:800, fontVariantNumeric:"tabular-nums", color:runBal<0?T.bad:T.good }}>{INR(runBal)}</div></div></div>
     </div>
+    {carryOn && carryIn!==0 && <div style={{ fontSize:11.5, color:T.muted, textAlign:"center", marginTop:7 }}>Opening balance carried from earlier months: <b style={{ color:carryIn<0?T.bad:T.good }}>{INR(carryIn)}</b> + this month {INR(d.balance)} = {INR(runBal)}</div>}
     <div style={{ ...card({ padding:"12px 13px", marginTop:9 }) }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:8 }}>
         <span style={{ fontSize:12.5, fontWeight:700 }}>Allocation</span>
@@ -738,7 +754,7 @@ export default function BudgetView({ budget, setBudget }) {
        onAdd={()=>setModal({type:"spend", env:modal.cat, back:{type:"goal", cat:modal.cat}})}
        onEdit={t=>setModal({type:"spend", env:modal.cat, initial:t, back:{type:"goal", cat:modal.cat}})}
        onClose={()=>setModal(null)} />}
-    {modal?.type==="months" && <MonthPicker budget={budget} onPick={id=>{ api.setActive(id); setModal(null); }} onCreate={()=>{ api.createNext(); setModal(null); }} onCreatePrev={()=>{ api.createPrev(); setModal(null); }} onCreateMonth={id=>{ api.createMonth(id); setModal(null); }} onDelete={api.deleteMonth} onImport={importCSV} onExport={exportCSV} onExportMonth={exportCSV} onClose={()=>setModal(null)} />}
+    {modal?.type==="months" && <MonthPicker budget={budget} onPick={id=>{ api.setActive(id); setModal(null); }} onCreate={()=>{ api.createNext(); setModal(null); }} onCreatePrev={()=>{ api.createPrev(); setModal(null); }} onCreateMonth={id=>{ api.createMonth(id); setModal(null); }} onDelete={api.deleteMonth} onImport={importCSV} onExport={exportCSV} onExportMonth={exportCSV} carryOver={!!budget?.carryOver} onToggleCarry={api.setCarry} onClose={()=>setModal(null)} />}
     {modal?.type==="cat"    && <CatSheet api={api} initial={modal.initial} onClose={(cat)=>setModal(cat&&modal.spendAfter?{type:"spend", env:cat}:null)} />}
     {modal?.type==="report" && <ReportSheet m={m} onClose={()=>setModal(null)} />}
   </div>;
