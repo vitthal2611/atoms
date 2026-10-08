@@ -127,18 +127,23 @@ const parseBudgetCSV = text => { const rows=parseCSV(text); if(!rows.length) ret
   return out; };
 const importBudgetRows = (budget, rows) => { const months={ ...(budget?.months||{}) };
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
-  for(const r of rows){ const id=r.month;
+  for(const r of rows){
+    const bk=normBucket(r.bucket);
+    const type=r.type||(r.date?"spend":(bk==="income"||/salary|other/i.test(r.envelope)?"income":"budget"));
+    const isSalary=type==="income" && /salary/i.test((r.envelope||"").trim());   // fixed monthly income, no date
+    const dateMonth=(r.date||"").slice(0,7);
+    // A transaction falls into the month of its own date — nothing else. Only budget
+    // allocations and the fixed Salary (which carry no date) use the Month column.
+    const id=(type!=="budget" && !isSalary && dateMonth.length===7) ? dateMonth : r.month;
     const base=months[id]||{ id, label:mLabel(id), status:"committed", salaryIncome:0, otherIncome:0, categories:[], savingsActual:{}, txns:[] };
     const mm={ ...base, categories:(base.categories||[]).map(c=>({ ...c })), txns:[...(base.txns||[])] };
-    const bk=normBucket(r.bucket);
     const ensure=(name,bucket)=>{ let c=mm.categories.find(x=>(x.name||"").toLowerCase()===(name||"").toLowerCase()); if(!c){ c={ id:"c"+uid(), name:name||"Envelope", bucket:bucket||"need", budget:0 }; mm.categories.push(c); } return c; };
-    const type=r.type||(r.date?"spend":(bk==="income"||/salary|other/i.test(r.envelope)?"income":"budget"));
     if(type==="income"){ const label=(r.envelope||"").trim();
-      if(/salary/i.test(label)) mm.salaryIncome=r.amount;              // e.g. "Salary", "TIAA Salary" → fixed Salary
+      if(isSalary) mm.salaryIncome=r.amount;                           // e.g. "Salary", "TIAA Salary" → fixed Salary
       else mm.txns.push({ id:"t"+uid(), date:r.date||id+"-01", desc:label||"Other income", amount:r.amount, categoryId:"", bucket:"income" }); }  // everything else → an income entry (Other income is not a fixed value)
     else if(type==="budget"){ const c=ensure(r.envelope, bk==="income"?"need":bk); c.budget=r.amount; if(bk!=="income") c.bucket=bk; }
     else { if(bk==="income"){ mm.txns.push({ id:"t"+uid(), date:r.date||id+"-01", desc:r.note||"Income", amount:r.amount, categoryId:"", bucket:"income" }); }
-      else { const c=ensure(r.envelope, bk); mm.txns.push({ id:"t"+uid(), date:(r.date&&r.date.length>=7)?r.date:id+"-01", desc:r.note||"", amount:r.amount, categoryId:c.id, bucket:c.bucket }); } }
+      else { const c=ensure(r.envelope, bk); mm.txns.push({ id:"t"+uid(), date:r.date||id+"-01", desc:r.note||"", amount:r.amount, categoryId:c.id, bucket:c.bucket }); } }
     months[id]=mm; }
   const active=(budget?.active&&months[budget.active])?budget.active:Object.keys(months).sort().pop();
   return { ...(budget||{}), active, months }; };
