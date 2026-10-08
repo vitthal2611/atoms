@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, useId, memo, Fragmen
 import { createPortal } from "react-dom";
 import BudgetView, { seedBudget } from "./Budget.jsx";
 import { initializeApp, getApps } from "firebase/app";
-import { getFirestore, initializeFirestore, doc, getDoc, getDocFromCache, setDoc, collection, query, where, getCountFromServer, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
+import { getFirestore, initializeFirestore, doc, onSnapshot, setDoc, collection, query, where, getCountFromServer, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "firebase/auth";
 import { getMessaging, getToken, isSupported } from "firebase/messaging";
 
@@ -1413,57 +1413,82 @@ export default function App() {
   const hasLoadedRef        = useRef(false); // saves stay blocked until the initial fetch succeeds — otherwise a failed load + local edit could overwrite cloud data with empty state
   const didBackfillRef      = useRef(false); // one-time createdAt backfill for habits saved before we tracked it
 
-  // ── Auth listener ──
+  // ── Auth + live Firestore sync ──
+  // onSnapshot listeners do double duty: the first fire serves instantly from this
+  // device's offline cache (instant hydration, no blank wait), and later fires push
+  // real-time updates — so a change on one device (desktop) appears on another
+  // (mobile) within moments, without a reload.
+  // NOTE: writes are still whole-document, so two devices editing the SAME doc in the
+  // same instant remains last-write-wins. Live listeners shrink that window to near-
+  // zero in normal single-user use; field-level merge writes would be the deeper fix.
+  const docUnsubsRef = useRef([]);
   useEffect(() => {
-    return onAuthStateChanged(_auth, async (u) => {
+    const authUnsub = onAuthStateChanged(_auth, (u) => {
+      // Tear down the previous user's listeners before (re)subscribing.
+      docUnsubsRef.current.forEach(fn => { try { fn(); } catch {} });
+      docUnsubsRef.current = [];
       isFirstId.current = true;
       isFirstCi.current = true;
       isFirstDt.current = true;
       isFirstHn.current = true;
       isFirstSt.current = true;
+      isFirstBg.current = true;
       hasLoadedRef.current = false;
       didBackfillRef.current = false;
       streakCacheRef.current = {};
       setUser(u);
-      if (u) {
-        setDataLoading(true);
-        // Prune entries older than 366 days to keep each Firestore doc under 1MB.
-        const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 366);
-        const cutoffKey = dateToKey(cutoff);
-        const prune = raw => Object.fromEntries(Object.entries(raw || {}).filter(([k]) => k >= cutoffKey));
-        // Apply a set of snapshots. Re-arm each first-run guard so applying fetched
-        // data doesn't echo straight back to Firestore as a spurious save.
-        const applySnaps = ([idSnap, ciSnap, dtSnap, hnSnap, stSnap, bgSnap]) => {
-          if (idSnap.exists()) { isFirstId.current = true; setIdentities(idSnap.data().data); }
-          if (bgSnap.exists() && bgSnap.data().data) { isFirstBg.current = true; setBudget(bgSnap.data().data); }
-          if (ciSnap.exists()) { isFirstCi.current = true; setData(prune(ciSnap.data().data)); }
-          if (dtSnap.exists()) { isFirstDt.current = true; setDailyTasks(prune(dtSnap.data().data)); }
-          if (hnSnap.exists()) { isFirstHn.current = true; setHabitNotes(prune(hnSnap.data().data)); }
-          if (stSnap.exists()) { const raw = stSnap.data().data || {}; isFirstSt.current = true; setCueSettings({ custom: raw.custom || [], dismissed: raw.dismissed || [], scorecard: raw.scorecard || [], tribe: !!raw.tribe, windDown: { enabled: !!(raw.windDown && raw.windDown.enabled), time: (raw.windDown && raw.windDown.time) || "22:00" } }); }
-        };
-        const refs = [identitiesRef(u.uid), checkInsRef(u.uid), dailyTasksRef(u.uid), habitNotesRef(u.uid), settingsRef(u.uid), budgetRef(u.uid)];
-        // 1) Instant paint from this device's local cache (if present) — no blank wait on repeat opens.
-        try {
-          const cached = await Promise.all(refs.map(r => getDocFromCache(r).catch(() => null)));
-          if (cached.some(s => s && s.exists())) { applySnaps(cached.map(s => s || { exists: () => false })); setDataLoading(false); }
-        } catch { /* no cache yet — fall through to the server fetch */ }
-        // 2) Authoritative server refresh.
-        try {
-          const snaps = await Promise.all(refs.map(r => getDoc(r)));
-          applySnaps(snaps);
-          if (!snaps[4].exists()) {   // settings doc missing → migrate this device's localStorage cues
+      if (!u) return;
+      setDataLoading(true);
+
+      // Prune entries older than 366 days to keep each Firestore doc under 1MB.
+      const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 366);
+      const cutoffKey = dateToKey(cutoff);
+      const prune = raw => Object.fromEntries(Object.entries(raw || {}).filter(([k]) => k >= cutoffKey));
+
+      // Saves stay blocked until every doc has delivered its first snapshot, so a
+      // slow/partial load can't overwrite cloud data with empty state.
+      const pending = new Set(["id", "ci", "dt", "hn", "st", "bg"]);
+      const markLoaded = key => {
+        setDataLoading(false);
+        if (pending.has(key)) { pending.delete(key); if (pending.size === 0) hasLoadedRef.current = true; }
+      };
+
+      // Each listener re-arms its isFirst guard before calling a setter, so an
+      // incoming snapshot never echoes straight back out as a spurious save.
+      const sub = (ref, key, apply) => onSnapshot(
+        ref,
+        snap => {
+          // Skip our own not-yet-acknowledged local writes — we already hold that state.
+          if (!snap.metadata.hasPendingWrites) apply(snap);
+          markLoaded(key);
+        },
+        err => { console.error("Live sync failed (" + key + "):", err); setSaveError(true); setDataLoading(false); }
+      );
+
+      docUnsubsRef.current = [
+        sub(identitiesRef(u.uid), "id", snap => { if (snap.exists()) { isFirstId.current = true; setIdentities(snap.data().data); } }),
+        sub(checkInsRef(u.uid),   "ci", snap => { if (snap.exists()) { isFirstCi.current = true; setData(prune(snap.data().data)); } }),
+        sub(dailyTasksRef(u.uid), "dt", snap => { if (snap.exists()) { isFirstDt.current = true; setDailyTasks(prune(snap.data().data)); } }),
+        sub(habitNotesRef(u.uid), "hn", snap => { if (snap.exists()) { isFirstHn.current = true; setHabitNotes(prune(snap.data().data)); } }),
+        sub(settingsRef(u.uid),   "st", snap => {
+          if (snap.exists()) {
+            const raw = snap.data().data || {};
+            isFirstSt.current = true;
+            setCueSettings({ custom: raw.custom || [], dismissed: raw.dismissed || [], scorecard: raw.scorecard || [], tribe: !!raw.tribe, windDown: { enabled: !!(raw.windDown && raw.windDown.enabled), time: (raw.windDown && raw.windDown.time) || "22:00" } });
+          } else if (pending.has("st")) {
+            // No settings doc yet → migrate this device's localStorage cues (once).
             const lsCustom = loadCustomCues(); const lsDismissed = loadDismissedCues();
             if (lsCustom.length || lsDismissed.length) { isFirstSt.current = false; setCueSettings({ custom: lsCustom, dismissed: lsDismissed }); }
           }
-          hasLoadedRef.current = true;
-        } catch (err) {
-          console.error("Failed to load data from Firestore:", err);
-          setSaveError(true); // reuse the existing error banner
-        } finally {
-          setDataLoading(false);
-        }
-      }
+        }),
+        sub(budgetRef(u.uid),     "bg", snap => { if (snap.exists() && snap.data().data) { isFirstBg.current = true; setBudget(snap.data().data); } }),
+      ];
     });
+    return () => {
+      authUnsub();
+      docUnsubsRef.current.forEach(fn => { try { fn(); } catch {} });
+      docUnsubsRef.current = [];
+    };
   }, []);
 
   useEffect(() => {
@@ -2127,10 +2152,10 @@ export default function App() {
         <main style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:24, padding:32, flex:1 }}>
           <div style={{ fontSize:52 }} aria-hidden="true">🧠</div>
           <div style={{ fontFamily:FONT_DISPLAY, fontWeight:800, fontSize:24, color:T.text, textAlign:"center", letterSpacing:"-0.03em" }}>
-            Atomic Habits
+            Atoms
           </div>
           <div style={{ fontSize:16, color:T.muted, textAlign:"center", lineHeight:1.6 }}>
-            Sign in with your Google account to sync your habits across devices.
+            Sign in with your Google account to sync your habits and budget across devices.
           </div>
           {signInError && (
             <div role="alert" style={{ fontSize:14, color:T.red, background:T.red+"12", border:`1px solid ${T.red}44`, borderRadius:10, padding:"10px 14px", textAlign:"center", width:"100%", maxWidth:320 }}>
