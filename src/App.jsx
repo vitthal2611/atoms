@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, useId, memo, Fragmen
 import { createPortal } from "react-dom";
 import BudgetView, { seedBudget } from "./Budget.jsx";
 import { initializeApp, getApps } from "firebase/app";
-import { getFirestore, initializeFirestore, doc, getDoc, setDoc, collection, query, where, getCountFromServer } from "firebase/firestore";
+import { getFirestore, initializeFirestore, doc, getDoc, getDocFromCache, setDoc, collection, query, where, getCountFromServer, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "firebase/auth";
 import { getMessaging, getToken, isSupported } from "firebase/messaging";
 
@@ -24,7 +24,8 @@ const _fbApp  = _hadApp ? getApps()[0] : initializeApp(_fbConfig);
 // initializeFirestore can only run once per app, so reuse the instance on HMR.
 const _db     = _hadApp
   ? getFirestore(_fbApp)
-  : initializeFirestore(_fbApp, { ignoreUndefinedProperties: true });
+  // persistentLocalCache keeps an IndexedDB copy so reads serve instantly and work offline.
+  : initializeFirestore(_fbApp, { ignoreUndefinedProperties: true, localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
 const _auth  = getAuth(_fbApp);
 
 // Web-push VAPID public key (Firebase console → Cloud Messaging → Web Push certificates).
@@ -1426,54 +1427,33 @@ export default function App() {
       setUser(u);
       if (u) {
         setDataLoading(true);
-        try {
-          const [idSnap, ciSnap, dtSnap, hnSnap, stSnap, bgSnap] = await Promise.all([
-            getDoc(identitiesRef(u.uid)),
-            getDoc(checkInsRef(u.uid)),
-            getDoc(dailyTasksRef(u.uid)),
-            getDoc(habitNotesRef(u.uid)),
-            getDoc(settingsRef(u.uid)),
-            getDoc(budgetRef(u.uid)),
-          ]);
-          // Re-arm each first-run guard when applying fetched data, so the load
-          // itself doesn't echo straight back to Firestore as a spurious save
+        // Prune entries older than 366 days to keep each Firestore doc under 1MB.
+        const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 366);
+        const cutoffKey = dateToKey(cutoff);
+        const prune = raw => Object.fromEntries(Object.entries(raw || {}).filter(([k]) => k >= cutoffKey));
+        // Apply a set of snapshots. Re-arm each first-run guard so applying fetched
+        // data doesn't echo straight back to Firestore as a spurious save.
+        const applySnaps = ([idSnap, ciSnap, dtSnap, hnSnap, stSnap, bgSnap]) => {
           if (idSnap.exists()) { isFirstId.current = true; setIdentities(idSnap.data().data); }
           if (bgSnap.exists() && bgSnap.data().data) { isFirstBg.current = true; setBudget(bgSnap.data().data); }
-          // Prune entries older than 366 days to prevent Firestore 1MB doc limit
-          const cutoff = new Date();
-          cutoff.setDate(cutoff.getDate() - 366);
-          const cutoffKey = dateToKey(cutoff);
-          if (ciSnap.exists()) {
-            const raw = ciSnap.data().data || {};
-            const pruned = Object.fromEntries(Object.entries(raw).filter(([k]) => k >= cutoffKey));
-            isFirstCi.current = true;
-            setData(pruned);
-          }
-          if (dtSnap.exists()) {
-            const raw = dtSnap.data().data || {};
-            const pruned = Object.fromEntries(Object.entries(raw).filter(([k]) => k >= cutoffKey));
-            isFirstDt.current = true;
-            setDailyTasks(pruned);
-          }
-          if (hnSnap.exists()) {
-            const raw = hnSnap.data().data || {};
-            const pruned = Object.fromEntries(Object.entries(raw).filter(([k]) => k >= cutoffKey));
-            isFirstHn.current = true;
-            setHabitNotes(pruned);
-          }
-          // Cue suggestions: use the synced doc if present; otherwise migrate this
-          // device's localStorage cues to Firestore (isFirstSt stays false so it saves).
-          if (stSnap.exists()) {
-            const raw = stSnap.data().data || {};
-            isFirstSt.current = true;
-            setCueSettings({ custom: raw.custom || [], dismissed: raw.dismissed || [], scorecard: raw.scorecard || [], tribe: !!raw.tribe, windDown: { enabled: !!(raw.windDown && raw.windDown.enabled), time: (raw.windDown && raw.windDown.time) || "22:00" } });
-          } else {
-            const lsCustom = loadCustomCues();
-            const lsDismissed = loadDismissedCues();
-            if (lsCustom.length || lsDismissed.length) {
-              isFirstSt.current = false;   // persist the migration
-              setCueSettings({ custom: lsCustom, dismissed: lsDismissed });
-            }
+          if (ciSnap.exists()) { isFirstCi.current = true; setData(prune(ciSnap.data().data)); }
+          if (dtSnap.exists()) { isFirstDt.current = true; setDailyTasks(prune(dtSnap.data().data)); }
+          if (hnSnap.exists()) { isFirstHn.current = true; setHabitNotes(prune(hnSnap.data().data)); }
+          if (stSnap.exists()) { const raw = stSnap.data().data || {}; isFirstSt.current = true; setCueSettings({ custom: raw.custom || [], dismissed: raw.dismissed || [], scorecard: raw.scorecard || [], tribe: !!raw.tribe, windDown: { enabled: !!(raw.windDown && raw.windDown.enabled), time: (raw.windDown && raw.windDown.time) || "22:00" } }); }
+        };
+        const refs = [identitiesRef(u.uid), checkInsRef(u.uid), dailyTasksRef(u.uid), habitNotesRef(u.uid), settingsRef(u.uid), budgetRef(u.uid)];
+        // 1) Instant paint from this device's local cache (if present) — no blank wait on repeat opens.
+        try {
+          const cached = await Promise.all(refs.map(r => getDocFromCache(r).catch(() => null)));
+          if (cached.some(s => s && s.exists())) { applySnaps(cached.map(s => s || { exists: () => false })); setDataLoading(false); }
+        } catch { /* no cache yet — fall through to the server fetch */ }
+        // 2) Authoritative server refresh.
+        try {
+          const snaps = await Promise.all(refs.map(r => getDoc(r)));
+          applySnaps(snaps);
+          if (!snaps[4].exists()) {   // settings doc missing → migrate this device's localStorage cues
+            const lsCustom = loadCustomCues(); const lsDismissed = loadDismissedCues();
+            if (lsCustom.length || lsDismissed.length) { isFirstSt.current = false; setCueSettings({ custom: lsCustom, dismissed: lsDismissed }); }
           }
           hasLoadedRef.current = true;
         } catch (err) {
