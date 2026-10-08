@@ -3888,10 +3888,6 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
 
   // Daily reflection note — the footer link opens the scrollable journal.
   const [journalOpen, setJournalOpen] = useState(false);
-  // Lean daily card: collapsed = just the action + ring (Law 3, make it easy — no
-  // clutter to read). Tap to expand the identity, cue, coaching and chain. A habit
-  // missed yesterday opens itself so the "never miss twice" comeback stays visible.
-  const [expanded, setExpanded] = useState(!!warnMissedYesterday);
 
   // Breaking a bad habit inverts the whole loop (resist, clean days, accountability).
   const breaking = habit.kind === "bad";
@@ -3922,9 +3918,8 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
       transition: "background 0.2s ease",
     }}>
 
-      {/* ── Identity header — only when expanded. The daily collapsed card is just
-          the action + ring; the identity (the "why") is one tap away. ── */}
-      {expanded && (
+      {/* ── Identity header — a single clean identity line (metrics live in the
+          bottom proof row with the chain). ── */}
       <div style={{ display:"flex", alignItems:"center", gap:9, padding:"9px 8px 9px 12px", background: C + "14", borderBottom:`1px solid ${C}2a` }}>
         {identity.icon && (
           <span aria-hidden="true" style={{ width:25, height:25, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, background: C + "24" }}>{identity.icon}</span>
@@ -3934,8 +3929,8 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
           <IdentityName text={idDisplay} color={Cd} />
         </div>
         {streakBadge}
+        {menu}
       </div>
-      )}
 
       {/* ── Card body — ring · action · cue ── */}
       <div style={{ padding: "10px 12px 9px" }}>
@@ -3977,7 +3972,7 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
             >
               {habit.label}
             </span>
-            {!checked && !missed && expanded && cueText && (
+            {!checked && !missed && cueText && (
               <div style={{ marginTop:2, fontSize:12, fontWeight:700, letterSpacing:"0.01em", color:C }}>{cueLead} {cueBody}</div>
             )}
           </div>
@@ -3991,15 +3986,6 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
               <span style={{ fontSize:12, fontWeight:800, color:T.red, whiteSpace:"nowrap", background:T.red + "14", padding:"2px 8px", borderRadius:20 }}>Missed</span>
             </span>
           )}
-          {/* Expand toggle — reveals the identity, cue, coaching and chain on demand. */}
-          {!checked && !missed && (
-            <button type="button" onClick={(e) => { e.stopPropagation(); setExpanded(v => !v); }}
-              aria-expanded={expanded} aria-label={expanded ? `Hide details for ${habit.label}` : `Show details for ${habit.label}`}
-              style={{ flexShrink:0, width:30, height:30, borderRadius:"50%", border:"none", background:"transparent", color:T.muted, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", WebkitTapHighlightColor:"transparent" }}>
-              <span aria-hidden="true" style={{ fontSize:12, lineHeight:1, display:"inline-block", transition:"transform 0.2s", transform: expanded ? "rotate(180deg)" : "none" }}>▾</span>
-            </button>
-          )}
-          {menu}
         </div>
 
         {/* Quantity + time/place — beneath the action, indented to line up
@@ -4011,7 +3997,7 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
         {isQty && checked && (
           <div style={{ marginLeft:55, marginTop:3, fontSize:11.5, fontWeight:700, color:"#0F9D74" }}>{target} of {target}{unit ? " " + unit : ""} · done</div>
         )}
-        {!checked && expanded && (habit.time || habit.location) && (
+        {!checked && (habit.time || habit.location) && (
           <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:6, marginLeft:55, flexWrap:"wrap" }}>
             {habit.time && (
               <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:800, color:Cd, background:C + "12", border:`1px solid ${C}22`, borderRadius:20, padding:"3px 9px", fontVariantNumeric:"tabular-nums" }}
@@ -4028,8 +4014,8 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
           </div>
         )}
 
-        {/* Never-miss-twice nudge — this habit was missed yesterday (card auto-expands) */}
-        {warnMissedYesterday && !checked && !missed && expanded && (() => {
+        {/* Never-miss-twice nudge — this habit was missed yesterday */}
+        {warnMissedYesterday && !checked && !missed && (() => {
           // Never miss twice: on the day after a miss, halve the friction — offer the
           // 2-minute version as the comeback so getting back is effortless.
           const norm = s => (s || "").trim().toLowerCase().replace(/[.!]+$/, "");
@@ -4150,8 +4136,8 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
 
       </div>
 
-      {/* ── Coaching panel — Craving/Response/Reward chips + chain, only when expanded ── */}
-      {!checked && !missed && expanded && (() => {
+      {/* ── Coaching panel — Craving/Response/Reward chips + chain, always shown ── */}
+      {!checked && !missed && (() => {
         const total = Math.max(voteTotal, votes);          // never show "53 of 50"
         const pct   = total > 0 ? Math.min(100, Math.round((votes / total) * 100)) : 0;
         // Only surface the two-minute starter when it actually differs from the action
