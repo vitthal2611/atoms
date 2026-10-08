@@ -682,22 +682,11 @@ export default function BudgetView({ budget, setBudget }) {
         <div style={{ fontSize:16, fontWeight:800, marginTop:1, fontVariantNumeric:"tabular-nums" }}>{INR(k==="save"?d.sa:d.bk[k])}</div>
         <div style={{ fontSize:11, color:T.muted, marginTop:1 }}>{pct(k==="save"?d.sa:d.bk[k],d.income).toFixed(0)}% · of {INR(d.bbud[k])}</div></div>)}
     </div>
-    {(() => { const sc=(lbl,val,vc)=><div style={{ ...card({ padding:"10px 8px" }), flex:1, textAlign:"center", minWidth:0 }}>
-        <div style={{ fontSize:10, color:T.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:".02em" }}>{lbl}</div>
-        <div style={{ fontSize:15, fontWeight:800, marginTop:2, fontVariantNumeric:"tabular-nums", color:vc||T.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{INR(val)}</div></div>;
-      return carryOn
-      ? <>
-          <div style={{ display:"flex", gap:8, marginTop:9 }}>
-            {sc("Spent", d.es)}
-            {sc("Carried over", carryIn, carryIn<0?T.bad:T.good)}
-            {sc("This month", d.balance, d.balance<0?T.bad:T.good)}
-          </div>
-          <div style={{ fontSize:12.5, color:T.text2, textAlign:"center", marginTop:8, fontWeight:700 }}>Total balance: <b style={{ color:runBal<0?T.bad:T.good }}>{INR(runBal)}</b> <span style={{ color:T.muted, fontWeight:500 }}>(carried {INR(carryIn)} + this month {INR(d.balance)})</span></div>
-        </>
-      : <div style={{ display:"flex", gap:9, marginTop:9 }}>
-          <div style={{ ...card({ padding:"10px 12px" }), flex:1, display:"flex", alignItems:"center", gap:9 }}><Ic name="spend" size={19} color={T.muted} /><div><div style={{ fontSize:11, color:T.muted, fontWeight:600 }}>Spent</div><div style={{ fontSize:15, fontWeight:800, fontVariantNumeric:"tabular-nums" }}>{INR(d.es)}</div></div></div>
-          <div style={{ ...card({ padding:"10px 12px" }), flex:1, display:"flex", alignItems:"center", gap:9 }}><Ic name="wallet" size={19} color={T.muted} /><div><div style={{ fontSize:11, color:T.muted, fontWeight:600 }}>Balance</div><div style={{ fontSize:15, fontWeight:800, fontVariantNumeric:"tabular-nums", color:d.balance<0?T.bad:T.good }}>{INR(d.balance)}</div></div></div>
-        </div>;
+    {(() => { const scard=(icon,lbl,val)=><div style={{ ...card({ padding:"10px 12px" }), flex:1, display:"flex", alignItems:"center", gap:9 }}><Ic name={icon} size={19} color={T.muted} /><div style={{ minWidth:0 }}><div style={{ fontSize:11, color:T.muted, fontWeight:600 }}>{lbl}</div><div style={{ fontSize:15, fontWeight:800, fontVariantNumeric:"tabular-nums", color:lbl==="Spent"?T.text:(val<0?T.bad:T.good) }}>{INR(val)}</div></div></div>;
+      return <>
+        <div style={{ display:"flex", gap:9, marginTop:9 }}>{scard("spend","Spent",d.es)}{scard("wallet","Balance",carryOn?runBal:d.balance)}</div>
+        {carryOn && <div style={{ fontSize:11.5, color:T.muted, textAlign:"center", marginTop:7 }}>Balance = carried forward <b style={{ color:carryIn<0?T.bad:T.good }}>{INR(carryIn)}</b> + this month <b style={{ color:d.balance<0?T.bad:T.good }}>{INR(d.balance)}</b></div>}
+      </>;
     })()}
     <div style={{ ...card({ padding:"12px 13px", marginTop:9 }) }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:8 }}>
