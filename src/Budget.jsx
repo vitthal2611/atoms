@@ -682,11 +682,9 @@ export default function BudgetView({ budget, setBudget }) {
         <div style={{ fontSize:16, fontWeight:800, marginTop:1, fontVariantNumeric:"tabular-nums" }}>{INR(k==="save"?d.sa:d.bk[k])}</div>
         <div style={{ fontSize:11, color:T.muted, marginTop:1 }}>{pct(k==="save"?d.sa:d.bk[k],d.income).toFixed(0)}% · of {INR(d.bbud[k])}</div></div>)}
     </div>
-    {(() => { const scard=(icon,lbl,val)=><div style={{ ...card({ padding:"10px 12px" }), flex:1, display:"flex", alignItems:"center", gap:9 }}><Ic name={icon} size={19} color={T.muted} /><div style={{ minWidth:0 }}><div style={{ fontSize:11, color:T.muted, fontWeight:600 }}>{lbl}</div><div style={{ fontSize:15, fontWeight:800, fontVariantNumeric:"tabular-nums", color:lbl==="Spent"?T.text:(val<0?T.bad:T.good) }}>{INR(val)}</div></div></div>;
-      return <>
-        <div style={{ display:"flex", gap:9, marginTop:9 }}>{scard("spend","Spent",d.es)}{scard("wallet","Balance",carryOn?runBal:d.balance)}</div>
-        {carryOn && <div style={{ fontSize:11.5, color:T.muted, textAlign:"center", marginTop:7 }}>Balance = carried forward <b style={{ color:carryIn<0?T.bad:T.good }}>{INR(carryIn)}</b> + this month <b style={{ color:d.balance<0?T.bad:T.good }}>{INR(d.balance)}</b></div>}
-      </>;
+    {(() => { const scard=(icon,lbl,val,tip)=><div title={tip||undefined} style={{ ...card({ padding:"10px 12px" }), flex:1, display:"flex", alignItems:"center", gap:9, cursor:tip?"help":"default" }}><Ic name={icon} size={19} color={T.muted} /><div style={{ minWidth:0 }}><div style={{ fontSize:11, color:T.muted, fontWeight:600, display:"flex", alignItems:"center", gap:3 }}>{lbl}{tip && <span style={{ fontSize:10, opacity:.6 }}>ⓘ</span>}</div><div style={{ fontSize:15, fontWeight:800, fontVariantNumeric:"tabular-nums", color:lbl==="Spent"?T.text:(val<0?T.bad:T.good) }}>{INR(val)}</div></div></div>;
+      const tip = carryOn ? `Carried forward ${INR(carryIn)} + this month ${INR(d.balance)} = ${INR(runBal)}` : undefined;
+      return <div style={{ display:"flex", gap:9, marginTop:9 }}>{scard("spend","Spent",d.es)}{scard("wallet", carryOn?"Total balance":"Balance", carryOn?runBal:d.balance, tip)}</div>;
     })()}
     <div style={{ ...card({ padding:"12px 13px", marginTop:9 }) }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:8 }}>
