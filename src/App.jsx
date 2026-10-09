@@ -853,7 +853,7 @@ function saveCustomCues(list) {
 }
 
 // ─── HABIT FORM ───────────────────────────────────────────────────────────────
-function HabitForm({ initial={}, identities, cueSettings={ custom: [], dismissed: [] }, onCreateIdentity, onSave, onCancel, onDelete, mode="add" }) {
+function HabitForm({ initial={}, identities, cueSettings={ custom: [], dismissed: [] }, onCreateIdentity, onSave, onCancel, mode="add" }) {
   const [form, setForm] = useState({
     label:      initial.label      || "",
     trigger:    initial.trigger    || "",
@@ -1185,9 +1185,6 @@ function HabitForm({ initial={}, identities, cueSettings={ custom: [], dismissed
           {mode==="add" ? "Create habit" : "Save changes"}
         </button>
       </div>
-      {mode==="edit" && onDelete && (
-        <button type="button" onClick={onDelete} style={{ width:"100%", marginTop:10, background:"transparent", border:"none", color:T.red, fontSize:13.5, fontWeight:700, padding:"10px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>Delete habit</button>
-      )}
       {submitted && !valid && (
         <div role="alert" style={{ fontSize:13, color:T.red, marginTop:8, textAlign:"center" }}>
           {!form.label.trim() ? "Habit name is required"
@@ -1204,7 +1201,7 @@ function HabitForm({ initial={}, identities, cueSettings={ custom: [], dismissed
 }
 
 // ─── IDENTITY FORM ────────────────────────────────────────────────────────────
-function IdentityForm({ initial={}, onSave, onCancel, onDelete, mode="add" }) {
+function IdentityForm({ initial={}, onSave, onCancel, mode="add" }) {
   const [form, setForm] = useState({
     label:    initial.label    || "",
     icon:     initial.icon     || "🎯",
@@ -1251,9 +1248,6 @@ function IdentityForm({ initial={}, onSave, onCancel, onDelete, mode="add" }) {
           {mode==="add" ? "Add Identity" : "Save Changes"}
         </button>
       </div>
-      {mode==="edit" && onDelete && (
-        <button type="button" onClick={onDelete} style={{ width:"100%", marginTop:10, background:"transparent", border:"none", color:T.red, fontSize:13.5, fontWeight:700, padding:"10px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>Delete identity</button>
-      )}
       {submitted && !valid && (
         <div role="alert" style={{ fontSize:13, color:T.red, marginTop:8, textAlign:"center" }}>
           Identity statement is required
@@ -2500,7 +2494,7 @@ export default function App() {
       )}
       {modal==="editHabit" && modalCtx && (
         <Modal title="Edit Habit" onClose={()=>setModal(null)}>
-          <HabitForm initial={{ ...modalCtx.habit, identityId: modalCtx.identityId }} identities={identities} cueSettings={cueSettings} onSave={updateHabit} onCancel={()=>setModal(null)} onDelete={()=>openDeleteHabit(modalCtx.identityId, modalCtx.habit)} mode="edit" />
+          <HabitForm initial={{ ...modalCtx.habit, identityId: modalCtx.identityId }} identities={identities} cueSettings={cueSettings} onSave={updateHabit} onCancel={()=>setModal(null)} mode="edit" />
         </Modal>
       )}
       {modal==="addIdentity" && (
@@ -2515,7 +2509,7 @@ export default function App() {
       )}
       {modal==="editIdentity" && modalCtx && (
         <Modal title="Edit Identity" onClose={()=>setModal(null)}>
-          <IdentityForm initial={{ ...modalCtx.ident, colorIdx: modalCtx.colorIdx }} onSave={updateIdentity} onCancel={()=>setModal(null)} onDelete={()=>openDeleteIdentity(modalCtx.ident)} mode="edit" />
+          <IdentityForm initial={{ ...modalCtx.ident, colorIdx: modalCtx.colorIdx }} onSave={updateIdentity} onCancel={()=>setModal(null)} mode="edit" />
         </Modal>
       )}
       {modal==="confirmDeleteHabit" && modalCtx && (
@@ -3178,37 +3172,47 @@ const ManageView = memo(function ManageView({ identities, allData, onAddHabit, o
       )}
 
       {identities.map(identity=>(
-        <div key={identity.id} style={{ ...S.card, marginBottom:10 }}>
-          {/* Identity header — tap to edit (delete lives inside the edit screen). */}
-          <button type="button" onClick={()=>onEditIdentity(identity)} aria-label={`Edit identity: ${identity.label}`}
-            style={{ display:"flex", alignItems:"center", gap:11, width:"100%", background:"transparent", border:"none", padding:0, cursor:"pointer", fontFamily:"inherit", textAlign:"left", WebkitTapHighlightColor:"transparent" }}>
-            <span aria-hidden="true" style={{ width:36, height:36, borderRadius:10, flexShrink:0, background:(identity.color||T.primary)+"22", display:"flex", alignItems:"center", justifyContent:"center", fontSize:19 }}>{identity.icon}</span>
-            <span style={{ flex:1, minWidth:0 }}>
-              <span style={{ display:"block", fontSize:15, fontWeight:700, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{shortLabel(identity.label)}</span>
-              <span style={{ display:"block", fontSize:12, color:T.muted, marginTop:1 }}>{identity.habits.length} habit{identity.habits.length!==1?"s":""}</span>
-            </span>
-            <span aria-hidden="true" style={{ color:T.muted, fontSize:16, flexShrink:0 }}>›</span>
-          </button>
+        <div key={identity.id} style={S.card}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+            <span style={{fontSize:24}} aria-hidden="true">{identity.icon}</span>
+            <div style={{flex:1}}>
+              <div style={{...S.cardLabel,color:identity.color}}>{identity.label}</div>
+              <div style={{fontSize:12,color:T.muted,marginTop:2,fontWeight:500}}>{identity.habits.length} habit{identity.habits.length!==1?"s":""}</div>
+            </div>
+            <button onClick={()=>onEditIdentity(identity)} style={S.crudBtn} aria-label={`Edit identity: ${identity.label}`}>
+              <span aria-hidden="true">✎</span>
+            </button>
+            <button onClick={()=>onDeleteIdentity(identity)} style={{...S.crudBtn,color:T.red}} aria-label={`Delete identity: ${identity.label}`}>
+              <span aria-hidden="true">🗑</span>
+            </button>
+          </div>
 
           {identity.habits.length>0 && (
-            <div style={{ marginTop:12, borderTop:`1px solid ${T.border}` }}>
+            <div style={{borderTop:`1px solid ${T.border}`,paddingTop:10,marginBottom:10}}>
               {[...identity.habits].sort(byHabitTime).map(habit=>(
-                <button type="button" key={habit.id} onClick={()=>onEditHabit(identity.id,habit)} aria-label={`Edit habit: ${habit.label}`}
-                  style={{ display:"flex", alignItems:"center", gap:10, width:"100%", padding:"11px 2px", borderBottom:`1px solid ${T.surf2}`, background:"transparent", border:"none", cursor:"pointer", fontFamily:"inherit", textAlign:"left", WebkitTapHighlightColor:"transparent" }}>
-                  <span style={{ flex:1, minWidth:0, fontSize:14, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.label}</span>
-                  <span aria-hidden="true" style={{ color:T.muted, fontSize:15, flexShrink:0 }}>›</span>
-                </button>
+                <div key={habit.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:`1px solid ${T.surf2}`}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:14,color:T.text,fontWeight:600}}>{habit.label}</div>
+                    {habit.trigger&&<div style={{fontSize:12,color:T.muted,marginTop:2}}><span aria-hidden="true">⚡</span> {habit.trigger}</div>}
+                  </div>
+                  <button onClick={()=>onEditHabit(identity.id,habit)} style={S.crudBtn} aria-label={`Edit habit: ${habit.label}`}>
+                    <span aria-hidden="true">✎</span>
+                  </button>
+                  <button onClick={()=>onDeleteHabit(identity.id,habit)} style={{...S.crudBtn,color:T.red}} aria-label={`Delete habit: ${habit.label}`}>
+                    <span aria-hidden="true">🗑</span>
+                  </button>
+                </div>
               ))}
             </div>
           )}
 
-          {identity.habits.length===0 && (
-            <div style={{ fontSize:13, color:T.muted, textAlign:"center", padding:"12px 0 2px" }}>No habits yet</div>
+          {identity.habits.length===0&&(
+            <div style={{fontSize:13,color:T.muted,marginBottom:12,textAlign:"center",padding:"8px 0"}}>No habits yet — add one below</div>
           )}
 
-          <button onClick={()=>onAddHabit(identity.id)}
-            style={{ display:"flex", alignItems:"center", gap:7, background:"transparent", border:"none", padding:"11px 2px 0", cursor:"pointer", color:identity.color||T.primary, fontSize:13.5, fontWeight:700, fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
-            <span style={{ fontSize:16, lineHeight:1 }} aria-hidden="true">+</span> Add habit
+          <button onClick={()=>onAddHabit(identity.id)} style={{...S.addHabitBtn,borderColor:identity.color+"55"}}>
+            <span style={{fontSize:16,color:identity.color,fontWeight:700}} aria-hidden="true">+</span>
+            <span style={{fontSize:14,color:T.text2}}>Add habit to {shortLabel(identity.label)}</span>
           </button>
         </div>
       ))}
