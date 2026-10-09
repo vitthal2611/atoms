@@ -3759,12 +3759,11 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
   const next = getNextMilestone(streak);
   // Environment prep tick (Law 3) — a per-day, per-device convenience in localStorage.
   const [prepped, setPrepped] = useState(() => { try { return localStorage.getItem(`atoms:prep:${habit.id}:${getTodayKey()}`) === "1"; } catch { return false; } });
-  // Compact density: the card shows only what's needed to check in (action + ring +
-  // one meta line); identity, cue, and coaching move behind an expand tap. A habit
-  // missed yesterday opens itself so the "never miss twice" nudge stays visible.
+  // Two card versions, switched by the header toggle:
+  //  compact → only the action, ring, and a time · trigger line (fastest check-in)
+  //  full    → everything (identity, cue, time/place, Craving/Response/Reward)
   const compact = density === "compact";
-  const [expanded, setExpanded] = useState(!!warnMissedYesterday);
-  const showDetail = !compact || expanded;   // when to render the full identity/cue/coaching
+  const showDetail = !compact;
   // Quantity habits: a target amount (e.g. 8 glasses) counted up per day.
   const target = habit.target > 1 ? Math.round(habit.target) : 0;
   const isQty = target > 0;
@@ -3890,13 +3889,12 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
             {!checked && !missed && showDetail && cueText && (
               <div style={{ marginTop:2, fontSize:12, fontWeight:700, letterSpacing:"0.01em", color:C }}>{cueLead} {cueBody}</div>
             )}
-            {/* Compact: one quiet meta line — streak · identity · time. */}
-            {!checked && !missed && compact && !expanded && (
-              <div style={{ marginTop:3, fontSize:12, color:T.muted, display:"flex", alignItems:"center", gap:5, flexWrap:"wrap" }}>
-                {streak > 0 && <span style={{ color:"#B45309", fontWeight:800, display:"inline-flex", alignItems:"center", gap:3 }}><Ic name="flame" size={11} color="#B45309" />{streak}</span>}
-                {streak > 0 && <span aria-hidden="true">·</span>}
-                <span style={{ color:"#534AB7", minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:160 }}>{idDisplay}</span>
-                {habit.time && <><span aria-hidden="true">·</span><span style={{ fontVariantNumeric:"tabular-nums" }}>{to24h(habit.time)}</span></>}
+            {/* Compact: one quiet meta line — time · trigger (the cue). */}
+            {!checked && !missed && compact && (habit.time || cueText) && (
+              <div style={{ marginTop:3, fontSize:12.5, color:T.text2, display:"flex", alignItems:"center", gap:5, flexWrap:"wrap" }}>
+                {habit.time && <span style={{ fontVariantNumeric:"tabular-nums", fontWeight:700 }}>{to24h(habit.time)}</span>}
+                {habit.time && cueText && <span aria-hidden="true">·</span>}
+                {cueText && <span style={{ color:C, fontWeight:700, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:210 }}>{cueLead} {cueBody}</span>}
               </div>
             )}
           </div>
@@ -3910,15 +3908,8 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
               <span style={{ fontSize:12, fontWeight:800, color:T.red, whiteSpace:"nowrap", background:T.red + "14", padding:"2px 8px", borderRadius:20 }}>Missed</span>
             </span>
           )}
-          {/* Compact: expand toggle + the ⋯ menu live in the action row (the identity
-              header that normally holds the menu is hidden until expanded). */}
-          {!checked && !missed && compact && (
-            <button type="button" onClick={(e) => { e.stopPropagation(); setExpanded(v => !v); }}
-              aria-expanded={expanded} aria-label={expanded ? `Hide details for ${habit.label}` : `Show details for ${habit.label}`}
-              style={{ flexShrink:0, width:28, height:28, borderRadius:"50%", border:"none", background:"transparent", color:T.muted, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", WebkitTapHighlightColor:"transparent" }}>
-              <span aria-hidden="true" style={{ fontSize:11, lineHeight:1, display:"inline-block", transition:"transform 0.2s", transform: expanded ? "rotate(180deg)" : "none" }}>▾</span>
-            </button>
-          )}
+          {/* Compact: the ⋯ menu lives in the action row (the identity header that
+              normally holds it is hidden in compact view). */}
           {compact && menu}
         </div>
 
