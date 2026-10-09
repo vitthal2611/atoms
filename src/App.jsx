@@ -3805,9 +3805,9 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
   // Breaking a bad habit inverts the whole loop (resist, clean days, accountability).
   const breaking = habit.kind === "bad";
 
-  // Full view uses one consistent app colour; compact colour-codes each habit by its
-  // identity so you recognize it at a glance. Bad habits stay rose in both.
-  const C  = breaking ? "#D4537E" : (compact ? (identity.color || T.primary) : T.primary);
+  // One consistent card colour across the whole app (NOT the per-identity hue).
+  // Good habits share the ocean-blue theme colour; bad habits stay rose.
+  const C  = breaking ? "#D4537E" : T.primary;
   const Cd = breaking ? "#8A2F52" : "#0A5E86";
 
   // Identity name reads as a natural sentence after "I am" — lowercase the first
@@ -3824,28 +3824,9 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
   const rate = Math.round(rs.rate * 100);
   const rateColor = rate >= 80 ? "#0F9D74" : rate >= 50 ? "#C2751A" : "#B4402A";
 
-  // The check-in ring — placed on the left in full view, on the right in compact.
-  const ringNode = (
-    <span style={{ flexShrink:0, width:44, display:"flex", alignItems:"center", justifyContent:"center" }}>
-      {isQty && !checked && !missed ? (
-        <CounterRing count={count} target={target} color={C} size={44}
-          onInc={() => adjustCount(habit.id, target, 1)}
-          label={`Add one${unit ? " " + unit : ""} for ${habit.label} — ${count} of ${target}`} />
-      ) : (
-        <HabitRing checked={checked} missed={missed} color={C} streak={streak} next={next} size={44}
-          active={active && !readOnly} readOnly={readOnly} onClick={activate}
-          label={checked ? `Uncheck: ${habit.label}` : (breaking ? `Mark clean: ${habit.label}` : `Check: ${habit.label}`)} />
-      )}
-    </span>
-  );
-  // Compact: a colour-tinted tile with the habit's own icon, for instant recognition.
-  const tileNode = compact ? (
-    <span aria-hidden="true" onClick={activate} style={{ flexShrink:0, width:42, height:42, borderRadius:12, background: C + "22", display:"flex", alignItems:"center", justifyContent:"center", fontSize:21, lineHeight:1, cursor: readOnly ? "default" : "pointer" }}>{habit.icon || identity.icon || "•"}</span>
-  ) : null;
-
   return (
     <div className="habit-card" style={{
-      background: checked ? C + "1f" : missed ? T.red + "10" : (compact ? C + "0a" : "transparent"),
+      background: checked ? C + "1f" : missed ? T.red + "10" : "transparent",
       borderTop: first ? "none" : `1px solid ${C}22`,
       transition: "background 0.2s ease",
     }}>
@@ -3867,9 +3848,28 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
 
       {/* ── Card body — ring · action · cue ── */}
       <div style={{ padding: "10px 12px 9px" }}>
-        {/* ── Hero: compact = [icon tile] action [ring]; full = [ring] action ── */}
-        <div style={{ display:"flex", alignItems:"center", gap: compact ? 13 : 11 }}>
-          {compact ? tileNode : ringNode}
+        {/* ── The check-in ring + the implementation intention (the hero) ── */}
+        <div style={{ display:"flex", alignItems:"center", gap:11 }}>
+          <span style={{ flexShrink:0, width:44, display:"flex", alignItems:"center", justifyContent:"center" }}>
+            {isQty && !checked && !missed ? (
+              <CounterRing count={count} target={target} color={C} size={44}
+                onInc={() => adjustCount(habit.id, target, 1)}
+                label={`Add one${unit ? " " + unit : ""} for ${habit.label} — ${count} of ${target}`} />
+            ) : (
+              <HabitRing
+                checked={checked}
+                missed={missed}
+                color={C}
+                streak={streak}
+                next={next}
+                size={44}
+                active={active && !readOnly}
+                readOnly={readOnly}
+                onClick={activate}
+                label={checked ? `Uncheck: ${habit.label}` : (breaking ? `Mark clean: ${habit.label}` : `Check: ${habit.label}`)}
+              />
+            )}
+          </span>
           {/* Action is the hero; the cue sits tight beneath it as one unit so
               there's no floating gap between the action and its cue. */}
           <div style={{ flex:1, minWidth:0 }}>
@@ -3880,8 +3880,7 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
               onKeyDown={e => { if (e.key === "Enter") activate(); }}
               aria-label={isQty && !checked ? `Add one for ${habit.label}` : checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
               style={{ display:"block", cursor: readOnly ? "default" : "pointer",
-                wordBreak:"break-word", fontSize:17, fontWeight: compact ? 700 : 800, letterSpacing:"-0.01em", lineHeight:1.2,
-                fontFamily: compact ? FONT_DISPLAY : undefined,
+                wordBreak:"break-word", fontSize:17, fontWeight:800, letterSpacing:"-0.01em", lineHeight:1.25,
                 color: checked ? T.text2 : missed ? T.muted : T.text,
                 textDecoration: checked ? "line-through" : "none", textDecorationColor: C + "88" }}
             >
@@ -3899,7 +3898,6 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
               </div>
             )}
           </div>
-          {compact && ringNode}
           {isQty && !checked && !missed && count > 0 && (
             <button onClick={(e) => { e.stopPropagation(); adjustCount(habit.id, target, -1); }}
               aria-label={`Remove one — ${count} of ${target}`}
@@ -5241,8 +5239,6 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
               const st = getStreakForHabit(habit.id, habit.frequency);
               const bad = habit.kind === "bad";
               const streakBadge = st > 0 ? <StreakBadge habit={habit} allData={allData} streak={st} isBad={bad} /> : null;
-              // Compact view color-codes each habit by its identity; full keeps the one app colour.
-              const accent = (density === "compact" && !bad && (identity.color)) ? identity.color : T.primary;
               return (
               <div key={habit.id} className={habit.id === justChecked ? "just-checked" : undefined} style={{
                 background: warnMissed ? T.red+"14" : T.surface, borderRadius:14,
@@ -5250,14 +5246,14 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                   ? "1px solid #F0B4B4"
                   : habit.kind === "bad"
                   ? (habit.id === firstPendingId ? "1.5px solid #D4537E" : "1px solid #F4C0D1")
-                  : (habit.id === firstPendingId ? `1.5px solid ${accent}` : `1px solid ${T.border}`),
+                  : (habit.id === firstPendingId ? `1.5px solid ${T.primary}` : `1px solid ${T.border}`),
                 // Left accent — red when missed yesterday, rose for bad habits, else the
-                // identity colour (compact) or the one app colour (full).
-                borderLeft: `4px solid ${warnMissed ? "#E24B4A" : (habit.kind === "bad" ? "#D4537E" : accent)}`,
+                // one consistent app colour (not per-identity).
+                borderLeft: `4px solid ${warnMissed ? "#E24B4A" : (habit.kind === "bad" ? "#D4537E" : T.primary)}`,
                 boxShadow: warnMissed
                   ? "0 6px 20px #E24B4A22"
                   : habit.id === firstPendingId
-                  ? (habit.kind === "bad" ? "0 8px 22px #D4537E2e" : `0 8px 22px ${accent}2e`)
+                  ? (habit.kind === "bad" ? "0 8px 22px #D4537E2e" : `0 8px 22px ${T.primary}2e`)
                   : T.shadow,
                 overflow:"hidden",
               }}>
