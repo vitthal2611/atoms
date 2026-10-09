@@ -3847,9 +3847,9 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
       )}
 
       {/* ── Card body — ring · action · cue ── */}
-      <div style={{ padding: "10px 12px 9px" }}>
+      <div style={{ padding: compact ? "14px 15px" : "10px 12px 9px" }}>
         {/* ── The check-in ring + the implementation intention (the hero) ── */}
-        <div style={{ display:"flex", alignItems:"center", gap:11 }}>
+        <div style={{ display:"flex", alignItems:"center", gap: compact ? 13 : 11 }}>
           <span style={{ flexShrink:0, width:44, display:"flex", alignItems:"center", justifyContent:"center" }}>
             {isQty && !checked && !missed ? (
               <CounterRing count={count} target={target} color={C} size={44}
@@ -3880,7 +3880,8 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
               onKeyDown={e => { if (e.key === "Enter") activate(); }}
               aria-label={isQty && !checked ? `Add one for ${habit.label}` : checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
               style={{ display:"block", cursor: readOnly ? "default" : "pointer",
-                wordBreak:"break-word", fontSize:17, fontWeight:800, letterSpacing:"-0.01em", lineHeight:1.25,
+                wordBreak:"break-word", fontSize:17, fontWeight: compact ? 600 : 800, letterSpacing:"-0.01em", lineHeight: compact ? 1.15 : 1.25,
+                fontFamily: compact ? FONT_DISPLAY : undefined,
                 color: checked ? T.text2 : missed ? T.muted : T.text,
                 textDecoration: checked ? "line-through" : "none", textDecorationColor: C + "88" }}
             >
@@ -3889,12 +3890,15 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
             {!checked && !missed && showDetail && cueText && (
               <div style={{ marginTop:2, fontSize:12, fontWeight:700, letterSpacing:"0.01em", color:C }}>{cueLead} {cueBody}</div>
             )}
-            {/* Compact: one quiet meta line — time · trigger (the cue). */}
+            {/* Compact: a themed time chip + the quiet trigger (the cue). */}
             {!checked && !missed && compact && (habit.time || cueText) && (
-              <div style={{ marginTop:3, fontSize:12.5, color:T.text2, display:"flex", alignItems:"center", gap:5, flexWrap:"wrap" }}>
-                {habit.time && <span style={{ fontVariantNumeric:"tabular-nums", fontWeight:700 }}>{to24h(habit.time)}</span>}
-                {habit.time && cueText && <span aria-hidden="true">·</span>}
-                {cueText && <span style={{ color:C, fontWeight:700, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:210 }}>{cueLead} {cueBody}</span>}
+              <div style={{ marginTop:6, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                {habit.time && (
+                  <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:11.5, fontWeight:800, color:Cd, background: C + "14", borderRadius:20, padding:"2px 9px", fontVariantNumeric:"tabular-nums" }}>
+                    <Ic name="clock" size={11} color={Cd} />{to24h(habit.time)}
+                  </span>
+                )}
+                {cueText && <span style={{ fontSize:12.5, fontWeight:600, color:T.text2, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:200 }}>{cueLead} {cueBody}</span>}
               </div>
             )}
           </div>
@@ -5241,7 +5245,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
               const streakBadge = st > 0 ? <StreakBadge habit={habit} allData={allData} streak={st} isBad={bad} /> : null;
               return (
               <div key={habit.id} className={habit.id === justChecked ? "just-checked" : undefined} style={{
-                background: warnMissed ? T.red+"14" : T.surface, borderRadius:14,
+                background: warnMissed ? T.red+"14" : T.surface, borderRadius: density === "compact" ? 16 : 14,
                 border: warnMissed
                   ? "1px solid #F0B4B4"
                   : habit.kind === "bad"
