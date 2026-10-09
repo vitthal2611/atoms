@@ -2772,7 +2772,7 @@ const SCORE_META = {
   "-": { c: "#B4402A", bg: "#FBE9E4", bd: "#F3B6A6", label: "bad" },
   "=": { c: "#5F6E7A", bg: "#EEF2F6", bd: "#D6E1EA", label: "neutral" },
 };
-function ScorecardSettings({ settings = {}, onChange }) {
+function ScorecardSettings({ settings = {}, onChange, bare = false }) {
   const list = settings.scorecard || [];
   const [text, setText] = useState("");
   const [sign, setSign] = useState("=");
@@ -2781,7 +2781,7 @@ function ScorecardSettings({ settings = {}, onChange }) {
   const cycle = (i) => { const order = ["+", "=", "-"]; patch({ scorecard: list.map((it, idx) => idx === i ? { ...it, sign: order[(order.indexOf(it.sign) + 1) % 3] } : it) }); };
   const remove = (i) => patch({ scorecard: list.filter((_, idx) => idx !== i) });
   return (
-    <div style={{ ...S.card, marginTop:18 }}>
+    <div style={bare ? {} : { ...S.card, marginTop:18 }}>
       <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.08em", textTransform:"uppercase", color:T.muted, marginBottom:6 }}>Habit scorecard</div>
       <div style={{ fontSize:12, color:T.muted, marginBottom:14, lineHeight:1.45 }}>
         Awareness comes before change. List what you already do in a day and tag each — <b style={{color:SCORE_META["+"].c}}>＋ good</b>, <b style={{color:SCORE_META["-"].c}}>－ bad</b>, <b style={{color:SCORE_META["="].c}}>＝ neutral</b>. Tap a tag to change it. Turn a <b style={{color:SCORE_META["-"].c}}>－</b> into a habit to break.
@@ -2824,7 +2824,7 @@ function ScorecardSettings({ settings = {}, onChange }) {
 }
 
 // ─── CUE SUGGESTIONS SETTINGS (Manage tab) — remove/restore cue suggestions ────
-function CueSettings({ settings = { custom: [], dismissed: [] }, onChange }) {
+function CueSettings({ settings = { custom: [], dismissed: [] }, onChange, bare = false }) {
   const [draft, setDraft] = useState("");
   const dismissed = settings.dismissed || [];
   const custom = settings.custom || [];
@@ -2846,7 +2846,7 @@ function CueSettings({ settings = { custom: [], dismissed: [] }, onChange }) {
   ];
   const removedCount = BASE_GOOD_CUES.concat(BASE_BAD_CUES).filter(c => dset.has(c)).length;
   return (
-    <div style={{ ...S.card, marginTop:18 }}>
+    <div style={bare ? {} : { ...S.card, marginTop:18 }}>
       <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.08em", textTransform:"uppercase", color:T.muted, marginBottom:6 }}>Cue suggestions</div>
       <div style={{ fontSize:12, color:T.muted, marginBottom:14, lineHeight:1.45 }}>
         These appear when you pick a cue while adding a habit. Add your own, or remove any you'll never use — ✕ hides it, ＋ brings it back.{removedCount > 0 ? ` (${removedCount} hidden)` : ""}
@@ -2897,7 +2897,7 @@ function CueSettings({ settings = { custom: [], dismissed: [] }, onChange }) {
 }
 
 // ─── TRIBE — anonymous aggregate social proof, one cohort per identity ─────────
-function TribeSettings({ enabled, onToggle, identities = [] }) {
+function TribeSettings({ enabled, onToggle, identities = [], bare = false }) {
   const [counts, setCounts] = useState(null);   // { [identityId]: {today,total} | null }
   useEffect(() => {
     if (!enabled) { setCounts(null); return; }
@@ -2920,7 +2920,7 @@ function TribeSettings({ enabled, onToggle, identities = [] }) {
     return () => { alive = false; };
   }, [enabled, identities]);
   return (
-    <div style={{ ...S.card, marginTop:18 }}>
+    <div style={bare ? {} : { ...S.card, marginTop:18 }}>
       <div style={{ display:"flex", alignItems:"center", gap:10 }}>
         <span style={{ fontSize:18 }} aria-hidden="true">🏹</span>
         <div style={{ flex:1, minWidth:0 }}>
@@ -2958,7 +2958,7 @@ function TribeSettings({ enabled, onToggle, identities = [] }) {
 }
 
 // ─── INTEGRITY REPORT — this month's votes per identity (deliberate review) ────
-function MonthReport({ identities, allData = {} }) {
+function MonthReport({ identities, allData = {}, bare = false }) {
   const monthKey = getTodayKey().slice(0, 7);
   const monthName = new Date(monthKey + "-01T00:00").toLocaleDateString(navigator.language || undefined, { month: "long", year: "numeric" });
   const rows = (identities || []).map(idn => {
@@ -2969,7 +2969,7 @@ function MonthReport({ identities, allData = {} }) {
   const total = rows.reduce((n, r) => n + r.votes, 0);
   const max = rows.length ? rows[0].votes : 0;
   return (
-    <div style={{ ...S.card, marginTop:18 }}>
+    <div style={bare ? {} : { ...S.card, marginTop:18 }}>
       <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.08em", textTransform:"uppercase", color:T.muted, marginBottom:6 }}>Integrity report · {monthName}</div>
       {total === 0 ? (
         <div style={{ fontSize:12.5, color:T.muted, lineHeight:1.5 }}>No votes yet this month. Every check-in is a vote for who you're becoming — cast your first today.</div>
@@ -3139,7 +3139,27 @@ function ImportHabits({ onImport, onDone }) {
   );
 }
 
+// Collapsible settings group — one card with a tappable header; body shows when open.
+function SettingsGroup({ open, onToggle, emoji, color, title, sub, children }) {
+  return (
+    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, marginBottom:9, overflow:"hidden" }}>
+      <button onClick={onToggle} aria-expanded={open}
+        style={{ display:"flex", alignItems:"center", gap:12, padding:14, width:"100%", background:"transparent", border:"none", cursor:"pointer", fontFamily:"inherit", textAlign:"left", WebkitTapHighlightColor:"transparent" }}>
+        <span aria-hidden="true" style={{ width:34, height:34, borderRadius:10, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", background: (color||T.primary)+"1f", fontSize:18 }}>{emoji}</span>
+        <span style={{ flex:1, minWidth:0 }}>
+          <span style={{ display:"block", fontSize:14.5, fontWeight:700, color:T.text }}>{title}</span>
+          {sub && <span style={{ display:"block", fontSize:12, color:T.muted, marginTop:1 }}>{sub}</span>}
+        </span>
+        <span aria-hidden="true" style={{ color:T.muted, fontSize:13, transition:"transform 0.2s", transform: open ? "rotate(180deg)" : "none", display:"inline-flex", flexShrink:0 }}>▾</span>
+      </button>
+      {open && <div style={{ padding:"2px 14px 12px", borderTop:`1px solid ${T.border}` }}>{children}</div>}
+    </div>
+  );
+}
+
 const ManageView = memo(function ManageView({ identities, allData, onAddHabit, onEditHabit, onDeleteHabit, onAddIdentity, onEditIdentity, onDeleteIdentity, userName, userEmail, onSignOut, notifStatus, notifBusy, onEnableReminders, cueSettings, onChangeCueSettings, onOpenImport, onDeleteAll }) {
+  const [openGroup, setOpenGroup] = useState("notifications");
+  const grpToggle = id => () => setOpenGroup(o => o === id ? null : id);
   return (
     <div style={S.content}>
 
@@ -3199,21 +3219,10 @@ const ManageView = memo(function ManageView({ identities, allData, onAddHabit, o
 
       <button onClick={onAddIdentity} style={S.addIdentityBtn}>+ Add New Identity</button>
 
-      <MonthReport identities={identities} allData={allData} />
+      {/* ── Settings — grouped & collapsible so the page stays scannable ── */}
+      <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.08em", textTransform:"uppercase", color:T.muted, margin:"22px 2px 10px" }}>Settings</div>
 
-      <TribeSettings
-        enabled={!!(cueSettings && cueSettings.tribe)}
-        onToggle={() => onChangeCueSettings && onChangeCueSettings(prev => ({ ...(prev || {}), tribe: !(prev && prev.tribe) }))}
-        identities={identities}
-      />
-
-      <ScorecardSettings settings={cueSettings} onChange={onChangeCueSettings} />
-
-      <CueSettings settings={cueSettings} onChange={onChangeCueSettings} />
-
-      {/* Account & settings — sign out + reminders live here, keeping the header clean */}
-      <div style={{ ...S.card, marginTop:18 }}>
-        <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.08em", textTransform:"uppercase", color:T.muted, marginBottom:12 }}>Account &amp; settings</div>
+      <SettingsGroup open={openGroup==="appearance"} onToggle={grpToggle("appearance")} emoji="🎨" color="#7C5CFF" title="Appearance" sub="Theme — System, Light, Dark">
 
         {/* Appearance — Light / Dark / System. Writes localStorage("atoms.theme")
             and reloads, since the theme is chosen once at module load. */}
@@ -3237,6 +3246,10 @@ const ManageView = memo(function ManageView({ identities, allData, onAddHabit, o
             </div>
           );
         })()}
+
+      </SettingsGroup>
+
+      <SettingsGroup open={openGroup==="notifications"} onToggle={grpToggle("notifications")} emoji="🔔" color="#2E9BFF" title="Notifications" sub="Reminders · bedtime wind-down">
 
         {/* Habit reminders — always shown. On devices where web push isn't available
             in a browser tab (notably iPhone), guide the user to install the app first. */}
@@ -3297,6 +3310,20 @@ const ManageView = memo(function ManageView({ identities, allData, onAddHabit, o
           );
         })()}
 
+      </SettingsGroup>
+
+      <SettingsGroup open={openGroup==="community"} onToggle={grpToggle("community")} emoji="👥" color="#1D9E75" title="Coaching &amp; community" sub="Tribe · scorecard · cue ideas">
+        <TribeSettings bare enabled={!!(cueSettings && cueSettings.tribe)} onToggle={() => onChangeCueSettings && onChangeCueSettings(prev => ({ ...(prev || {}), tribe: !(prev && prev.tribe) }))} identities={identities} />
+        <div style={{ borderTop:`1px solid ${T.surf2}`, marginTop:12, paddingTop:12 }}><ScorecardSettings bare settings={cueSettings} onChange={onChangeCueSettings} /></div>
+        <div style={{ borderTop:`1px solid ${T.surf2}`, marginTop:12, paddingTop:12 }}><CueSettings bare settings={cueSettings} onChange={onChangeCueSettings} /></div>
+      </SettingsGroup>
+
+      <SettingsGroup open={openGroup==="reports"} onToggle={grpToggle("reports")} emoji="📊" color="#BA7517" title="Reports" sub="Monthly integrity summary">
+        <MonthReport bare identities={identities} allData={allData} />
+      </SettingsGroup>
+
+      <SettingsGroup open={openGroup==="data"} onToggle={grpToggle("data")} emoji="🗄️" color="#888780" title="Data &amp; account" sub="Import · export · sign out">
+
         {/* Import habits from JSON — bulk-add habits from a file or pasted blob. */}
         <div style={{ display:"flex", alignItems:"center", gap:10, paddingBottom:12, marginBottom:12, borderBottom:`1px solid ${T.surf2}` }}>
           <span style={{ fontSize:18 }} aria-hidden="true">📥</span>
@@ -3347,7 +3374,7 @@ const ManageView = memo(function ManageView({ identities, allData, onAddHabit, o
             <div style={{ fontSize:11, color:T.muted, marginTop:6, textAlign:"center", lineHeight:1.4 }}>Clears every habit and identity. You'll get a few seconds to undo.</div>
           </div>
         )}
-      </div>
+      </SettingsGroup>
     </div>
   );
 });
