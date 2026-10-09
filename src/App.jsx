@@ -1287,6 +1287,9 @@ export default function App() {
   });
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
   const [justChecked,  setJustChecked]  = useState(null);
+  // Habit-card density — "compact" (action + ring, detail on tap) or "full". Per device.
+  const [cardDensity,  setCardDensity]  = useState(() => { try { return localStorage.getItem("atoms.cardDensity") === "full" ? "full" : "compact"; } catch { return "compact"; } });
+  const toggleDensity = () => setCardDensity(d => { const n = d === "compact" ? "full" : "compact"; try { localStorage.setItem("atoms.cardDensity", n); } catch {} return n; });
   const [milestone,    setMilestone]   = useState(null);   // streak-milestone toast
   const [syncing,      setSyncing]     = useState(false);
   const [saveError,    setSaveError]   = useState(false);
@@ -2591,6 +2594,14 @@ export default function App() {
                 : `${totalDone} vote${totalDone!==1?"s":""} · ${totalTotal-totalDone} to go`}
             </div>
           </div>
+          {view === "today" && (
+            <button type="button" onClick={toggleDensity}
+              aria-label={`Card view: ${cardDensity === "compact" ? "compact" : "full"}. Switch to ${cardDensity === "compact" ? "full" : "compact"}.`}
+              style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11, fontWeight:700, color:T.text2, background:T.surf2, border:`1px solid ${T.border}`, borderRadius:20, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
+              <Ic name={cardDensity === "compact" ? "rows" : "card"} size={13} color={T.text2} />
+              {cardDensity === "compact" ? "Compact" : "Full"}
+            </button>
+          )}
         </div>
        </div>
        {/* Fixed quote + day navigator — live in the sticky header so they stay
@@ -2625,6 +2636,7 @@ export default function App() {
             habitNotes={habitNotes}
             setHabitNote={setHabitNote}
             justChecked={justChecked}
+            density={cardDensity}
             getStreakForHabit={getStreakForHabit}
             openEditHabit={openEditHabit}
             openDeleteHabit={openDeleteHabit}
@@ -3393,6 +3405,8 @@ const byHabitTime = (a, b) => habitSortMinutes(a) - habitSortMinutes(b);
 // ─── ICONS — crisp inline SVG strokes, consistent across devices ──────────────
 const IC_PATHS = {
   bolt:   <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>,
+  rows:   <><path d="M4 7h16M4 12h16M4 17h16"/></>,
+  card:   <><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 10.5h16"/></>,
   clock:  <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,
   home:   <><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></>,
   gift:   <><path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></>,
@@ -3509,100 +3523,9 @@ function CounterRing({ count, target, color, onInc, size = 44, label }) {
   );
 }
 
-// ─── NOTES JOURNAL — edit today's note + scroll (and edit) past days ───────────
-// James Clear's "Reflection & Review", per habit: one scrollable log where any
-// day's note is editable. Opened from the card's note link and the ⋯ menu.
-function NotesJournalModal({ habit, identity, allData = {}, habitNotes = {}, onSaveNote, onClose }) {
-  const todayK = getTodayKey();
-  const [editingKey, setEditingKey] = useState(todayK);   // today open for writing by default
-  const [draft, setDraft] = useState((habitNotes[todayK] || {})[habit.id] || "");
-
-  // Today is editable; earlier days are a read-only log. Show today plus any past
-  // day that has a status or a note, newest first.
-  const rows = useMemo(() => {
-    const out = [];
-    for (let i = 0; i < 366 && out.length < 120; i++) {
-      const k = addDaysKey(todayK, -i);
-      const st = (allData[k] || {})[habit.id];
-      const nt = (habitNotes[k] || {})[habit.id];
-      if (i === 0 || st !== undefined || nt) out.push({ k, st, nt });
-    }
-    return out;
-  }, [habit.id, allData, habitNotes, todayK]);
-
-  const editingToday = editingKey === todayK;
-  const saveToday = () => { onSaveNote(todayK, draft); setEditingKey(null); };
-
-  return (
-    <Modal title={`${habit.label} · notes`} onClose={onClose}>
-      <div style={{ padding: "2px 16px 18px", maxHeight: "62vh", overflowY: "auto" }}>
-        {rows.map(({ k, st, nt }, idx) => {
-          const isToday = k === todayK;
-          const dateLabel = new Date(k + "T00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-          const done = st === true, miss = st === "miss";
-          const Badge = (
-            <span aria-hidden="true" style={{ width: 18, height: 18, borderRadius: "50%", flexShrink: 0, marginTop: 1, display: "flex", alignItems: "center", justifyContent: "center", background: done ? identity.color : miss ? "#D98AA9" : T.surf2 }}>
-              {done && <Ic name="check" size={11} color="#fff" />}
-              {miss && <Ic name="x" size={10} color="#fff" />}
-            </span>
-          );
-          const heading = <span style={{ fontSize: 12, fontWeight: 800, color: T.text2 }}>{isToday ? "Today · " : ""}{dateLabel}{done ? " · done" : miss ? " · missed" : ""}</span>;
-
-          // Today — editable entry
-          if (isToday) {
-            return (
-              <div key={k} style={{ borderTop: idx === 0 ? "none" : `1px solid ${T.surf2}`, padding: "11px 0" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 7 }}>{Badge}{heading}</div>
-                {editingToday ? (
-                  <div style={{ paddingLeft: 27 }}>
-                    <textarea
-                      value={draft}
-                      onChange={e => setDraft(e.target.value)}
-                      autoFocus
-                      maxLength={280}
-                      rows={3}
-                      placeholder="What did you do today? (for your own review)"
-                      style={{ width: "100%", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit", fontSize: 13, color: T.text, background: T.surface, border: `1px solid ${identity.color}`, borderRadius: 9, padding: "8px 10px", lineHeight: 1.45 }}
-                    />
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 6 }}>
-                      <span style={{ fontSize: 10.5, color: T.muted }}>{draft.length}/280</span>
-                      <span style={{ display: "flex", gap: 8 }}>
-                        <button type="button" onClick={() => { setDraft((habitNotes[todayK] || {})[habit.id] || ""); setEditingKey(null); }} style={{ fontSize: 12, fontWeight: 700, color: T.muted, background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", WebkitTapHighlightColor: "transparent" }}>Cancel</button>
-                        <button type="button" onClick={saveToday} style={{ fontSize: 12, fontWeight: 800, color: "#fff", background: identity.color, border: "none", borderRadius: 8, padding: "5px 13px", cursor: "pointer", fontFamily: "inherit", WebkitTapHighlightColor: "transparent" }}>Save</button>
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <button type="button" onClick={() => { setDraft(nt || ""); setEditingKey(todayK); }} aria-label="Add or edit today's note"
-                    style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "none", border: "none", padding: "0 0 0 27px", cursor: "pointer", fontFamily: "inherit", WebkitTapHighlightColor: "transparent" }}>
-                    <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: nt ? T.text : "#534AB7", fontWeight: nt ? 400 : 600, lineHeight: 1.45, wordBreak: "break-word" }}>{nt || "+ add today's note"}</span>
-                    <Ic name="pencil" size={14} color={T.muted} />
-                  </button>
-                )}
-              </div>
-            );
-          }
-
-          // Earlier days — read-only log
-          return (
-            <div key={k} style={{ display: "flex", gap: 9, padding: "11px 0", borderTop: idx === 0 ? "none" : `1px solid ${T.surf2}` }}>
-              {Badge}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                {heading}
-                <div style={{ fontSize: 13, color: nt ? T.text : T.muted, fontStyle: nt ? "normal" : "italic", lineHeight: 1.45, marginTop: 2, wordBreak: "break-word" }}>{nt || "— no note"}</div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </Modal>
-  );
-}
-
 // ─── ROW MENU — notes / miss / edit / delete behind one ⋯ button ──────────────
 function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHabit, onReview, habitNotes = {}, allData = {}, setHabitNote, habitOps }) {
   const [open, setOpen] = useState(false);
-  const [notesOpen, setNotesOpen] = useState(false);
   const menuItem = {
     display: "flex", alignItems: "center", gap: 10, width: "100%",
     padding: "13px 8px", background: "transparent", border: "none",
@@ -3631,9 +3554,6 @@ function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHab
                 <Ic name="spark" size={15} color="#D4537E" /> Email {shortLabel(habit.partnerName || "partner")} an update
               </a>
             )}
-            <button onClick={() => { setOpen(false); setNotesOpen(true); }} style={menuItem}>
-              <Ic name="info" size={15} color={identity.colorDim || T.text2} /> Notes &amp; history
-            </button>
             {onReview && (
               <button onClick={() => { setOpen(false); onReview(habit, identity); }} style={menuItem}>
                 <Ic name="spark" size={15} color={T.primary} /> Review &amp; adjust
@@ -3651,16 +3571,6 @@ function RowMenu({ habit, identity, missed, onMiss, openEditHabit, openDeleteHab
             </button>
           </div>
         </Modal>
-      )}
-      {notesOpen && (
-        <NotesJournalModal
-          habit={habit}
-          identity={identity}
-          allData={allData}
-          habitNotes={habitNotes}
-          onSaveNote={(dateKey, text) => setHabitNote && setHabitNote(dateKey, habit.id, text)}
-          onClose={() => setNotesOpen(false)}
-        />
       )}
     </>
   );
@@ -3841,14 +3751,20 @@ function VotesBadge({ habit, allData, votes, total, color, isBad }) {
 // are intentionally excluded: they're derived from the compared props (streak,
 // checked…) or from this habit's own slice, so skipping them is safe.
 function habitRowEqual(a, b) {
-  const K = ["habit","identity","checked","missed","warnMissedYesterday","streak","count","note","habitNotes","first","showIdentity","hideTime","votes","voteTotal","active","stackLabels","readOnly","toggle","adjustCount","onMiss","setHabitNote","onEdit","habitOps"];
+  const K = ["habit","identity","checked","missed","warnMissedYesterday","streak","count","note","habitNotes","first","showIdentity","hideTime","votes","voteTotal","active","stackLabels","readOnly","density","toggle","adjustCount","onMiss","setHabitNote","onEdit","habitOps"];
   for (let i = 0; i < K.length; i++) if (a[K[i]] !== b[K[i]]) return false;
   return true;
 }
-const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, adjustCount, count = 0, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, habitOps, active = false, stackLabels = null, readOnly = false }) {
+const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warnMissedYesterday, streak, toggle, adjustCount, count = 0, onMiss, note = "", allData = {}, habitNotes = {}, setHabitNote, first, showIdentity, hideTime, history, votes = 0, voteTotal = 0, streakBadge = null, menu = null, onEdit, habitOps, active = false, stackLabels = null, readOnly = false, density = "full" }) {
   const next = getNextMilestone(streak);
   // Environment prep tick (Law 3) — a per-day, per-device convenience in localStorage.
   const [prepped, setPrepped] = useState(() => { try { return localStorage.getItem(`atoms:prep:${habit.id}:${getTodayKey()}`) === "1"; } catch { return false; } });
+  // Compact density: the card shows only what's needed to check in (action + ring +
+  // one meta line); identity, cue, and coaching move behind an expand tap. A habit
+  // missed yesterday opens itself so the "never miss twice" nudge stays visible.
+  const compact = density === "compact";
+  const [expanded, setExpanded] = useState(!!warnMissedYesterday);
+  const showDetail = !compact || expanded;   // when to render the full identity/cue/coaching
   // Quantity habits: a target amount (e.g. 8 glasses) counted up per day.
   const target = habit.target > 1 ? Math.round(habit.target) : 0;
   const isQty = target > 0;
@@ -3886,8 +3802,6 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
   const cueBody = cueStartsWithI ? cueAnchor.replace(/^i\s+/i, "") : cueAnchor;
   const intention = cueText ? `${cueLead} ${cueBody}, ${habit.kind === "bad" ? "instead I'll" : "I will"}` : "";
 
-  // Daily reflection note — the footer link opens the scrollable journal.
-  const [journalOpen, setJournalOpen] = useState(false);
 
   // Breaking a bad habit inverts the whole loop (resist, clean days, accountability).
   const breaking = habit.kind === "bad";
@@ -3918,8 +3832,8 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
       transition: "background 0.2s ease",
     }}>
 
-      {/* ── Identity header — a single clean identity line (metrics live in the
-          bottom proof row with the chain). ── */}
+      {/* ── Identity header — shown in full view; in compact it's one tap away. ── */}
+      {showDetail && (
       <div style={{ display:"flex", alignItems:"center", gap:9, padding:"9px 8px 9px 12px", background: C + "14", borderBottom:`1px solid ${C}2a` }}>
         {identity.icon && (
           <span aria-hidden="true" style={{ width:25, height:25, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, background: C + "24" }}>{identity.icon}</span>
@@ -3929,8 +3843,9 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
           <IdentityName text={idDisplay} color={Cd} />
         </div>
         {streakBadge}
-        {menu}
+        {!compact && menu}
       </div>
+      )}
 
       {/* ── Card body — ring · action · cue ── */}
       <div style={{ padding: "10px 12px 9px" }}>
@@ -3972,8 +3887,17 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
             >
               {habit.label}
             </span>
-            {!checked && !missed && cueText && (
+            {!checked && !missed && showDetail && cueText && (
               <div style={{ marginTop:2, fontSize:12, fontWeight:700, letterSpacing:"0.01em", color:C }}>{cueLead} {cueBody}</div>
+            )}
+            {/* Compact: one quiet meta line — streak · identity · time. */}
+            {!checked && !missed && compact && !expanded && (
+              <div style={{ marginTop:3, fontSize:12, color:T.muted, display:"flex", alignItems:"center", gap:5, flexWrap:"wrap" }}>
+                {streak > 0 && <span style={{ color:"#B45309", fontWeight:800, display:"inline-flex", alignItems:"center", gap:3 }}><Ic name="flame" size={11} color="#B45309" />{streak}</span>}
+                {streak > 0 && <span aria-hidden="true">·</span>}
+                <span style={{ color:"#534AB7", minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:160 }}>{idDisplay}</span>
+                {habit.time && <><span aria-hidden="true">·</span><span style={{ fontVariantNumeric:"tabular-nums" }}>{to24h(habit.time)}</span></>}
+              </div>
             )}
           </div>
           {isQty && !checked && !missed && count > 0 && (
@@ -3986,6 +3910,16 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
               <span style={{ fontSize:12, fontWeight:800, color:T.red, whiteSpace:"nowrap", background:T.red + "14", padding:"2px 8px", borderRadius:20 }}>Missed</span>
             </span>
           )}
+          {/* Compact: expand toggle + the ⋯ menu live in the action row (the identity
+              header that normally holds the menu is hidden until expanded). */}
+          {!checked && !missed && compact && (
+            <button type="button" onClick={(e) => { e.stopPropagation(); setExpanded(v => !v); }}
+              aria-expanded={expanded} aria-label={expanded ? `Hide details for ${habit.label}` : `Show details for ${habit.label}`}
+              style={{ flexShrink:0, width:28, height:28, borderRadius:"50%", border:"none", background:"transparent", color:T.muted, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", WebkitTapHighlightColor:"transparent" }}>
+              <span aria-hidden="true" style={{ fontSize:11, lineHeight:1, display:"inline-block", transition:"transform 0.2s", transform: expanded ? "rotate(180deg)" : "none" }}>▾</span>
+            </button>
+          )}
+          {compact && menu}
         </div>
 
         {/* Quantity + time/place — beneath the action, indented to line up
@@ -3997,7 +3931,7 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
         {isQty && checked && (
           <div style={{ marginLeft:55, marginTop:3, fontSize:11.5, fontWeight:700, color:"#0F9D74" }}>{target} of {target}{unit ? " " + unit : ""} · done</div>
         )}
-        {!checked && (habit.time || habit.location) && (
+        {!checked && showDetail && (habit.time || habit.location) && (
           <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:6, marginLeft:55, flexWrap:"wrap" }}>
             {habit.time && (
               <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:800, color:Cd, background:C + "12", border:`1px solid ${C}22`, borderRadius:20, padding:"3px 9px", fontVariantNumeric:"tabular-nums" }}
@@ -4014,8 +3948,8 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
           </div>
         )}
 
-        {/* Never-miss-twice nudge — this habit was missed yesterday */}
-        {warnMissedYesterday && !checked && !missed && (() => {
+        {/* Never-miss-twice nudge — this habit was missed yesterday (compact auto-expands) */}
+        {warnMissedYesterday && !checked && !missed && showDetail && (() => {
           // Never miss twice: on the day after a miss, halve the friction — offer the
           // 2-minute version as the comeback so getting back is effortless.
           const norm = s => (s || "").trim().toLowerCase().replace(/[.!]+$/, "");
@@ -4136,8 +4070,8 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
 
       </div>
 
-      {/* ── Coaching panel — Craving/Response/Reward chips + chain, always shown ── */}
-      {!checked && !missed && (() => {
+      {/* ── Coaching panel — Craving/Response/Reward chips + chain (full/expanded only) ── */}
+      {!checked && !missed && showDetail && (() => {
         const total = Math.max(voteTotal, votes);          // never show "53 of 50"
         const pct   = total > 0 ? Math.min(100, Math.round((votes / total) * 100)) : 0;
         // Only surface the two-minute starter when it actually differs from the action
@@ -4195,14 +4129,8 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
             ))}
           </div>
 
-          {/* Footer — add a note (left) + the next-reward milestone (right) */}
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginTop:13, paddingTop:12, borderTop:`1px solid ${T.surf2}` }}>
-            {setHabitNote ? (
-              <button type="button" onClick={() => setJournalOpen(true)} aria-label={note ? "Open note" : "Add a note for today"}
-                style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:12, fontWeight:700, color: note ? "#534AB7" : T.muted, background:"none", border:"none", padding:0, cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
-                <Ic name="pencil" size={14} color={note ? "#534AB7" : T.muted} /> {note ? "Note" : "Add a note"}
-              </button>
-            ) : <span aria-hidden="true" />}
+          {/* Footer — the next-reward milestone progress */}
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", gap:12, marginTop:13, paddingTop:12, borderTop:`1px solid ${T.surf2}` }}>
             <MilestoneProgress streak={streak} />
           </div>
 
@@ -4240,17 +4168,6 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
         </div>
         );
       })()}
-
-      {journalOpen && setHabitNote && (
-        <NotesJournalModal
-          habit={habit}
-          identity={identity}
-          allData={allData}
-          habitNotes={habitNotes}
-          onSaveNote={(dateKey, text) => setHabitNote(dateKey, habit.id, text)}
-          onClose={() => setJournalOpen(false)}
-        />
-      )}
     </div>
   );
 }, habitRowEqual);
@@ -5173,7 +5090,7 @@ function StreakBadge({ habit, allData, streak, isBad, bare = false }) {
 }
 
 // ─── TODAY VIEW ───────────────────────────────────────────────────────────────
-const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, adjustCount, markMiss, habitOps, habitNotes, setHabitNote, justChecked, getStreakForHabit, openEditHabit, openDeleteHabit, openReviewFor, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, addFocusTask, toggleTask, deleteTask, editTask, toggleStar, toggleFocus, deferTask, setTaskPriority, reviewTarget, onOpenReview, onDismissReview }) {
+const TodayView = memo(function TodayView({ identities, allHabits, todayData, allData, toggle, adjustCount, markMiss, habitOps, habitNotes, setHabitNote, justChecked, density, getStreakForHabit, openEditHabit, openDeleteHabit, openReviewFor, setModal, openAddHabit, openAddIdentity, selectedDate, setSelectedDate, todayKey, dailyTasks, addTask, addFocusTask, toggleTask, deleteTask, editTask, toggleStar, toggleFocus, deferTask, setTaskPriority, reviewTarget, onOpenReview, onDismissReview }) {
   const [notTodayExpanded, setNotTodayExpanded] = useState(false);
   const notTodayListId = useId();
   const [matrixExpanded, setMatrixExpanded] = useState(false);
@@ -5354,6 +5271,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                 <HabitRow
                   active={habit.id === firstPendingId}
                   readOnly={isFuture}
+                  density={density}
                   stackLabels={stackLabels}
                   streakBadge={streakBadge}
                   onEdit={() => openEditHabit(identity.id, habit)}
