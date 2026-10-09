@@ -3888,8 +3888,6 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
 
   // Daily reflection note — the footer link opens the scrollable journal.
   const [journalOpen, setJournalOpen] = useState(false);
-  // Four Laws coaching row: which law's detail is open (tap on mobile; hover shows a tooltip).
-  const [openLaw, setOpenLaw] = useState(null);
 
   // Breaking a bad habit inverts the whole loop (resist, clean days, accountability).
   const breaking = habit.kind === "bad";
@@ -4159,46 +4157,43 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
         <div style={{ background:T.surface, borderTop:`1px solid ${T.surf2}`, padding:"9px 14px 11px" }}
           aria-label={`${votes} of ${total} ${breaking ? "days clean" : "days kept"} toward ${shortLabel(identity.label)}, ${pct} percent${streak > 0 ? `, ${streak} ${breaking ? "days clean streak" : "day streak"}` : ""}`}>
 
-          {/* Four Laws — compact icons; hover (desktop) shows the detail in a tooltip,
-              tap (mobile) reveals it inline below. Keeps the daily card uncluttered. */}
-          {(() => {
-            const respText = breaking
-              ? [showStarter ? `If tempted: ${habit.starter}` : "", habit.easy || ""].filter(Boolean).join(" · ")
-              : (showStarter ? `2-min: ${habit.starter}` : (habit.easy || ""));
-            const laws = [
-              { name:"Craving",  icon:"heart", color:"#534AB7", text: habit.attractive || "",
-                hint: breaking ? "Add the real cost" : "Add why it's attractive" },
-              { name:"Response", icon:"bolt",  color:"#0F6E56", text: respText,
-                hint: breaking ? "Add friction" : "Add an easy start" },
-              { name:"Reward",   icon:"gift",  color:"#854F0B", text: habit.satisfying ? `${breaking ? "If you slip: " : ""}${habit.satisfying}` : "",
-                hint: breaking ? "Add an accountability cost" : "Add a reward" },
-            ];
-            const sel = laws.find(l => l.name === openLaw);
-            return (
-            <>
-              <div style={{ display:"flex", gap:8 }}>
-                {laws.map(l => { const set = !!l.text; const open = openLaw === l.name; return (
-                  <button key={l.name} type="button"
-                    onClick={() => set ? setOpenLaw(o => o === l.name ? null : l.name) : (onEdit && onEdit())}
-                    title={`${l.name} — ${l.text || "not set"}`}
-                    aria-label={`${l.name}: ${l.text || "not set yet"}`}
-                    style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4, padding:"8px 6px", borderRadius:10,
-                      border:`1px solid ${l.color}${open ? "" : "22"}`, background: l.color + (open ? "22" : (set ? "0e" : "06")),
-                      cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent", opacity: set ? 1 : 0.55 }}>
-                    <Ic name={l.icon} size={17} color={l.color} />
-                    <span style={{ fontSize:10, fontWeight:900, letterSpacing:"0.03em", textTransform:"uppercase", color:l.color }}>{l.name}</span>
-                  </button>
-                ); })}
+          {/* Four Laws — icon · label · value, one per line (B1). */}
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            {[
+              { icon:"heart", name:"Craving", color:"#534AB7",
+                content: habit.attractive
+                  ? <span style={{ color:T.text }}>{habit.attractive}</span>
+                  : <AddHint label={breaking ? "Add the real cost" : "Add why it's attractive"} /> },
+              { icon:"bolt", name:"Response", color:"#0F6E56",
+                // For good habits the easy/prep already has its own "Prep:" bar at the
+                // top, so show only the 2-minute version here (no duplicate). Bad habits
+                // have no prep bar, so both friction levers can share this line.
+                content: breaking
+                  ? ((showStarter || habit.easy)
+                      ? <span style={{ color:T.text }}>
+                          {showStarter && <>If tempted: {habit.starter}</>}
+                          {showStarter && habit.easy ? " · " : ""}
+                          {habit.easy}
+                        </span>
+                      : <AddHint label="Add friction" />)
+                  : (showStarter
+                      ? <span style={{ color:T.text }}>2-min: {habit.starter}</span>
+                      : habit.easy
+                      ? <span style={{ color:T.text }}>{habit.easy}</span>
+                      : <AddHint label="Add an easy start" />) },
+              { icon:"gift", name:"Reward", color:"#854F0B",
+                content: habit.satisfying
+                  ? <span style={{ color:T.text }}>{breaking ? "If you slip: " : ""}{habit.satisfying}</span>
+                  : <AddHint label={breaking ? "Add an accountability cost" : "Add a reward"} /> },
+            ].map(l => (
+              <div key={l.name} style={{ display:"flex", alignItems:"baseline", gap:10 }}>
+                <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:6, width:100, fontSize:11, fontWeight:900, letterSpacing:"0.03em", textTransform:"uppercase", color:l.color }}>
+                  <Ic name={l.icon} size={15} color={l.color} /> {l.name}
+                </span>
+                <span style={{ flex:1, minWidth:0, fontSize:13.5, fontWeight:600, lineHeight:1.35, wordBreak:"break-word" }}>{l.content}</span>
               </div>
-              {sel && (
-                <div style={{ display:"flex", gap:7, marginTop:8, fontSize:13, fontWeight:600, color:T.text, lineHeight:1.4, background:T.surf2, borderRadius:9, padding:"8px 11px" }}>
-                  <Ic name={sel.icon} size={14} color={sel.color} />
-                  <span style={{ flex:1, minWidth:0, wordBreak:"break-word" }}>{sel.text ? sel.text : <AddHint label={sel.hint} />}</span>
-                </div>
-              )}
-            </>
-            );
-          })()}
+            ))}
+          </div>
 
           {/* Footer — add a note (left) + the next-reward milestone (right) */}
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginTop:13, paddingTop:12, borderTop:`1px solid ${T.surf2}` }}>
