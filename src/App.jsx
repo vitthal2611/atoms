@@ -3860,21 +3860,21 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
 
       {/* ── Identity header — shown in full view; in compact it's one tap away. ── */}
       {showDetail && (
-      <div style={{ background:`linear-gradient(135deg, ${C}, ${Cd})`, color:"#fff", padding:"12px 13px" }}>
+      <div style={{ background:`linear-gradient(135deg, ${C}12, ${C}20)`, borderBottom:`1px solid ${C}2a`, padding:"11px 13px" }}>
         <div style={{ display:"flex", alignItems:"flex-start", gap:10 }}>
           {identity.icon && (
-            <span aria-hidden="true" style={{ width:34, height:34, borderRadius:10, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17, background:"#ffffff33" }}>{identity.icon}</span>
+            <span aria-hidden="true" style={{ width:32, height:32, borderRadius:10, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, background: C + "26" }}>{identity.icon}</span>
           )}
           <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontSize:10, fontWeight:900, letterSpacing:"0.05em", textTransform:"uppercase", opacity:.85 }}>{breaking ? "Breaking free" : "Becoming"}</div>
-            <IdentityName text={idDisplay} color="#fff" />
+            <div style={{ fontSize:9.5, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking free" : "Becoming"}</div>
+            <IdentityName text={idDisplay} color={Cd} />
           </div>
           {streakBadge}
-          {!compact && <span style={{ display:"inline-flex", borderRadius:8, background:"#ffffff22" }}>{menu}</span>}
+          {!compact && menu}
         </div>
         {votes > 0 && (
-          <div style={{ fontSize:11, opacity:.92, marginTop:8, display:"flex", alignItems:"center", gap:5 }}>
-            <Ic name={breaking ? "check" : "pencil"} size={12} color="#ffffffcc" />
+          <div style={{ fontSize:11, fontWeight:600, color:T.text2, marginTop:7, display:"flex", alignItems:"center", gap:5 }}>
+            <Ic name={breaking ? "check" : "pencil"} size={12} color={C} />
             {breaking ? `${votes} resisted — staying in control` : `${votes} vote${votes === 1 ? "" : "s"} cast — proving it every day`}
           </div>
         )}
