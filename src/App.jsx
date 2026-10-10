@@ -3889,7 +3889,7 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
 
       {/* ── Identity header — shown in full view; in compact it's one tap away. ── */}
       {showDetail && (
-      <div style={{ padding:"12px 14px 0" }}>
+      <div style={{ padding:"12px 14px 11px", borderBottom:`1px solid ${T.border}` }}>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           {identity.icon && (
             <span aria-hidden="true" style={{ width:28, height:28, borderRadius:9, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, background: C + "1f" }}>{identity.icon}</span>
@@ -4027,7 +4027,6 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
                   border: done ? "none" : isToday ? `1.5px solid ${C}` : miss ? `1.5px solid ${T.red}55` : `1px solid ${T.border}` }} />;
               })}
             </div>
-            <span style={{ fontSize:10.5, color:T.muted }}>this week{rs.due >= 7 ? ` · ${rate}% this month` : ""}</span>
           </div>
         )}
 
