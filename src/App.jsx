@@ -3786,6 +3786,9 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
   const next = getNextMilestone(streak);
   // Environment prep tick (Law 3) — a per-day, per-device convenience in localStorage.
   const [prepped, setPrepped] = useState(() => { try { return localStorage.getItem(`atoms:prep:${habit.id}:${getTodayKey()}`) === "1"; } catch { return false; } });
+  // Full view collapses the detail section (Craving/Response/Reward, milestone, week
+  // strip) by default so the card is a fast check-in; tap "Show details" to expand.
+  const [expanded, setExpanded] = useState(false);
   // Two card versions, switched by the header toggle:
   //  compact → only the action, ring, and a time · trigger line (fastest check-in)
   //  full    → everything (identity, cue, time/place, Craving/Response/Reward)
@@ -4110,10 +4113,19 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
           );
         })()}
 
+        {/* Expand / collapse the detail section (Craving/Response/Reward + milestone + week). */}
+        {showDetail && !checked && !missed && (
+          <button type="button" onClick={() => setExpanded(v => !v)} aria-expanded={expanded}
+            style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:5, width:"100%", marginTop:10, padding:"5px", background:"none", border:"none", color:T.muted, fontSize:11.5, fontWeight:700, fontFamily:"inherit", cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
+            {expanded ? "Hide details" : "Show details"}
+            <span aria-hidden="true" style={{ fontSize:10, lineHeight:1, display:"inline-block", transform: expanded ? "rotate(180deg)" : "none", transition:"transform .15s" }}>▾</span>
+          </button>
+        )}
+
       </div>
 
-      {/* ── Coaching panel — Craving/Response/Reward chips + chain (full/expanded only) ── */}
-      {!checked && !missed && showDetail && (() => {
+      {/* ── Coaching panel — Craving/Response/Reward + milestone + week (expanded only) ── */}
+      {!checked && !missed && showDetail && expanded && (() => {
         const total = Math.max(voteTotal, votes);          // never show "53 of 50"
         const pct   = total > 0 ? Math.min(100, Math.round((votes / total) * 100)) : 0;
         // Only surface the two-minute starter when it actually differs from the action
