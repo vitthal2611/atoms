@@ -3886,7 +3886,7 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
           {identity.icon && (
             <span aria-hidden="true" style={{ width:24, height:24, borderRadius:7, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, background: C + "1f" }}>{identity.icon}</span>
           )}
-          {expanded && <span style={{ flexShrink:0, fontSize:9.5, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking free" : "Becoming"}</span>}
+          <span style={{ flexShrink:0, fontSize:9.5, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking" : "I am"}</span>
           <span style={{ flex:1, minWidth:0, fontSize:13, fontWeight:800, color:Cd, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{idDisplay}</span>
           {streakBadge}
           {!compact && menu}
