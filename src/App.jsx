@@ -1288,7 +1288,7 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
   const [justChecked,  setJustChecked]  = useState(null);
   // Habit-card density — "compact" (action + ring, detail on tap) or "full". Per device.
-  const [cardDensity,  setCardDensity]  = useState(() => { try { return localStorage.getItem("atoms.cardDensity") === "full" ? "full" : "compact"; } catch { return "compact"; } });
+  const [cardDensity,  setCardDensity]  = useState(() => { try { return localStorage.getItem("atoms.cardDensity") === "compact" ? "compact" : "full"; } catch { return "full"; } });
   const toggleDensity = () => setCardDensity(d => { const n = d === "compact" ? "full" : "compact"; try { localStorage.setItem("atoms.cardDensity", n); } catch {} return n; });
   const [milestone,    setMilestone]   = useState(null);   // streak-milestone toast
   const [syncing,      setSyncing]     = useState(false);
