@@ -3854,6 +3854,24 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
   const rate = Math.round(rs.rate * 100);
   const rateColor = rate >= 80 ? "#0F9D74" : rate >= 50 ? "#C2751A" : "#B4402A";
 
+  // This week's Mon→Sun status — shared by the collapsed momentum dots and the
+  // expanded week strip: done / today / miss / undone / future / off / pre.
+  const weekDays = (() => {
+    const tk = getTodayKey();
+    const dt = new Date(tk + "T00:00");
+    const monday = addDaysKey(tk, -((dt.getDay() + 6) % 7));
+    const sKey = habitStartKey(habit, allData);
+    return ["M", "T", "W", "T", "F", "S", "S"].map((lb, i) => {
+      const key = addDaysKey(monday, i);
+      let st;
+      if (sKey && key < sKey) st = "pre";
+      else if (!isScheduledOn(habit.frequency, key)) st = "off";
+      else { const v = allData[key] ? allData[key][habit.id] : undefined;
+        st = v === true ? "done" : v === "miss" ? "miss" : key > tk ? "future" : key === tk ? "today" : "undone"; }
+      return { lb, st };
+    });
+  })();
+
   return (
     <div className="habit-card" style={{
       background: checked ? C + "1f" : missed ? T.red + "10" : "transparent",
@@ -3863,19 +3881,17 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
 
       {/* ── Identity header — shown in full view; in compact it's one tap away. ── */}
       {showDetail && (
-      <div style={{ background:`linear-gradient(135deg, ${C}12, ${C}20)`, borderBottom:`1px solid ${C}2a`, padding:"11px 13px" }}>
-        <div style={{ display:"flex", alignItems:"flex-start", gap:10 }}>
+      <div style={{ padding:"12px 14px 0" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:9 }}>
           {identity.icon && (
-            <span aria-hidden="true" style={{ width:32, height:32, borderRadius:10, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, background: C + "26" }}>{identity.icon}</span>
+            <span aria-hidden="true" style={{ width:24, height:24, borderRadius:7, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, background: C + "1f" }}>{identity.icon}</span>
           )}
-          <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontSize:9.5, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking free" : "Becoming"}</div>
-            <IdentityName text={idDisplay} color={Cd} />
-          </div>
+          {expanded && <span style={{ flexShrink:0, fontSize:9.5, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking free" : "Becoming"}</span>}
+          <span style={{ flex:1, minWidth:0, fontSize:13, fontWeight:800, color:Cd, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{idDisplay}</span>
           {streakBadge}
           {!compact && menu}
         </div>
-        {votes > 0 && (
+        {expanded && votes > 0 && (
           <div style={{ fontSize:11, fontWeight:600, color:T.text2, marginTop:7, display:"flex", alignItems:"center", gap:5 }}>
             <Ic name={breaking ? "check" : "pencil"} size={12} color={C} />
             {breaking ? `${votes} resisted — staying in control` : `${votes} vote${votes === 1 ? "" : "s"} cast — proving it every day`}
@@ -3885,7 +3901,7 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
       )}
 
       {/* ── Card body — ring · action · cue ── */}
-      <div style={{ padding: compact ? "14px 15px" : "10px 12px 9px" }}>
+      <div style={{ padding: compact ? "14px 15px" : "8px 14px 12px" }}>
         {/* ── The check-in ring + the implementation intention (the hero) ── */}
         <div style={{ display:"flex", alignItems:"center", gap: compact ? 13 : 11 }}>
           {/* Ring: compact/quantity/checked/missed. In full+unchecked the Complete button below is the check-in. */}
@@ -3968,19 +3984,35 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
           <div style={{ marginLeft:55, marginTop:3, fontSize:11.5, fontWeight:700, color:"#0F9D74" }}>{target} of {target}{unit ? " " + unit : ""} · done</div>
         )}
         {!checked && showDetail && (habit.time || habit.location) && (
-          <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:8, marginLeft: isQty ? 55 : 0, flexWrap:"wrap" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:13, marginTop:9, marginLeft: isQty ? 55 : 0, flexWrap:"wrap", fontSize:11.5, color:T.muted }}>
             {habit.time && (
-              <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:800, color:Cd, background:C + "12", border:`1px solid ${C}22`, borderRadius:20, padding:"3px 9px", fontVariantNumeric:"tabular-nums" }}
+              <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontVariantNumeric:"tabular-nums" }}
                 aria-label={cueText ? `Reminder at ${to24h(habit.time)}` : `At ${to24h(habit.time)}`}>
-                {cueText ? <span aria-hidden="true" style={{ fontSize:10 }}>🔔</span> : <Ic name="clock" size={11} color={Cd} />}{to24h(habit.time)}
+                <Ic name="clock" size={12} color={T.muted} />{to24h(habit.time)}
               </span>
             )}
             {habit.location && (
-              <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:800, color:T.text2, background:T.surf2, borderRadius:20, padding:"3px 9px", maxWidth:170 }}>
-                <span aria-hidden="true" style={{ fontSize:10 }}>📍</span>
-                <span style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{habit.location}</span>
+              <span style={{ display:"inline-flex", alignItems:"center", gap:4, minWidth:0 }}>
+                <span aria-hidden="true" style={{ fontSize:11 }}>📍</span>
+                <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:170 }}>{habit.location}</span>
               </span>
             )}
+          </div>
+        )}
+
+        {/* Momentum dots — glanceable week progress (collapsed view). */}
+        {showDetail && !checked && !missed && !expanded && (
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:11, marginLeft: isQty ? 55 : 0 }}
+            aria-label={`This week, ${weekDays.filter(d => d.st === "done").length} days kept${streak > 0 ? `, ${streak} day streak` : ""}`}>
+            <div style={{ display:"flex", gap:5 }} aria-hidden="true">
+              {weekDays.map((d, i) => {
+                const done = d.st === "done", isToday = d.st === "today", miss = d.st === "miss" || d.st === "undone";
+                return <span key={i} style={{ width:9, height:9, borderRadius:"50%", boxSizing:"border-box",
+                  background: done ? C : T.surf2,
+                  border: done ? "none" : isToday ? `1.5px solid ${C}` : miss ? `1.5px solid ${T.red}55` : `1px solid ${T.border}` }} />;
+              })}
+            </div>
+            <span style={{ fontSize:10.5, color:T.muted }}>this week{rs.due >= 7 ? ` · ${rate}% this month` : ""}</span>
           </div>
         )}
 
@@ -3988,8 +4020,8 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
         {showDetail && !checked && !missed && !isQty && !readOnly && (
           <button type="button" onClick={activate}
             aria-label={breaking ? `Mark clean: ${habit.label}` : `Complete: ${habit.label}`}
-            style={{ width:"100%", marginTop:11, background:C, color:"#fff", border:"none", borderRadius:12, padding:"12px", fontSize:14.5, fontWeight:800, fontFamily:"inherit", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8, WebkitTapHighlightColor:"transparent" }}>
-            <Ic name="check" size={18} color="#fff" /> {breaking ? "Mark clean today" : "Complete habit"}
+            style={{ width:"100%", marginTop:13, background:C, color:"#fff", border:"none", borderRadius:13, padding:"12px", fontSize:14.5, fontWeight:800, fontFamily:"inherit", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8, boxShadow:`0 2px 8px ${C}40`, WebkitTapHighlightColor:"transparent" }}>
+            <Ic name="check" size={18} color="#fff" /> {breaking ? "Mark clean" : "Complete"}
           </button>
         )}
 
@@ -4205,20 +4237,7 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
 
           {/* Weekly consistency strip — this calendar week, Mon→Sun. */}
           {(() => {
-            const t = getTodayKey();
-            const dt = new Date(t + "T00:00");
-            const monday = addDaysKey(t, -((dt.getDay() + 6) % 7));
-            const sKey = habitStartKey(habit, allData);
-            const LBL = ["M", "T", "W", "T", "F", "S", "S"];
-            const days = LBL.map((lb, i) => {
-              const key = addDaysKey(monday, i);
-              let st;
-              if (sKey && key < sKey) st = "pre";
-              else if (!isScheduledOn(habit.frequency, key)) st = "off";
-              else { const v = allData[key] ? allData[key][habit.id] : undefined;
-                st = v === true ? "done" : v === "miss" ? "miss" : key > t ? "future" : key === t ? "today" : "undone"; }
-              return { lb, st };
-            });
+            const days = weekDays;
             let wK = 0, wD = 0;
             days.forEach(d => { if (d.st === "done") { wK++; wD++; } else if (d.st === "miss" || d.st === "undone") wD++; });
             const allKept = wD > 0 && wK === wD;
