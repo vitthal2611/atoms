@@ -3860,16 +3860,24 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
 
       {/* ── Identity header — shown in full view; in compact it's one tap away. ── */}
       {showDetail && (
-      <div style={{ display:"flex", alignItems:"center", gap:9, padding:"9px 8px 9px 12px", background: C + "14", borderBottom:`1px solid ${C}2a` }}>
-        {identity.icon && (
-          <span aria-hidden="true" style={{ width:25, height:25, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, background: C + "24" }}>{identity.icon}</span>
-        )}
-        <div style={{ flex:1, minWidth:0, display:"flex", alignItems:"baseline", gap:6 }}>
-          <span style={{ flexShrink:0, fontSize:10, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking" : "I am"}</span>
-          <IdentityName text={idDisplay} color={Cd} />
+      <div style={{ background:`linear-gradient(135deg, ${C}, ${Cd})`, color:"#fff", padding:"12px 13px" }}>
+        <div style={{ display:"flex", alignItems:"flex-start", gap:10 }}>
+          {identity.icon && (
+            <span aria-hidden="true" style={{ width:34, height:34, borderRadius:10, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17, background:"#ffffff33" }}>{identity.icon}</span>
+          )}
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:10, fontWeight:900, letterSpacing:"0.05em", textTransform:"uppercase", opacity:.85 }}>{breaking ? "Breaking free" : "Becoming"}</div>
+            <IdentityName text={idDisplay} color="#fff" />
+          </div>
+          {streakBadge}
+          {!compact && <span style={{ display:"inline-flex", borderRadius:8, background:"#ffffff22" }}>{menu}</span>}
         </div>
-        {streakBadge}
-        {!compact && menu}
+        {votes > 0 && (
+          <div style={{ fontSize:11, opacity:.92, marginTop:8, display:"flex", alignItems:"center", gap:5 }}>
+            <Ic name={breaking ? "check" : "pencil"} size={12} color="#ffffffcc" />
+            {breaking ? `${votes} resisted — staying in control` : `${votes} vote${votes === 1 ? "" : "s"} cast — proving it every day`}
+          </div>
+        )}
       </div>
       )}
 
