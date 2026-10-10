@@ -682,16 +682,9 @@ export default function BudgetView({ budget, setBudget }) {
   const carryOn = !!budget?.carryOver;
   const carryIn = carryOn ? Object.keys(budget.months||{}).sort().filter(id=>id<active).reduce((a,id)=>a+calc(budget.months[id]).balance,0) : 0;
   const runBal = d.balance + carryIn;
-  // Up to 6 most-recently-used envelopes (by latest transaction) pin to the top,
-  // then shown alphabetically; the rest are grouped by bucket below.
-  const lastUsed = {}; (m.txns||[]).forEach(t=>{ if(t.categoryId && (!lastUsed[t.categoryId] || t.date>lastUsed[t.categoryId])) lastUsed[t.categoryId]=t.date; });
+  // All envelopes are grouped by bucket (Need / Want / Save), sorted A→Z within each.
   const allCats = m.categories||[];
-  const recentCats = allCats.filter(c=>lastUsed[c.id])
-    .sort((a,b)=>lastUsed[b.id].localeCompare(lastUsed[a.id]))   // pick the 6 most recent
-    .slice(0,6)
-    .sort((a,b)=>(a.name||"").localeCompare(b.name||""));        // ...then display A→Z
-  const recentIds = new Set(recentCats.map(c=>c.id));
-  const restCats = allCats.filter(c=>!recentIds.has(c.id));
+  const restCats = allCats;
   const sub = { fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".04em", margin:"0 2px 8px" };
   // Non-recent envelopes grouped by bucket, sorted A→Z within each group.
   const bucketSec = bucket => { const cs=restCats.filter(c=>c.bucket===bucket).sort((a,b)=>(a.name||"").localeCompare(b.name||"")); if(!cs.length) return null;
@@ -789,8 +782,6 @@ export default function BudgetView({ budget, setBudget }) {
     </div>
     {impNote && <div style={{ fontSize:12, color:T.good, fontWeight:700, textAlign:"right", margin:"-2px 2px 8px" }}>{impNote}</div>}
     {editMode && <div style={{ fontSize:12, color:T.muted, margin:"0 2px 8px" }}>Tap an envelope to edit its budget & icon, or add a new one below.</div>}
-    {recentCats.length>0 && restCats.length>0 && <div style={sub}>⭐ Recently used</div>}
-    {recentCats.length>0 && <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>{recentCats.map(envCard)}</div>}
     {bucketSec("need")}
     {bucketSec("want")}
     {bucketSec("save")}
