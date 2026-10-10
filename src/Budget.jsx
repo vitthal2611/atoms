@@ -695,26 +695,34 @@ export default function BudgetView({ budget, setBudget }) {
       <div key={bucket+"-g"} style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>{cs.map(envCard)}</div>
     ];
   };
-  const envCard = c => { const s=d.sp[c.id]||0, bal=(+c.budget||0)-s, u=pct(s,c.budget); const n=(m.txns||[]).filter(t=>t.categoryId===c.id).length;
-    const st=c.bucket==="save"?(s>=c.budget&&c.budget>0?"done":u>=80?"good":"warn"):stOf(s,c.budget);
-    const label=c.bucket==="save"?(s>=c.budget&&c.budget>0?"Funded":u>0?"Partial":"Empty"):(st==="bad"?"Overspent":st==="warn"?"Watch":"On track");
+  const envCard = c => { const s=d.sp[c.id]||0, bud=+c.budget||0, bal=bud-s, u=pct(s,bud); const n=(m.txns||[]).filter(t=>t.categoryId===c.id).length;
+    const isSave=c.bucket==="save";
+    const st=isSave?(s>=bud&&bud>0?"done":u>=80?"good":"warn"):stOf(s,bud);
+    const label=isSave?(s>=bud&&bud>0?"Funded":u>0?"Saving":"Empty"):(st==="bad"?"Overspent":st==="warn"?"Watch":"On track");
     const col=st==="bad"?T.bad:st==="warn"?T.warn:BK[c.bucket].c;
-    const cell=(l,v,vc,al)=><div style={{ minWidth:0, textAlign:al }}>
-      <div style={{ fontSize:10, color:T.muted, textTransform:"uppercase", letterSpacing:".03em" }}>{l}</div>
-      <div style={{ fontSize:12.5, fontWeight:700, fontVariantNumeric:"tabular-nums", color:vc||T.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{v}</div></div>;
-    return <div key={c.id} onClick={()=>editMode?setModal({type:"cat",initial:c}):setModal(c.bucket==="save"?{type:"goal",cat:c}:{type:"spend",env:c})}
-      style={{ ...card({ padding:13 }), cursor:"pointer", minWidth:0 }}>
-      <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:11 }}>
-        <div style={{ width:32, height:32, borderRadius:9, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, background:BK[c.bucket].s, flexShrink:0 }}>{iconOf(c)}</div>
+    const RC=144.51, off=RC*(1-Math.max(0,Math.min(1,(u||0)/100)));   // ring: 2πr, r=23
+    return <div key={c.id} onClick={()=>editMode?setModal({type:"cat",initial:c}):setModal(isSave?{type:"goal",cat:c}:{type:"spend",env:c})}
+      style={{ ...card({ padding:14 }), cursor:"pointer", minWidth:0, borderRadius:14 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:12 }}>
+        <div style={{ width:30, height:30, borderRadius:9, display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, background:BK[c.bucket].s, flexShrink:0 }}>{iconOf(c)}</div>
         <span style={{ flex:1, minWidth:0, fontWeight:700, fontSize:13.5, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.name}</span>
-        <span style={{ ...chip(st), flexShrink:0 }}>{label}</span></div>
-      <Bar v={u} color={col} />
-      <div style={{ display:"flex", justifyContent:"space-between", gap:6, marginTop:11 }}>
-        {cell("Alloc", INRk(c.budget), null, "left")}{cell("Spent", INRk(s), col, "center")}{cell("Balance", INRk(bal), bal<0?T.bad:T.good, "right")}
+        {isSave ? <span style={{ ...chip(st), flexShrink:0 }}>{label}</span>
+          : <span title={label} style={{ width:7, height:7, borderRadius:"50%", background:col, flexShrink:0 }} />}</div>
+      <div style={{ display:"flex", alignItems:"center", gap:13 }}>
+        <svg width="54" height="54" viewBox="0 0 54 54" style={{ flexShrink:0 }} aria-hidden="true">
+          <circle cx="27" cy="27" r="23" fill="none" stroke={T.surf2} strokeWidth="6" />
+          <circle cx="27" cy="27" r="23" fill="none" stroke={col} strokeWidth="6" strokeLinecap="round" strokeDasharray={RC} strokeDashoffset={off} transform="rotate(-90 27 27)" />
+          <text x="27" y="31" textAnchor="middle" fontSize={u>=100?11:12.5} fontWeight="700" fontFamily="inherit" fill={st==="bad"?T.bad:T.text}>{Math.round(u||0)}%</text>
+        </svg>
+        <div style={{ minWidth:0 }}>
+          <div style={{ fontSize:19, fontWeight:800, color:isSave?BK.save.c:(bal<0?T.bad:T.good), fontVariantNumeric:"tabular-nums", lineHeight:1.1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{isSave?INRk(s):INRk(bal)}</div>
+          <div style={{ fontSize:11, color:(bal<0&&!isSave)?T.bad:T.muted }}>{isSave?`of ${INRk(bud)} saved`:(bal<0?"overspent":"left to spend")}</div></div>
       </div>
-      {c.bucket!=="save" && <button onClick={e=>{ e.stopPropagation(); setModal({ type:"envtxns", cat:c }); }}
-        style={{ marginTop:10, paddingTop:9, width:"100%", background:"none", border:"none", borderTop:`1px solid ${T.border}`, textAlign:"left", color:T.primary, fontFamily:"inherit", fontSize:11.5, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:5 }}>
-        🧾 {n} txn{n===1?"":"s"}<span style={{ marginLeft:"auto", opacity:.55 }}>›</span></button>}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", fontSize:11, color:T.muted, marginTop:12, paddingTop:9, borderTop:`1px solid ${T.border}`, fontVariantNumeric:"tabular-nums" }}>
+        <span>{isSave?`${INRk(Math.max(0,bal))} to go`:`${INRk(s)} of ${INRk(bud)}`}</span>
+        {isSave ? <span>{n} txn{n===1?"":"s"}</span>
+          : <button onClick={e=>{ e.stopPropagation(); setModal({ type:"envtxns", cat:c }); }} style={{ background:"none", border:"none", color:T.primary, fontFamily:"inherit", fontSize:11, fontWeight:700, cursor:"pointer", padding:0 }}>{n} txn{n===1?"":"s"} ›</button>}
+      </div>
     </div>; };
 
   const pill = on => ({ display:"inline-flex", alignItems:"center", gap:5, fontFamily:"inherit", fontSize:12.5, fontWeight:700, padding:"6px 12px", borderRadius:20, cursor:"pointer", border:`1px solid ${on?T.primary:T.border}`, background:on?T.primary+"14":T.surf2, color:on?T.primary:T.text2 });
