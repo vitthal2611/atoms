@@ -233,7 +233,6 @@ function SpendSheet({ m, api, env, initial, curMonth, onClose, onChange }) {
           : <div style={{ fontSize:12.5, color:T.muted }}>No other envelope has spare money.</div>}
         {chosen && !can && <div style={{ fontSize:12, color:T.bad, marginTop:6 }}>{chosen.name} only has {INR(chosen.avail)}.</div>}</div>
       <button disabled={!can} onClick={()=>{ api.transfer(src, env.id, xfer.shortfall); record(); }} style={{ ...primaryBtn, background:can?T.primary:T.surf2, color:can?"#fff":T.muted, marginBottom:8 }}>Transfer {INR(xfer.shortfall)} & spend</button>
-      <button onClick={record} style={{ ...ghostBtn, width:"100%", color:T.bad, borderColor:T.bad+"55", marginBottom:8 }}>Overspend anyway</button>
       <button onClick={()=>setXfer(null)} style={{ ...ghostBtn, width:"100%" }}>Back</button>
     </Sheet>;
   }
