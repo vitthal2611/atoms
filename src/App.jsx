@@ -3877,6 +3877,8 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
       <div style={{ padding: compact ? "14px 15px" : "10px 12px 9px" }}>
         {/* ── The check-in ring + the implementation intention (the hero) ── */}
         <div style={{ display:"flex", alignItems:"center", gap: compact ? 13 : 11 }}>
+          {/* Ring: compact/quantity/checked/missed. In full+unchecked the Complete button below is the check-in. */}
+          {(compact || isQty || checked || missed) && (
           <span style={{ flexShrink:0, width:44, display:"flex", alignItems:"center", justifyContent:"center" }}>
             {isQty && !checked && !missed ? (
               <CounterRing count={count} target={target} color={C} size={44}
@@ -3897,6 +3899,7 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
               />
             )}
           </span>
+          )}
           {/* Action is the hero; the cue sits tight beneath it as one unit so
               there's no floating gap between the action and its cue. */}
           <div style={{ flex:1, minWidth:0 }}>
@@ -3968,6 +3971,15 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
               </span>
             )}
           </div>
+        )}
+
+        {/* Complete habit — the explicit one-tap check-in CTA (full view, simple habits). */}
+        {showDetail && !checked && !missed && !isQty && !readOnly && (
+          <button type="button" onClick={activate}
+            aria-label={breaking ? `Mark clean: ${habit.label}` : `Complete: ${habit.label}`}
+            style={{ width:"100%", marginTop:11, background:C, color:"#fff", border:"none", borderRadius:12, padding:"12px", fontSize:14.5, fontWeight:800, fontFamily:"inherit", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8, WebkitTapHighlightColor:"transparent" }}>
+            <Ic name="check" size={18} color="#fff" /> {breaking ? "Mark clean today" : "Complete habit"}
+          </button>
         )}
 
         {/* Never-miss-twice nudge — this habit was missed yesterday (compact auto-expands) */}
@@ -4113,8 +4125,8 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
         <div style={{ background:T.surface, borderTop:`1px solid ${T.surf2}`, padding:"9px 14px 11px" }}
           aria-label={`${votes} of ${total} ${breaking ? "days clean" : "days kept"} toward ${shortLabel(identity.label)}, ${pct} percent${streak > 0 ? `, ${streak} ${breaking ? "days clean streak" : "day streak"}` : ""}`}>
 
-          {/* Four Laws — icon · label · value, one per line (B1). */}
-          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          {/* Four Laws — Craving / Response / Reward as three compact columns. */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:7 }}>
             {[
               { icon:"heart", name:"Craving", color:"#534AB7",
                 content: habit.attractive
@@ -4142,19 +4154,83 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
                   ? <span style={{ color:T.text }}>{breaking ? "If you slip: " : ""}{habit.satisfying}</span>
                   : <AddHint label={breaking ? "Add an accountability cost" : "Add a reward"} /> },
             ].map(l => (
-              <div key={l.name} style={{ display:"flex", alignItems:"baseline", gap:10 }}>
-                <span style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:6, width:100, fontSize:11, fontWeight:900, letterSpacing:"0.03em", textTransform:"uppercase", color:l.color }}>
-                  <Ic name={l.icon} size={15} color={l.color} /> {l.name}
-                </span>
-                <span style={{ flex:1, minWidth:0, fontSize:13.5, fontWeight:600, lineHeight:1.35, wordBreak:"break-word" }}>{l.content}</span>
+              <div key={l.name} style={{ background:T.surf2, borderRadius:10, padding:"8px 9px", minWidth:0 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:4, fontSize:9, fontWeight:900, letterSpacing:"0.03em", textTransform:"uppercase", color:l.color }}>
+                  <Ic name={l.icon} size={12} color={l.color} /> {l.name}
+                </div>
+                <div style={{ marginTop:3, fontSize:11.5, fontWeight:600, lineHeight:1.3, color:T.text2, wordBreak:"break-word" }}>{l.content}</div>
               </div>
             ))}
           </div>
 
-          {/* Footer — the next-reward milestone progress */}
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", gap:12, marginTop:13, paddingTop:12, borderTop:`1px solid ${T.surf2}` }}>
-            <MilestoneProgress streak={streak} />
-          </div>
+          {/* Milestone bar — streak progress toward the next reward (gold). */}
+          {(() => {
+            const earnedM = getMilestone(streak), nextM = getNextMilestone(streak);
+            if (!nextM) return null;
+            const prevD = earnedM ? earnedM.days : 0;
+            const fracM = Math.max(0, Math.min(1, (streak - prevD) / (nextM.days - prevD)));
+            const remainM = nextM.days - streak;
+            return (
+              <div style={{ marginTop:13, background:T.surf2, borderRadius:11, padding:"9px 11px" }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", fontSize:10.5, fontWeight:800, marginBottom:6 }}>
+                  <span style={{ color:"#B07B1E" }}><span aria-hidden="true">{nextM.emoji}</span> {nextM.label}</span>
+                  <span style={{ color:T.muted, whiteSpace:"nowrap" }}>{remainM} day{remainM === 1 ? "" : "s"} to go</span>
+                </div>
+                <div style={{ height:5, background:"#EBE0C6", borderRadius:20, overflow:"hidden" }}>
+                  <div style={{ width:`${Math.round(fracM * 100)}%`, height:"100%", background:"#F59E0B", borderRadius:20 }} />
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Weekly consistency strip — this calendar week, Mon→Sun. */}
+          {(() => {
+            const t = getTodayKey();
+            const dt = new Date(t + "T00:00");
+            const monday = addDaysKey(t, -((dt.getDay() + 6) % 7));
+            const sKey = habitStartKey(habit, allData);
+            const LBL = ["M", "T", "W", "T", "F", "S", "S"];
+            const days = LBL.map((lb, i) => {
+              const key = addDaysKey(monday, i);
+              let st;
+              if (sKey && key < sKey) st = "pre";
+              else if (!isScheduledOn(habit.frequency, key)) st = "off";
+              else { const v = allData[key] ? allData[key][habit.id] : undefined;
+                st = v === true ? "done" : v === "miss" ? "miss" : key > t ? "future" : key === t ? "today" : "undone"; }
+              return { lb, st };
+            });
+            let wK = 0, wD = 0;
+            days.forEach(d => { if (d.st === "done") { wK++; wD++; } else if (d.st === "miss" || d.st === "undone") wD++; });
+            const allKept = wD > 0 && wK === wD;
+            return (
+              <div style={{ marginTop:13, paddingTop:12, borderTop:`1px solid ${T.surf2}` }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:9 }}>
+                  <span style={{ fontSize:11, fontWeight:700, color:T.text2 }}>This week</span>
+                  <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:11, fontWeight:800, color: allKept ? "#0F9D74" : T.muted, whiteSpace:"nowrap" }}>
+                    {allKept && <Ic name="check" size={11} color="#0F9D74" />}{allKept ? "all kept" : `${wK} of ${wD} kept`}
+                  </span>
+                </div>
+                <div style={{ display:"flex", justifyContent:"space-between" }}>
+                  {days.map((d, i) => {
+                    const done = d.st === "done", isToday = d.st === "today", miss = d.st === "miss" || d.st === "undone";
+                    return (
+                      <div key={i} style={{ textAlign:"center" }}>
+                        <div style={{ width:28, height:28, borderRadius:"50%", margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"center",
+                          background: done ? C : isToday ? C + "14" : "transparent",
+                          border: done ? "none" : isToday ? `2px solid ${C}` : miss ? `1.5px solid ${T.red}66` : `1.5px solid ${T.border}` }}>
+                          {done ? <Ic name="check" size={14} color="#fff" />
+                            : isToday ? <span style={{ width:6, height:6, borderRadius:"50%", background:C }} />
+                            : miss ? <span style={{ width:5, height:5, borderRadius:"50%", background:T.red + "88" }} />
+                            : null}
+                        </div>
+                        <div style={{ fontSize:9.5, fontWeight: isToday ? 800 : 500, color: isToday ? Cd : T.muted, marginTop:4 }}>{d.lb}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* 2-minute rule scaling — once it's automatic, nudge to grow it (once). */}
           {(() => {
