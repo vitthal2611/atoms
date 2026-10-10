@@ -3889,14 +3889,14 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
 
       {/* ── Identity header — shown in full view; in compact it's one tap away. ── */}
       {showDetail && (
-      <div style={{ padding:"12px 14px 11px", borderBottom:`1px solid ${T.border}` }}>
-        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+      <div style={{ padding:"9px 14px 8px", borderBottom:`1px solid ${T.border}` }}>
+        <div style={{ display:"flex", alignItems:"center", gap:9 }}>
           {identity.icon && (
-            <span aria-hidden="true" style={{ width:28, height:28, borderRadius:9, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, background: C + "1f" }}>{identity.icon}</span>
+            <span aria-hidden="true" style={{ width:25, height:25, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, background: C + "1f" }}>{identity.icon}</span>
           )}
           <span style={{ flex:1, minWidth:0, display:"flex", alignItems:"baseline", gap:5 }}>
             <span style={{ flexShrink:0, fontSize:10, fontWeight:900, letterSpacing:"0.05em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking" : "I am"}</span>
-            <span style={{ flex:1, minWidth:0, fontSize:15.5, fontWeight:800, letterSpacing:"-0.01em", color:Cd, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{idDisplay}</span>
+            <span style={{ flex:1, minWidth:0, fontSize:15, fontWeight:800, letterSpacing:"-0.01em", color:Cd, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{idDisplay}</span>
           </span>
           {streakBadge}
           {!compact && menu}
@@ -3911,7 +3911,7 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
       )}
 
       {/* ── Card body — ring · action · cue ── */}
-      <div style={{ padding: compact ? "14px 15px" : "8px 14px 12px" }}>
+      <div style={{ padding: compact ? "14px 15px" : "7px 14px 11px" }}>
         {/* ── The check-in ring + the implementation intention (the hero) ── */}
         <div style={{ display:"flex", alignItems:"center", gap: compact ? 13 : 11 }}>
           {/* Ring: compact/quantity/checked/missed. In full+unchecked the Complete button below is the check-in. */}
