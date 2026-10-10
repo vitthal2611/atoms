@@ -82,15 +82,17 @@ export function seedBudget() {
 }
 
 function calc(m) {
-  const sp={}, bk={need:0,want:0,save:0}; let inx=0;
-  (m.txns||[]).forEach(t=>{ if(t.bucket==="income"){ inx+=(+t.amount||0); return; } if(t.categoryId) sp[t.categoryId]=(sp[t.categoryId]||0)+(+t.amount||0); bk[t.bucket]=(bk[t.bucket]||0)+(+t.amount||0); });
-  const income=(+m.salaryIncome||0)+(+m.otherIncome||0)+inx;
+  const sp={}, bk={need:0,want:0,save:0}; let inxIncome=0, borrow=0, letout=0;
+  (m.txns||[]).forEach(t=>{ if(t.bucket==="income"){ const a=+t.amount||0; if(t.kind==="borrow") borrow+=a; else if(t.kind==="letout") letout+=a; else inxIncome+=a; return; } if(t.categoryId) sp[t.categoryId]=(sp[t.categoryId]||0)+(+t.amount||0); bk[t.bucket]=(bk[t.bucket]||0)+(+t.amount||0); });
+  const grossIncome=(+m.salaryIncome||0)+(+m.otherIncome||0)+inxIncome;  // salary + other + plain income entries
+  const realIncome=grossIncome-letout;                                   // what's truly yours (feeds net worth)
+  const income=grossIncome+borrow-letout;                                // budget: allocatable cash (borrow counts, lent out doesn't)
   const cats=m.categories||[]; let sb=0,eb=0;
   const bbud={need:0,want:0,save:0};
   cats.forEach(c=>{ if(c.bucket==="save"){ sb+=(+c.budget||0); bbud.save+=(+c.budget||0); } else { eb+=(+c.budget||0); bbud[c.bucket]+=(+c.budget||0); } });
   const sa=bk.save;   // savings actual = sum of Save transactions (contributions)
   const es=bk.need+bk.want, allocated=sb+eb;
-  return { m, sp, bk, bbud, income, sb, sa, es, allocated, balance:income-es-sa, unalloc:income-allocated };
+  return { m, sp, bk, bbud, income, grossIncome, realIncome, borrow, letout, sb, sa, es, allocated, balance:income-es-sa, unalloc:income-allocated };
 }
 const stOf = (s,b) => { const u=pct(s,b); return u>100?"bad":u>=80?"warn":"good"; };
 
@@ -201,10 +203,12 @@ function SpendSheet({ m, api, env, initial, curMonth, onClose, onChange }) {
   let dateMin="2000-01-01", dateMax=t;
   if(initial?.date){ if(initial.date<dateMin) dateMin=initial.date; if(initial.date>dateMax) dateMax=initial.date; }
   const [date,setDate]=useState(initial?.date || (t.slice(0,7)===m.id ? t : m.id+"-01"));
+  const [kind,setKind]=useState(initial?.kind||"income");   // income entries only: income | borrow | letout
   const [err,setErr]=useState(""); const [xfer,setXfer]=useState(null); const [src,setSrc]=useState("");
   const spentOf = id => (m.txns||[]).filter(t=>t.categoryId===id && (!initial||t.id!==initial.id)).reduce((a,t)=>a+(+t.amount||0),0);
   const record = () => {
     const v={ date, desc:desc.trim(), amount:+amt, bucket:env.bucket, categoryId:isInc?"":env.id };
+    if(isInc) v.kind=kind;
     const envInfo = isInc ? null : { name:env.name, bucket:env.bucket, budget:env.budget, icon:env.icon };
     if(initial) api.editTxn(initial.id, v, envInfo); else api.addTxn({ id:"t"+Date.now(), ...v }, envInfo);
     onClose(true);
@@ -236,7 +240,14 @@ function SpendSheet({ m, api, env, initial, curMonth, onClose, onChange }) {
   return <Sheet title={(initial?"Edit ":"Add ")+(isInc?"income":"spend")} onClose={()=>onClose()}>
     <div style={{ display:"flex", alignItems:"center", gap:11, background:T.surf2, borderRadius:13, padding:"11px 12px", marginBottom:14 }}>
       <div style={{ width:40, height:40, borderRadius:11, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, background:BK[env.bucket].s }}>{iconOf(env)}</div>
-      <div><div style={{ fontWeight:700, fontSize:15, color:T.text }}>{env.name}</div><div style={{ fontSize:11.5, color:T.muted }}>{isInc?"Income":BK[env.bucket].l+" · envelope"}</div></div></div>
+      <div><div style={{ fontWeight:700, fontSize:15, color:T.text }}>{env.name}</div><div style={{ fontSize:11.5, color:T.muted }}>{isInc?(kind==="borrow"?"Borrow money":kind==="letout"?"Let out money":"Income"):BK[env.bucket].l+" · envelope"}</div></div></div>
+    {isInc && <>
+      <div style={{ display:"flex", gap:6, marginBottom:8 }}>
+        {[["income","Income"],["borrow","Borrow money"],["letout","Let out money"]].map(([k,lbl])=>{ const on=kind===k; const c=k==="letout"?T.bad:k==="borrow"?T.text2:T.good;
+          return <button key={k} onClick={()=>setKind(k)} style={{ flex:1, padding:"8px 4px", borderRadius:10, border:`1px solid ${on?c:T.border}`, background:on?(k==="letout"?T.badS:k==="borrow"?T.surf2:T.incomeS):T.surf2, color:on?c:T.text2, fontWeight:on?800:600, fontSize:11.5, cursor:"pointer", fontFamily:"inherit" }}>{lbl}</button>; })}
+      </div>
+      <div style={{ fontSize:11.5, color:T.muted, margin:"0 2px 14px", lineHeight:1.4 }}>{kind==="borrow"?"Borrowed cash — added to budget, but not counted as income.":kind==="letout"?"Money you lent out — debited from income and budget.":"Money that's truly yours."}</div>
+    </>}
     <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:2, margin:"6px 0 18px", maxWidth:"100%" }}>
       <span style={{ fontSize:36, fontWeight:800, color:amt?T.text:T.muted, flexShrink:0 }}>₹</span>
       <input autoFocus type="number" inputMode="numeric" className="bud-amt" value={amt} onChange={e=>setAmt(e.target.value)} placeholder="0"
@@ -284,7 +295,11 @@ function ImportCSVBtn({ onImport, hint }) {
 function IncomeSheet({ m, api, onImport, onAdd, onEdit, onClose }) {
   const [editing,setEditing]=useState(null); const [tmp,setTmp]=useState(""); const [clr,setClr]=useState(false);
   const entries=[...(m.txns||[])].filter(t=>t.bucket==="income").sort((a,b)=>b.date.localeCompare(a.date));
-  const total=(+m.salaryIncome||0)+(+m.otherIncome||0)+entries.reduce((a,t)=>a+(+t.amount||0),0);
+  const sumKind=k=>entries.filter(t=>(t.kind||"income")===k).reduce((a,t)=>a+(+t.amount||0),0);
+  const borrow=sumKind("borrow"), letout=sumKind("letout");
+  const grossIncome=(+m.salaryIncome||0)+(+m.otherIncome||0)+sumKind("income");  // salary + other + plain income
+  const realIncome=grossIncome-letout;    // what's truly yours
+  const budget=realIncome+borrow;         // allocatable (borrowed cash counts for budgeting)
   const start=k=>{ setEditing(k); setTmp(String(k==="salary"?(m.salaryIncome||0):(m.otherIncome||0))); };
   const save=()=>{ const v=Math.max(0,+tmp||0); if(editing==="salary") api.setIncome(v, +m.otherIncome||0); else api.setIncome(+m.salaryIncome||0, v); setEditing(null); };
   const seclab=t=><div style={{ fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".04em", margin:"2px 2px 0" }}>{t}</div>;
@@ -301,13 +316,26 @@ function IncomeSheet({ m, api, onImport, onAdd, onEdit, onClose }) {
     {baseRow("salary","💼","Salary",m.salaryIncome||0)}
     {(+m.otherIncome>0) && baseRow("other","🏷️","Other income (tap to clear)",m.otherIncome)}
     <div style={{ margin:"16px 0 0" }}>{seclab("Income entries this month")}</div>
-    {entries.length ? entries.map(t=><div key={t.id} onClick={()=>onEdit(t)} style={{ display:"flex", alignItems:"center", gap:11, padding:"12px 0", borderBottom:`1px solid ${T.border}`, cursor:"pointer" }}>
-        <div style={{ width:36, height:36, borderRadius:10, background:T.incomeS, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17, flexShrink:0 }}>💵</div>
-        <div style={{ flex:1, minWidth:0 }}><div style={{ fontWeight:600, fontSize:14, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{t.desc||"Income"}</div><div style={{ fontSize:11.5, color:T.muted }}>{fmtD(t.date)}</div></div>
-        <div style={{ fontWeight:700, fontSize:14, color:T.good, fontVariantNumeric:"tabular-nums" }}>+{INR(t.amount)}</div></div>)
+    {entries.length ? entries.map(t=>{ const kind=t.kind||"income";
+        const km = kind==="borrow" ? { icon:"🏦", tag:"Borrow", tagBg:T.surf2, tagC:T.text2, sub:"not counted as income", col:T.muted, sign:"" }
+          : kind==="letout" ? { icon:"💸", tag:"Let out", tagBg:T.badS, tagC:T.bad, sub:"debited from income", col:T.bad, sign:"−" }
+          : { icon:"💵", tag:null, sub:null, col:T.good, sign:"+" };
+        return <div key={t.id} onClick={()=>onEdit(t)} style={{ display:"flex", alignItems:"center", gap:11, padding:"12px 0", borderBottom:`1px solid ${T.border}`, cursor:"pointer", opacity:kind==="borrow"?.75:1 }}>
+          <div style={{ width:36, height:36, borderRadius:10, background:kind==="letout"?T.badS:T.incomeS, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17, flexShrink:0 }}>{km.icon}</div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontWeight:600, fontSize:14, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{t.desc||"Income"}{km.tag && <span style={{ fontSize:10, fontWeight:700, background:km.tagBg, color:km.tagC, border:`1px solid ${T.border}`, padding:"1px 7px", borderRadius:20, marginLeft:7 }}>{km.tag}</span>}</div>
+            <div style={{ fontSize:11.5, color:T.muted }}>{km.sub?`${fmtD(t.date)} · ${km.sub}`:fmtD(t.date)}</div></div>
+          <div style={{ fontWeight:700, fontSize:14, color:km.col, fontVariantNumeric:"tabular-nums" }}>{km.sign}{INR(t.amount)}</div></div>; })
       : <div style={{ fontSize:13, color:T.muted, padding:"12px 2px" }}>No extra income entries yet.</div>}
-    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", paddingTop:12, marginTop:4, borderTop:`2px solid ${T.border}`, fontSize:15, fontWeight:800 }}>
-      <span>Total income</span><span style={{ color:T.good, fontVariantNumeric:"tabular-nums" }}>{INR(total)}</span></div>
+    <div style={{ marginTop:14, paddingTop:12, borderTop:`2px solid ${T.border}` }}>
+      {(borrow>0||letout>0) ? <>
+        <div style={{ display:"flex", justifyContent:"space-between", fontSize:12.5, color:T.text2, padding:"3px 0" }}><span>Income</span><span style={{ fontVariantNumeric:"tabular-nums" }}>{INR(grossIncome)}</span></div>
+        {letout>0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:12.5, color:T.bad, padding:"3px 0" }}><span>Let out (debited)</span><span style={{ fontVariantNumeric:"tabular-nums" }}>−{INR(letout)}</span></div>}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", paddingTop:8, marginTop:4, borderTop:`1px solid ${T.border}`, fontSize:15, fontWeight:800 }}><span>Total income</span><span style={{ color:T.good, fontVariantNumeric:"tabular-nums" }}>{INR(realIncome)}</span></div>
+        {borrow>0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:T.muted, padding:"8px 0 0" }}><span>Borrowed · not income, for budget only</span><span style={{ fontVariantNumeric:"tabular-nums" }}>{INR(borrow)}</span></div>}
+        <div style={{ display:"flex", justifyContent:"space-between", fontSize:12.5, color:T.text2, padding:"4px 0 0", fontWeight:700 }}><span>Budget to allocate</span><span style={{ fontVariantNumeric:"tabular-nums" }}>{INR(budget)}</span></div>
+      </> : <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", fontSize:15, fontWeight:800 }}><span>Total income</span><span style={{ color:T.good, fontVariantNumeric:"tabular-nums" }}>{INR(realIncome)}</span></div>}
+    </div>
     <button onClick={onAdd} style={{ ...ghostBtn, width:"100%", background:T.incomeS, color:T.good, borderColor:T.good+"4d", marginTop:14 }}>＋ Add income entry</button>
     {entries.length>0 && (clr
       ? <div style={{ marginTop:12, background:T.badS, border:`1px solid ${T.bad}55`, borderRadius:11, padding:12, textAlign:"center" }}>
@@ -346,7 +374,7 @@ function CatSheet({ api, initial, onClose }) {
 function MonthPicker({ budget, onPick, onCreate, onCreatePrev, onCreateMonth, onDelete, onImport, onExport, onExportMonth, carryOver, onToggleCarry, onClose }) {
   const [del,setDel]=useState(null); const [msg,setMsg]=useState(""); const [pick,setPick]=useState("");
   const ids=Object.keys(budget.months).sort(); const nextId=mShift(ids[ids.length-1],1); const prevId=mShift(ids[0],-1);
-  const incomeOf=mm=>(+mm.salaryIncome||0)+(+mm.otherIncome||0)+((mm.txns||[]).filter(t=>t.bucket==="income").reduce((a,t)=>a+(+t.amount||0),0));
+  const incomeOf=mm=>(+mm.salaryIncome||0)+(+mm.otherIncome||0)+((mm.txns||[]).filter(t=>t.bucket==="income").reduce((a,t)=>{ const amt=+t.amount||0; return a+(t.kind==="letout"?-amt:amt); },0));
   return <Sheet title="Your budgets" onClose={onClose}>
     <div style={{ fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".04em", margin:"2px 2px 6px" }}>{ids.length} month{ids.length===1?"":"s"} created</div>
     {ids.map(id=>{ const mm=budget.months[id], active=id===budget.active;
@@ -706,10 +734,25 @@ export default function BudgetView({ budget, setBudget }) {
       </div>
       <div style={{ fontSize:11.5, fontWeight:600, textTransform:"uppercase", letterSpacing:".05em", opacity:.85 }}>Monthly budget</div>
       <div style={{ fontSize:30, fontWeight:800, letterSpacing:"-.02em", marginTop:2, fontVariantNumeric:"tabular-nums" }}>{INR(d.income)}</div>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", gap:8, marginTop:4 }}>
-        <div style={{ fontSize:12, opacity:.9 }}>Salary {INR(m.salaryIncome)}{(+m.otherIncome>0)?` · Other ${INR(m.otherIncome)}`:""}{(() => { const n=(m.txns||[]).filter(t=>t.bucket==="income").length; return n?` · ${n} entr${n===1?"y":"ies"}`:""; })()}</div>
-        <button onClick={()=>setModal({type:"income"})} style={{ background:"#ffffff2e", border:"none", color:"#fff", borderRadius:8, padding:"5px 13px", fontSize:11.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}>Income ›</button>
-      </div>
+      {(d.borrow>0 || d.letout>0)
+        ? <>
+            <div style={{ fontSize:11, opacity:.8, marginTop:1 }}>available to allocate</div>
+            <div style={{ display:"flex", gap:7, marginTop:11 }}>
+              {[["Income",d.grossIncome,""],["Borrowed",d.borrow,"+"],["Lent out",d.letout,"−"]]
+                .filter(c=>c[0]==="Income"||c[1]>0)
+                .map(([lbl,val,sign])=><div key={lbl} style={{ flex:1, background:"#ffffff24", borderRadius:10, padding:"7px 9px" }}>
+                  <div style={{ fontSize:10, opacity:.85 }}>{lbl}</div>
+                  <div style={{ fontSize:13, fontWeight:700, marginTop:2, fontVariantNumeric:"tabular-nums" }}>{sign}{INR(val)}</div>
+                </div>)}
+            </div>
+            <div style={{ display:"flex", justifyContent:"flex-end", marginTop:10 }}>
+              <button onClick={()=>setModal({type:"income"})} style={{ background:"#ffffff2e", border:"none", color:"#fff", borderRadius:8, padding:"5px 13px", fontSize:11.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>Income ›</button>
+            </div>
+          </>
+        : <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", gap:8, marginTop:4 }}>
+            <div style={{ fontSize:12, opacity:.9 }}>Salary {INR(m.salaryIncome)}{(+m.otherIncome>0)?` · Other ${INR(m.otherIncome)}`:""}{(() => { const n=(m.txns||[]).filter(t=>t.bucket==="income").length; return n?` · ${n} entr${n===1?"y":"ies"}`:""; })()}</div>
+            <button onClick={()=>setModal({type:"income"})} style={{ background:"#ffffff2e", border:"none", color:"#fff", borderRadius:8, padding:"5px 13px", fontSize:11.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}>Income ›</button>
+          </div>}
     </div>
     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:9, marginTop:12 }}>
       {["need","want","save"].map(k=><div key={k} style={card({ padding:"12px 11px" })}>
