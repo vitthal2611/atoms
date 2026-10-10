@@ -3890,14 +3890,12 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
       {/* ── Identity header — shown in full view; in compact it's one tap away. ── */}
       {showDetail && (
       <div style={{ padding:"12px 14px 0" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:9 }}>
           {identity.icon && (
-            <span aria-hidden="true" style={{ width:28, height:28, borderRadius:9, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, background: C + "1f" }}>{identity.icon}</span>
+            <span aria-hidden="true" style={{ width:24, height:24, borderRadius:7, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, background: C + "1f" }}>{identity.icon}</span>
           )}
-          <span style={{ flex:1, minWidth:0, display:"flex", alignItems:"baseline", gap:5 }}>
-            <span style={{ flexShrink:0, fontSize:10, fontWeight:900, letterSpacing:"0.05em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking" : "I am"}</span>
-            <span style={{ flex:1, minWidth:0, fontSize:15.5, fontWeight:800, letterSpacing:"-0.01em", color:Cd, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{idDisplay}</span>
-          </span>
+          <span style={{ flexShrink:0, fontSize:9.5, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking" : "I am"}</span>
+          <span style={{ flex:1, minWidth:0, fontSize:13, fontWeight:800, color:Cd, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{idDisplay}</span>
           {streakBadge}
           {!compact && menu}
         </div>
@@ -3954,7 +3952,9 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
             >
               {habit.label}
             </span>
-            {/* The implementation intention (cue / when / where) renders as a labelled grid below. */}
+            {!checked && !missed && showDetail && planLine && (
+              <div style={{ marginTop:3, fontSize:12.5, fontWeight:600, letterSpacing:"0.01em", color:C, lineHeight:1.35 }}>{planLine}</div>
+            )}
             {/* Compact: a themed time chip + the quiet trigger (the cue). */}
             {!checked && !missed && compact && (habit.time || cueText) && (
               <div style={{ marginTop:6, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
@@ -3991,29 +3991,7 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
         {isQty && checked && (
           <div style={{ marginLeft:55, marginTop:3, fontSize:11.5, fontWeight:700, color:"#0F9D74" }}>{target} of {target}{unit ? " " + unit : ""} · done</div>
         )}
-        {/* Implementation intention (Atomic Habits) — labelled plan grid: After / When / Where. */}
-        {showDetail && !checked && !missed && (cueText || habit.time || habit.location) && (
-          <div style={{ display:"flex", gap:7, marginTop:10, marginLeft: isQty ? 55 : 0 }}>
-            {cueText && (
-              <div style={{ flex:2, minWidth:0, background: C + "14", borderRadius:9, padding:"7px 9px" }}>
-                <div style={{ fontSize:8.5, fontWeight:900, textTransform:"uppercase", letterSpacing:"0.04em", color: C }}>After</div>
-                <div style={{ fontSize:12, color:T.text, marginTop:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{cueAnchor}</div>
-              </div>
-            )}
-            {habit.time && (
-              <div style={{ flex:1, minWidth:0, background:T.surf2, borderRadius:9, padding:"7px 9px" }}>
-                <div style={{ fontSize:8.5, fontWeight:900, textTransform:"uppercase", letterSpacing:"0.04em", color:T.muted }}>When</div>
-                <div style={{ fontSize:12, color:T.text, marginTop:1, fontVariantNumeric:"tabular-nums", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{to24h(habit.time)}</div>
-              </div>
-            )}
-            {habit.location && (
-              <div style={{ flex:1, minWidth:0, background:T.surf2, borderRadius:9, padding:"7px 9px" }}>
-                <div style={{ fontSize:8.5, fontWeight:900, textTransform:"uppercase", letterSpacing:"0.04em", color:T.muted }}>Where</div>
-                <div style={{ fontSize:12, color:T.text, marginTop:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{habit.location}</div>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Time & location are woven into the implementation-intention plan line above. */}
 
         {/* Momentum dots — glanceable week progress (collapsed view). */}
         {showDetail && !checked && !missed && !expanded && (
