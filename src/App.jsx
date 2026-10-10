@@ -3957,7 +3957,7 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
           <div style={{ marginLeft:55, marginTop:3, fontSize:11.5, fontWeight:700, color:"#0F9D74" }}>{target} of {target}{unit ? " " + unit : ""} · done</div>
         )}
         {!checked && showDetail && (habit.time || habit.location) && (
-          <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:6, marginLeft:55, flexWrap:"wrap" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:8, marginLeft: isQty ? 55 : 0, flexWrap:"wrap" }}>
             {habit.time && (
               <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:12, fontWeight:800, color:Cd, background:C + "12", border:`1px solid ${C}22`, borderRadius:20, padding:"3px 9px", fontVariantNumeric:"tabular-nums" }}
                 aria-label={cueText ? `Reminder at ${to24h(habit.time)}` : `At ${to24h(habit.time)}`}>
