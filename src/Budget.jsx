@@ -590,33 +590,38 @@ function ReportSheet({ m, onClose }) {
 function AllocationSheet({ m, d, onClose }) {
   const cats=[...(m.categories||[])].sort((a,b)=>(a.name||"").localeCompare(b.name||""));
   const budgetTotal=d.allocated, spentTotal=d.es+d.sa, leftTotal=budgetTotal-spentTotal;
+  const isOver=c=>c.bucket!=="save" && (d.sp[c.id]||0) > (+c.budget||0);
+  const overCats=cats.filter(isOver);
+  const overBy=overCats.reduce((a,c)=>a+((d.sp[c.id]||0)-(+c.budget||0)),0);
   const thn={ textAlign:"right", fontSize:10.5, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".03em", padding:"0 0 7px" };
-  const num={ textAlign:"right", fontSize:12.5, fontVariantNumeric:"tabular-nums", padding:"8px 0", color:T.text };
-  const fmtBal=v=>v<0?"−"+INRk(-v):INRk(v);
+  const num={ textAlign:"right", fontSize:12, fontVariantNumeric:"tabular-nums", padding:"8px 2px", color:T.text };
+  const fmtBal=v=>v<0?"−"+INR(-v):INR(v);
   return <Sheet title={"Budget vs spent · "+(m.label||mLabel(m.id))} onClose={onClose}>
+    {overCats.length>0 && <div style={{ background:T.badS, border:`1px solid ${T.bad}44`, borderRadius:11, padding:"9px 12px", marginBottom:12, fontSize:12.5, fontWeight:700, color:T.bad }}>
+      ⚠ {overCats.length} envelope{overCats.length===1?"":"s"} overspent by {INR(overBy)}</div>}
     {cats.length ? <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
-      <colgroup><col style={{ width:"40%" }}/><col style={{ width:"20%" }}/><col style={{ width:"20%" }}/><col style={{ width:"20%" }}/></colgroup>
+      <colgroup><col style={{ width:"34%" }}/><col style={{ width:"22%" }}/><col style={{ width:"22%" }}/><col style={{ width:"22%" }}/></colgroup>
       <thead><tr style={{ borderBottom:`1px solid ${T.border}` }}>
-        <th style={{ ...thn, textAlign:"left" }}>Envelope</th><th style={thn}>Budget</th><th style={thn}>Spent</th><th style={thn}>Left</th>
+        <th style={{ ...thn, textAlign:"left", padding:"0 2px 7px" }}>Envelope</th><th style={thn}>Budget</th><th style={thn}>Spent</th><th style={thn}>Left</th>
       </tr></thead>
       <tbody>
-        {cats.map(c=>{ const bud=+c.budget||0, sp=d.sp[c.id]||0, bal=bud-sp, isSave=c.bucket==="save";
+        {cats.map(c=>{ const bud=+c.budget||0, sp=d.sp[c.id]||0, bal=bud-sp, isSave=c.bucket==="save", over=isOver(c);
           const lc=isSave?BK.save.c:(bal<0?T.bad:bal>0?T.good:T.muted);
-          return <tr key={c.id} style={{ borderBottom:`1px solid ${T.border}` }}>
-            <td style={{ fontSize:12.5, padding:"8px 0", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", color:T.text }}>{iconOf(c)} {c.name}</td>
-            <td style={num}>{INRk(bud)}</td>
-            <td style={{ ...num, color:(!isSave&&sp>bud&&bud>0)?T.bad:T.text }}>{INRk(sp)}</td>
-            <td style={{ ...num, color:lc }}>{fmtBal(bal)}</td>
+          return <tr key={c.id} style={{ borderBottom:`1px solid ${T.border}`, background:over?T.badS:undefined }}>
+            <td style={{ fontSize:12, padding:"8px 2px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", color:over?T.bad:T.text, fontWeight:over?700:400 }}>{iconOf(c)} {c.name}</td>
+            <td style={num}>{INR(bud)}</td>
+            <td style={{ ...num, color:over?T.bad:T.text, fontWeight:over?700:400 }}>{INR(sp)}</td>
+            <td style={{ ...num, color:lc, fontWeight:over?800:400 }}>{fmtBal(bal)}</td>
           </tr>; })}
         <tr style={{ borderTop:`2px solid ${T.border}` }}>
-          <td style={{ fontSize:13, fontWeight:800, padding:"10px 0 0", color:T.text }}>Total</td>
-          <td style={{ ...num, fontWeight:800, padding:"10px 0 0" }}>{INRk(budgetTotal)}</td>
-          <td style={{ ...num, fontWeight:800, padding:"10px 0 0" }}>{INRk(spentTotal)}</td>
-          <td style={{ ...num, fontWeight:800, padding:"10px 0 0", color:leftTotal<0?T.bad:T.good }}>{fmtBal(leftTotal)}</td>
+          <td style={{ fontSize:13, fontWeight:800, padding:"10px 2px 0", color:T.text }}>Total</td>
+          <td style={{ ...num, fontWeight:800, padding:"10px 2px 0" }}>{INR(budgetTotal)}</td>
+          <td style={{ ...num, fontWeight:800, padding:"10px 2px 0" }}>{INR(spentTotal)}</td>
+          <td style={{ ...num, fontWeight:800, padding:"10px 2px 0", color:leftTotal<0?T.bad:T.good }}>{fmtBal(leftTotal)}</td>
         </tr>
       </tbody>
     </table> : <div style={{ fontSize:13, color:T.muted, padding:"14px 2px" }}>No envelopes yet.</div>}
-    <div style={{ fontSize:11, color:T.muted, textAlign:"center", marginTop:12 }}>Amounts in thousands (k) / lakhs (L). Tap an envelope on the Budget tab for full figures.</div>
+    <div style={{ fontSize:11, color:T.muted, textAlign:"center", marginTop:12 }}>Tap an envelope on the Budget tab to edit it.</div>
   </Sheet>;
 }
 
