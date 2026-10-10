@@ -586,6 +586,40 @@ function ReportSheet({ m, onClose }) {
   </Sheet>;
 }
 
+// Budget vs spent — flat table of every envelope's budgeted / spent / remaining.
+function AllocationSheet({ m, d, onClose }) {
+  const cats=[...(m.categories||[])].sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+  const budgetTotal=d.allocated, spentTotal=d.es+d.sa, leftTotal=budgetTotal-spentTotal;
+  const thn={ textAlign:"right", fontSize:10.5, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".03em", padding:"0 0 7px" };
+  const num={ textAlign:"right", fontSize:12.5, fontVariantNumeric:"tabular-nums", padding:"8px 0", color:T.text };
+  const fmtBal=v=>v<0?"−"+INRk(-v):INRk(v);
+  return <Sheet title={"Budget vs spent · "+(m.label||mLabel(m.id))} onClose={onClose}>
+    {cats.length ? <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
+      <colgroup><col style={{ width:"40%" }}/><col style={{ width:"20%" }}/><col style={{ width:"20%" }}/><col style={{ width:"20%" }}/></colgroup>
+      <thead><tr style={{ borderBottom:`1px solid ${T.border}` }}>
+        <th style={{ ...thn, textAlign:"left" }}>Envelope</th><th style={thn}>Budget</th><th style={thn}>Spent</th><th style={thn}>Left</th>
+      </tr></thead>
+      <tbody>
+        {cats.map(c=>{ const bud=+c.budget||0, sp=d.sp[c.id]||0, bal=bud-sp, isSave=c.bucket==="save";
+          const lc=isSave?BK.save.c:(bal<0?T.bad:bal>0?T.good:T.muted);
+          return <tr key={c.id} style={{ borderBottom:`1px solid ${T.border}` }}>
+            <td style={{ fontSize:12.5, padding:"8px 0", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", color:T.text }}>{iconOf(c)} {c.name}</td>
+            <td style={num}>{INRk(bud)}</td>
+            <td style={{ ...num, color:(!isSave&&sp>bud&&bud>0)?T.bad:T.text }}>{INRk(sp)}</td>
+            <td style={{ ...num, color:lc }}>{fmtBal(bal)}</td>
+          </tr>; })}
+        <tr style={{ borderTop:`2px solid ${T.border}` }}>
+          <td style={{ fontSize:13, fontWeight:800, padding:"10px 0 0", color:T.text }}>Total</td>
+          <td style={{ ...num, fontWeight:800, padding:"10px 0 0" }}>{INRk(budgetTotal)}</td>
+          <td style={{ ...num, fontWeight:800, padding:"10px 0 0" }}>{INRk(spentTotal)}</td>
+          <td style={{ ...num, fontWeight:800, padding:"10px 0 0", color:leftTotal<0?T.bad:T.good }}>{fmtBal(leftTotal)}</td>
+        </tr>
+      </tbody>
+    </table> : <div style={{ fontSize:13, color:T.muted, padding:"14px 2px" }}>No envelopes yet.</div>}
+    <div style={{ fontSize:11, color:T.muted, textAlign:"center", marginTop:12 }}>Amounts in thousands (k) / lakhs (L). Tap an envelope on the Budget tab for full figures.</div>
+  </Sheet>;
+}
+
 // ═══ MAIN ════════════════════════════════════════════════════════════════════
 export default function BudgetView({ budget, setBudget }) {
   const [modal, setModal] = useState(null);   // {type, ...}
@@ -765,9 +799,9 @@ export default function BudgetView({ budget, setBudget }) {
       const tip = carryOn ? `Carried forward ${INR(carryIn)} + this month ${INR(d.balance)} = ${INR(runBal)}` : undefined;
       return <div style={{ display:"flex", gap:9, marginTop:9 }}>{scard("spend","Spent",d.es)}{scard("wallet", carryOn?"Total balance":"Balance", carryOn?runBal:d.balance, tip)}</div>;
     })()}
-    <div style={{ ...card({ padding:"12px 13px", marginTop:9 }) }}>
+    <div onClick={()=>setModal({type:"alloc"})} style={{ ...card({ padding:"12px 13px", marginTop:9 }), cursor:"pointer" }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:8 }}>
-        <span style={{ fontSize:12.5, fontWeight:700 }}>Allocation</span>
+        <span style={{ fontSize:12.5, fontWeight:700, display:"inline-flex", alignItems:"center", gap:4 }}>Allocation <span style={{ color:T.muted, fontWeight:600 }}>›</span></span>
         <span style={{ fontSize:12, color:T.text2, fontVariantNumeric:"tabular-nums" }}>{INR(d.allocated)} of {INR(d.income)} income</span></div>
       <div style={{ height:9, borderRadius:6, background:T.surf2, overflow:"hidden" }}>
         <div style={{ height:"100%", width:Math.min(100,pct(d.allocated,d.income))+"%", background:d.unalloc<0?T.bad:T.primary, borderRadius:6 }} /></div>
@@ -830,6 +864,7 @@ export default function BudgetView({ budget, setBudget }) {
     {modal?.type==="months" && <MonthPicker budget={budget} onPick={id=>{ api.setActive(id); setModal(null); }} onCreate={()=>{ api.createNext(); setModal(null); }} onCreatePrev={()=>{ api.createPrev(); setModal(null); }} onCreateMonth={id=>{ api.createMonth(id); setModal(null); }} onDelete={api.deleteMonth} onImport={importCSV} onExport={exportCSV} onExportMonth={exportCSV} carryOver={!!budget?.carryOver} onToggleCarry={api.setCarry} onClose={()=>setModal(null)} />}
     {modal?.type==="cat"    && <CatSheet api={api} initial={modal.initial} onClose={(cat)=>setModal(cat&&modal.spendAfter?{type:"spend", env:cat}:null)} />}
     {modal?.type==="report" && <ReportSheet m={m} onClose={()=>setModal(null)} />}
+    {modal?.type==="alloc"  && <AllocationSheet m={m} d={d} onClose={()=>setModal(null)} />}
   </div>;
 }
 const lnk = { fontSize:12, fontWeight:700, color:T.primary, background:"none", border:"none", cursor:"pointer", fontFamily:"inherit" };
