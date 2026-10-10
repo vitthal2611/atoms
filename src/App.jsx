@@ -3891,12 +3891,6 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
           {streakBadge}
           {!compact && menu}
         </div>
-        {expanded && votes > 0 && (
-          <div style={{ fontSize:11, fontWeight:600, color:T.text2, marginTop:7, display:"flex", alignItems:"center", gap:5 }}>
-            <Ic name={breaking ? "check" : "pencil"} size={12} color={C} />
-            {breaking ? `${votes} resisted — staying in control` : `${votes} vote${votes === 1 ? "" : "s"} cast — proving it every day`}
-          </div>
-        )}
       </div>
       )}
 
@@ -4012,7 +4006,6 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
                   border: done ? "none" : isToday ? `1.5px solid ${C}` : miss ? `1.5px solid ${T.red}55` : `1px solid ${T.border}` }} />;
               })}
             </div>
-            <span style={{ fontSize:10.5, color:T.muted }}>this week{rs.due >= 7 ? ` · ${rate}% this month` : ""}</span>
           </div>
         )}
 
