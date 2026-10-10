@@ -1292,6 +1292,13 @@ export default function App() {
   const toggleDensity = () => setCardDensity(d => { const n = d === "compact" ? "full" : "compact"; try { localStorage.setItem("atoms.cardDensity", n); } catch {} return n; });
   const [milestone,    setMilestone]   = useState(null);   // streak-milestone toast
   const [syncing,      setSyncing]     = useState(false);
+  // Debounce the "Saving…" indicator so fast saves (the common case) never flash it.
+  const [savingVisible, setSavingVisible] = useState(false);
+  useEffect(() => {
+    if (!syncing) { setSavingVisible(false); return; }
+    const t = setTimeout(() => setSavingVisible(true), 600);
+    return () => clearTimeout(t);
+  }, [syncing]);
   const [saveError,    setSaveError]   = useState(false);
   const [signInError,  setSignInError] = useState(null);
   const [signingIn,    setSigningIn]   = useState(false);
@@ -2534,7 +2541,7 @@ export default function App() {
         <div style={{ minHeight:90, display:"flex", flexDirection:"column", justifyContent:"center" }}>
           {/* Always occupy the eyebrow's space (hidden when idle) so the title/date
               don't shift up and down as saving toggles — that caused header flicker. */}
-          <div style={{ ...S.eyebrow, visibility: syncing ? "visible" : "hidden" }} aria-hidden="true">Saving…</div>
+          <div style={{ ...S.eyebrow, visibility: savingVisible ? "visible" : "hidden" }} aria-hidden="true">Saving…</div>
           {syncing && (
             <div role="status" aria-live="polite" style={{ position:"absolute", width:1, height:1, overflow:"hidden", clip:"rect(0,0,0,0)", whiteSpace:"nowrap" }}>
               Saving your habits
