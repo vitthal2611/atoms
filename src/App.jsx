@@ -3831,6 +3831,14 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
   const cueBody = cueStartsWithI ? cueAnchor.replace(/^i\s+/i, "") : cueAnchor;
   const intention = cueText ? `${cueLead} ${cueBody}, ${habit.kind === "bad" ? "instead I'll" : "I will"}` : "";
 
+  // Implementation intention (Atomic Habits): habit stacking + time + location in one
+  // plan line — "After [cue], at [time] in [location]". The behaviour is the hero
+  // action above, so this line carries the surrounding plan as a single sentence.
+  const whenWhere = [habit.time && `at ${to24h(habit.time)}`, habit.location && `in ${habit.location}`].filter(Boolean).join(" ");
+  const planLine = cueText
+    ? `${cueLead} ${cueBody}${whenWhere ? `, ${whenWhere}` : ""}`
+    : (whenWhere ? whenWhere.charAt(0).toUpperCase() + whenWhere.slice(1) : "");
+
 
   // Breaking a bad habit inverts the whole loop (resist, clean days, accountability).
   const breaking = habit.kind === "bad";
@@ -3944,8 +3952,8 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
             >
               {habit.label}
             </span>
-            {!checked && !missed && showDetail && cueText && (
-              <div style={{ marginTop:2, fontSize:12, fontWeight:700, letterSpacing:"0.01em", color:C }}>{cueLead} {cueBody}</div>
+            {!checked && !missed && showDetail && planLine && (
+              <div style={{ marginTop:3, fontSize:12.5, fontWeight:600, letterSpacing:"0.01em", color:C, lineHeight:1.35 }}>{planLine}</div>
             )}
             {/* Compact: a themed time chip + the quiet trigger (the cue). */}
             {!checked && !missed && compact && (habit.time || cueText) && (
@@ -3983,22 +3991,7 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
         {isQty && checked && (
           <div style={{ marginLeft:55, marginTop:3, fontSize:11.5, fontWeight:700, color:"#0F9D74" }}>{target} of {target}{unit ? " " + unit : ""} · done</div>
         )}
-        {!checked && showDetail && (habit.time || habit.location) && (
-          <div style={{ display:"flex", alignItems:"center", gap:13, marginTop:9, marginLeft: isQty ? 55 : 0, flexWrap:"wrap", fontSize:11.5, color:T.muted }}>
-            {habit.time && (
-              <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontVariantNumeric:"tabular-nums" }}
-                aria-label={cueText ? `Reminder at ${to24h(habit.time)}` : `At ${to24h(habit.time)}`}>
-                <Ic name="clock" size={12} color={T.muted} />{to24h(habit.time)}
-              </span>
-            )}
-            {habit.location && (
-              <span style={{ display:"inline-flex", alignItems:"center", gap:4, minWidth:0 }}>
-                <span aria-hidden="true" style={{ fontSize:11 }}>📍</span>
-                <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:170 }}>{habit.location}</span>
-              </span>
-            )}
-          </div>
-        )}
+        {/* Time & location are woven into the implementation-intention plan line above. */}
 
         {/* Momentum dots — glanceable week progress (collapsed view). */}
         {showDetail && !checked && !missed && !expanded && (
