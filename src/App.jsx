@@ -3882,14 +3882,11 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
       {/* ── Identity header — shown in full view; in compact it's one tap away. ── */}
       {showDetail && (
       <div style={{ padding:"12px 14px 0" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:9 }}>
-          {identity.icon && (
-            <span aria-hidden="true" style={{ width:24, height:24, borderRadius:7, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, background: C + "1f" }}>{identity.icon}</span>
-          )}
-          <span style={{ flexShrink:0, fontSize:9.5, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C }}>{breaking ? "Breaking" : "I am"}</span>
-          <span style={{ flex:1, minWidth:0, fontSize:13, fontWeight:800, color:Cd, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{idDisplay}</span>
-          {streakBadge}
-          {!compact && menu}
+        <div style={{ display:"flex", alignItems:"baseline", gap:7 }}>
+          <span style={{ flexShrink:0, fontSize:10, fontWeight:900, letterSpacing:"0.05em", textTransform:"uppercase", color: C, fontFamily:FONT_DISPLAY }}>{breaking ? "Breaking" : "I am"}</span>
+          <span style={{ flex:1, minWidth:0, fontSize:14, fontWeight:800, color:Cd, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontFamily:FONT_DISPLAY }}>{idDisplay}</span>
+          <span style={{ alignSelf:"center", display:"inline-flex" }}>{streakBadge}</span>
+          {!compact && <span style={{ alignSelf:"center", display:"inline-flex" }}>{menu}</span>}
         </div>
       </div>
       )}
@@ -3932,7 +3929,7 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
               aria-label={isQty && !checked ? `Add one for ${habit.label}` : checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
               style={{ display:"block", cursor: readOnly ? "default" : "pointer",
                 wordBreak:"break-word", fontSize:17, fontWeight: compact ? 600 : 800, letterSpacing:"-0.01em", lineHeight: compact ? 1.15 : 1.25,
-                fontFamily: compact ? FONT_DISPLAY : undefined,
+                fontFamily: FONT_DISPLAY,
                 color: checked ? T.text2 : missed ? T.muted : T.text,
                 textDecoration: checked ? "line-through" : "none", textDecorationColor: C + "88" }}
             >
