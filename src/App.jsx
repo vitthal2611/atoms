@@ -3888,12 +3888,12 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
 
       {/* ── Identity header — shown in full view; in compact it's one tap away. ── */}
       {showDetail && (
-      <div style={{ padding:"12px 14px 0" }}>
-        <div style={{ display:"flex", alignItems:"baseline", gap:7 }}>
-          <span style={{ flexShrink:0, fontSize:10, fontWeight:900, letterSpacing:"0.05em", textTransform:"uppercase", color: C, fontFamily:FONT_DISPLAY }}>{breaking ? "Breaking" : "I am"}</span>
+      <div style={{ padding:"10px 14px", background: C + "14", borderBottom:`1px solid ${C}2a` }}>
+        <div style={{ display:"flex", alignItems:"center", gap:7 }}>
+          <span style={{ flexShrink:0, fontSize:9.5, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C, fontFamily:FONT_DISPLAY }}>{breaking ? "Breaking" : "I am"}</span>
           <span style={{ flex:1, minWidth:0, fontSize:14, fontWeight:800, color:Cd, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontFamily:FONT_DISPLAY }}>{idDisplay}</span>
-          <span style={{ alignSelf:"center", display:"inline-flex" }}>{streakBadge}</span>
-          {!compact && <span style={{ alignSelf:"center", display:"inline-flex" }}>{menu}</span>}
+          {streakBadge}
+          {!compact && menu}
         </div>
       </div>
       )}
