@@ -3457,6 +3457,7 @@ const IC_PATHS = {
   checklist: <><path d="M10 6h10M10 12h10M10 18h10"/><path d="M3 6l1.3 1.3L7 4.7"/><path d="M3 12l1.3 1.3L7 10.7"/><path d="M3 18l1.3 1.3L7 16.7"/></>,
   send:   <><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></>,
   moon:   <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>,
+  mic:    <><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4M8 21h8"/></>,
   clock:  <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,
   home:   <><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></>,
   gift:   <><path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></>,
@@ -4634,6 +4635,8 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
   const [editVal, setEditVal] = useState("");
   const [menuFor, setMenuFor] = useState(null);     // task whose bucket picker is open
   const [doneOpen, setDoneOpen] = useState(true);   // Completed is expanded by default so it's never hidden
+  const [listening, setListening] = useState(false); // voice-to-task capture
+  const recogRef = useRef(null);
   useEffect(() => { setVal(""); setEditingId(null); setMenuFor(null); }, [dateKey]);
 
   const live = tasks.filter(t => !t.carried);
@@ -4644,15 +4647,20 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
   const add = () => { const t = val.trim(); if (!t) return; onAdd(dateKey, t); setVal(""); };
   const saveEdit = () => { const t = editVal.trim(); if (t) onEdit(dateKey, editingId, t); setEditingId(null); };
 
-  // How long a carried task has been waiting (since its original day).
-  const fmtCarried = (t) => {
-    const s = t.since;
-    if (!s) return "earlier";
-    const days = Math.round((new Date(dateKey + "T00:00") - new Date(s + "T00:00")) / 86400000);
-    if (days <= 0) return "earlier";
-    if (days === 1) return "yesterday";
-    if (days < 7) return `${days} days ago`;
-    return new Date(s + "T00:00").toLocaleDateString(navigator.language || undefined, { day: "numeric", month: "short" });
+  // Voice capture — speak a task; the transcript fills the input to review, then add.
+  const SR = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+  const startVoice = () => {
+    if (!SR) return;
+    if (recogRef.current) { try { recogRef.current.stop(); } catch {} return; }
+    const r = new SR();
+    r.lang = navigator.language || "en-US";
+    r.interimResults = true;
+    r.continuous = false;
+    r.onresult = (e) => { let txt = ""; for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript; setVal(txt); };
+    r.onend = () => { setListening(false); recogRef.current = null; };
+    r.onerror = () => { setListening(false); recogRef.current = null; };
+    recogRef.current = r; setListening(true);
+    try { r.start(); } catch { setListening(false); recogRef.current = null; }
   };
 
   // Group open tasks into the four buckets.
@@ -4681,11 +4689,8 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
         <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px" }}>
           <button onClick={()=>onToggle(dateKey, t.id)} aria-label={`Complete: ${t.text}`}
             style={{ width:18, height:18, borderRadius:"50%", flexShrink:0, boxSizing:"border-box", border:`2px solid ${cur.color}`, background:"transparent", cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent" }} />
-          <div onClick={()=>{ if(editable){ setEditingId(t.id); setEditVal(t.text); } }}
-            style={{ flex:1, minWidth:0, cursor: editable?"text":"default" }}>
-            <div style={{ fontSize:13.5, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.text}</div>
-            {t.carriedFrom && <div style={{ fontSize:10, fontWeight:700, color:T.accent, marginTop:1 }}>carried · from {fmtCarried(t)}</div>}
-          </div>
+          <span onClick={()=>{ if(editable){ setEditingId(t.id); setEditVal(t.text); } }}
+            style={{ flex:1, minWidth:0, fontSize:13.5, fontWeight:600, color:T.text, cursor: editable?"text":"default", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.text}</span>
           {editable && onSetBucket && (
             <button onClick={()=>setMenuFor(menuOpen?null:t.id)} aria-label={`Move "${t.text}" — currently ${cur.label}`} aria-expanded={menuOpen}
               style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:4, fontSize:10.5, fontWeight:800, color:cur.color, background:cur.tint, border:"none", borderRadius:20, padding:"3px 9px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
@@ -4731,8 +4736,14 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
       {editable && (
         <div style={{ display:"flex", alignItems:"center", gap:8, background:T.bg, borderRadius:12, padding:"5px 6px 5px 12px", marginTop:12 }}>
           <input value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter") add(); if(e.key==="Escape") setVal(""); }}
-            placeholder="Add a task…" maxLength={80} aria-label="New task"
+            placeholder={listening ? "Listening…" : "Add a task…"} maxLength={80} aria-label="New task"
             style={{ flex:1, minWidth:0, border:"none", background:"transparent", fontSize:16, color:T.text, outline:"none", fontFamily:"inherit", padding:"6px 0" }} />
+          {SR && (
+            <button type="button" onClick={startVoice} aria-label={listening ? "Stop voice input" : "Add a task by voice"} aria-pressed={listening}
+              style={{ flexShrink:0, width:30, height:30, borderRadius:9, border:"none", background: listening ? T.red : T.surf2, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
+              <Ic name="mic" size={15} color={listening ? "#fff" : T.text2} />
+            </button>
+          )}
           <button type="button" onClick={add} aria-label="Add task"
             style={{ flexShrink:0, width:30, height:30, borderRadius:9, border:"none", background: val.trim()?T.primary:T.border2, color:"#fff", fontSize:18, fontWeight:800, lineHeight:1, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
             <span aria-hidden="true">+</span>
