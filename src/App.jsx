@@ -2037,7 +2037,7 @@ export default function App() {
       return {
         ...prev,
         [dateKey]: list.map(t => t.id === taskId ? { ...t, carried: true } : t),
-        [nextKey]: [...nextList, { ...src, id: uid(), done: false, carried: false, star: keepStar, carriedFrom: taskId }],
+        [nextKey]: [...nextList, { ...src, id: uid(), done: false, carried: false, star: keepStar, carriedFrom: taskId, since: src.since || dateKey }],
       };
     });
   }, []);
@@ -2093,7 +2093,7 @@ export default function App() {
         if (!undone.length) continue;
         const ids = new Set(undone.map(t => t.id));
         next[key] = list.map(t => ids.has(t.id) ? { ...t, carried: true } : t); // hide the source
-        toCarry.push(...undone);
+        toCarry.push(...undone.map(t => ({ ...t, _srcKey: key })));
       }
       if (!toCarry.length) return prev;
       // The Big 3 (focus) survives — an unfinished priority is still one today. Fill
@@ -2104,8 +2104,9 @@ export default function App() {
         if (keepFocus) slots--;
         // Drop legacy star + the source's focus fields; re-add focus only if kept
         // (never write `undefined` — Firestore rejects it).
-        const { star, focus, focusAt, ...rest } = t;
+        const { star, focus, focusAt, _srcKey, since, ...rest } = t;
         return { ...rest, id: uid(), done: false, carried: false, carriedFrom: t.id,
+          since: since || _srcKey,
           ...(keepFocus ? { focus: true, focusAt: focusAt || Date.now() } : {}) };
       })];
       return next;
@@ -2550,6 +2551,7 @@ export default function App() {
           <h1 style={S.title}>
             {view==="today"
               ? (selectedDate === todayKey ? "Today" : formatNavDate(selectedDate))
+              : view==="tasks" ? "Tasks"
               : view==="week" ? "This Month"
               : view==="streaks" ? "Streaks"
               : view==="budget" ? "Budget"
@@ -2670,6 +2672,7 @@ export default function App() {
           />
         )}
 
+        {view==="tasks"   && <TasksView dailyTasks={dailyTasks} todayKey={todayKey} addTask={addTask} toggleTask={toggleTask} editTask={editTask} deleteTask={deleteTask} toggleFocus={toggleFocus} deferTask={deferTask}/>}
         {view==="week"    && <WeekView data={data} todayKey={todayKey} identities={liveIdentities} onToggleDay={toggleForDate}/>}
         {view==="streaks" && <StreaksView data={data} getStreak={getStreakForHabit} identities={liveIdentities}/>}
         {view==="budget"  && <BudgetView budget={budget} setBudget={setBudget}/>}
@@ -2755,9 +2758,10 @@ export default function App() {
       {/* ── Bottom Nav ── */}
       <nav style={S.bottomNav} aria-label="Main navigation">
         {[
-          {id:"today",    icon:"sun",    label:"Today"},
-          {id:"budget",   icon:"wallet", label:"Budget"},
-          {id:"manage",   icon:"gear",   label:"Manage"},
+          {id:"today",    icon:"sun",       label:"Today"},
+          {id:"tasks",    icon:"checklist", label:"Tasks"},
+          {id:"budget",   icon:"wallet",    label:"Budget"},
+          {id:"manage",   icon:"gear",      label:"Manage"},
         ].map(t=>(
           <button key={t.id} onClick={()=>{ setView(t.id); if(t.id==="today") setSelectedDate(todayKey); }}
             style={{ ...S.navBtn, background: view===t.id ? T.accent+"14" : "transparent", borderRadius:12, margin:"4px 4px 0" }}
@@ -3441,6 +3445,7 @@ const IC_PATHS = {
   bolt:   <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>,
   rows:   <><path d="M4 7h16M4 12h16M4 17h16"/></>,
   card:   <><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 10.5h16"/></>,
+  checklist: <><path d="M10 6h10M10 12h10M10 18h10"/><path d="M3 6l1.3 1.3L7 4.7"/><path d="M3 12l1.3 1.3L7 10.7"/><path d="M3 18l1.3 1.3L7 16.7"/></>,
   clock:  <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,
   home:   <><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></>,
   gift:   <><path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></>,
@@ -4602,7 +4607,7 @@ const byPriority = (a, b) => taskRank(a) - taskRank(b);
 
 // Today's Focus — a prioritized to-do grouped under HIGH / MED / LOW headers.
 // Each task carries a one-tap H·M·L switch to reassign priority; done collapse.
-function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDelete, onPin }) {
+function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDelete, onPin, onDefer }) {
   const [val, setVal] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editVal, setEditVal] = useState("");
@@ -4614,10 +4619,22 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
   const open = live.filter(t => !t.done);
   const done = live.filter(t => t.done);
   // The Big 3 are hand-picked: star up to 3 tasks (kept in pick order). Everything
-  // else is the backlog, collapsed under "more tasks".
+  // else splits into Carried over (rolled from an earlier day) and the fresh Backlog.
   const pinned = open.filter(t => t.focus).sort((a, b) => (a.focusAt || 0) - (b.focusAt || 0));
   const big3 = pinned.slice(0, 3);
-  const rest = open.filter(t => !big3.includes(t));
+  const carried = open.filter(t => t.carriedFrom && !big3.includes(t));
+  const rest = open.filter(t => !big3.includes(t) && !t.carriedFrom);
+  // How long a carried task has been waiting (since its original day).
+  const fmtCarried = (t) => {
+    const s = t.since;
+    if (!s) return "earlier";
+    const days = Math.round((new Date(dateKey + "T00:00") - new Date(s + "T00:00")) / 86400000);
+    if (days <= 0) return "earlier";
+    if (days === 1) return "yesterday";
+    if (days < 7) return `${days} days ago`;
+    return new Date(s + "T00:00").toLocaleDateString(navigator.language || undefined, { day: "numeric", month: "short" });
+  };
+  const secHdr = (color) => ({ display:"flex", alignItems:"center", gap:5, fontSize:11, fontWeight:800, textTransform:"uppercase", letterSpacing:".04em", color, margin:"16px 2px 2px" });
   const focusFull = big3.length >= 3;
   const pct  = live.length ? done.length / live.length : 0;
   const RC   = 2 * Math.PI * 18;          // ring circumference (r = 18)
@@ -4642,8 +4659,17 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
       <div key={t.id} style={{ display:"flex", alignItems:"center", gap:11, padding:"9px 2px", borderTop:`1px solid ${T.surf2}` }}>
         <button onClick={()=>onToggle(dateKey, t.id)} aria-label={`Complete: ${t.text}`}
           style={{ width:19, height:19, borderRadius:"50%", flexShrink:0, boxSizing:"border-box", border:`2px solid ${T.primary}`, background:"transparent", cursor:"pointer", padding:0, WebkitTapHighlightColor:"transparent" }} />
-        <span onClick={()=>{ if(editable){ setEditingId(t.id); setEditVal(t.text); } }}
-          style={{ flex:1, minWidth:0, fontSize:14, fontWeight:600, color:T.text, cursor: editable?"text":"default", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.text}</span>
+        <div onClick={()=>{ if(editable){ setEditingId(t.id); setEditVal(t.text); } }}
+          style={{ flex:1, minWidth:0, cursor: editable?"text":"default" }}>
+          <div style={{ fontSize:14, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.text}</div>
+          {t.carriedFrom && <div style={{ fontSize:10.5, fontWeight:700, color:T.accent, marginTop:1 }}>from {fmtCarried(t)}</div>}
+        </div>
+        {onDefer && editable && t.carriedFrom && (
+          <button onClick={()=>onDefer(dateKey, t.id)} aria-label={`Move ${t.text} to tomorrow`}
+            style={{ flexShrink:0, background:"transparent", border:"none", padding:2, lineHeight:0, cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
+            <Ic name="skip" size={16} color={T.muted} />
+          </button>
+        )}
         {onPin && editable && (
           <button onClick={()=>onPin(dateKey, t.id)} aria-pressed={!!t.focus}
             aria-label={t.focus ? `Remove ${t.text} from your Big 3` : (focusFull ? "Big 3 is full" : `Add ${t.text} to your Big 3`)}
@@ -4684,6 +4710,14 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
           <Ic name="star" size={15} color={STAR_COLOR} />
           Tap the star on up to 3 tasks to set your Big 3.
         </div>
+      )}
+
+      {/* Carried over — undone tasks rolled forward from an earlier day. */}
+      {carried.length > 0 && (
+        <>
+          <div style={secHdr(T.accent)}><Ic name="skip" size={13} color={T.accent} style={{ transform:"rotate(180deg)" }} /> Carried over · {carried.length}</div>
+          {carried.map(t => taskRow(t))}
+        </>
       )}
 
       {/* Add a task — text + add. Sits just below the Big 3. */}
@@ -4739,6 +4773,28 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
     </div>
   );
 }
+
+// ─── TASKS VIEW — the dedicated to-do screen (its own bottom-nav tab) ──────────
+// Today's tasks only: Big 3 + Carried over (rolled from earlier days) + Backlog.
+const TasksView = memo(function TasksView({ dailyTasks, todayKey, addTask, toggleTask, editTask, deleteTask, toggleFocus, deferTask }) {
+  return (
+    <div style={S.content}>
+      <div style={{ ...S.card, padding:"14px 14px" }}>
+        <SimpleFocus
+          tasks={dailyTasks[todayKey] || []}
+          dateKey={todayKey}
+          editable={true}
+          onAdd={addTask}
+          onToggle={toggleTask}
+          onEdit={editTask}
+          onDelete={deleteTask}
+          onPin={toggleFocus}
+          onDefer={deferTask}
+        />
+      </div>
+    </div>
+  );
+});
 
 // ─── SWIPE ROW — swipe right to complete, left to delete ──────────────────────
 function SwipeRow({ onRight, onLeft, radius = 0, children }) {
@@ -5324,20 +5380,7 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
     <div style={S.content}>
       {/* Day Navigator now lives in the sticky header (stays pinned on scroll) */}
 
-      {/* Today's Focus — the Big 3 tasks, at the top of the daily dashboard
-          (the standalone Focus tab has been folded in here). */}
-      <div style={{ ...S.card, padding:"14px 14px" }}>
-        <SimpleFocus
-          tasks={dailyTasks[selectedDate] || []}
-          dateKey={selectedDate}
-          editable={selectedDate >= todayKey}
-          onAdd={addTask}
-          onToggle={toggleTask}
-          onEdit={editTask}
-          onDelete={deleteTask}
-          onPin={toggleFocus}
-        />
-      </div>
+      {/* Tasks moved to their own "Tasks" tab — the dashboard is habits-only now. */}
 
       {/* Looking ahead — a read-only preview of an upcoming day */}
       {isFuture && (
