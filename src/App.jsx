@@ -1281,10 +1281,14 @@ export default function App() {
   const [budget,       setBudget]      = useState(() => seedBudget());
   const [data,         setData]        = useState({});
   const [view,         setView]        = useState(() => {
-    // Honor a PWA app-shortcut deep link (?view=today|focus|manage).
-    try { const v = new URLSearchParams(location.search).get("view"); if (["today","focus","manage"].includes(v)) return v; } catch {}
+    // Honor a PWA app-shortcut deep link (?view=today|tasks|budget|manage).
+    try { const v = new URLSearchParams(location.search).get("view"); if (["today","tasks","budget","manage"].includes(v)) return v; } catch {}
+    // Otherwise reopen on the last main tab the user was on.
+    try { const saved = localStorage.getItem("atoms.view"); if (["today","tasks","budget","manage"].includes(saved)) return saved; } catch {}
     return "today";
   });
+  // Remember the last main tab (ignore transient sub-views like week/streaks).
+  useEffect(() => { if (["today","tasks","budget","manage"].includes(view)) { try { localStorage.setItem("atoms.view", view); } catch {} } }, [view]);
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
   const [justChecked,  setJustChecked]  = useState(null);
   // Habit-card density — "compact" (action + ring, detail on tap) or "full". Per device.
