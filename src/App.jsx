@@ -4637,6 +4637,7 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
   const [doneOpen, setDoneOpen] = useState(true);   // Completed is expanded by default so it's never hidden
   const [listening, setListening] = useState(false); // voice-to-task capture
   const recogRef = useRef(null);
+  const inputRef = useRef(null);
   useEffect(() => { setVal(""); setEditingId(null); setMenuFor(null); }, [dateKey]);
 
   const live = tasks.filter(t => !t.carried);
@@ -4649,22 +4650,27 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
 
   // Voice capture — speak a task; the words show live, then auto-add when you stop.
   const SR = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+  // Not supported in-app (e.g. iOS home-screen PWA) → focus the field so the
+  // device keyboard's own dictation mic can be used instead.
+  const nativeDictate = () => { try { inputRef.current?.focus(); inputRef.current?.click(); } catch {} };
   const startVoice = () => {
-    if (!SR) return;
+    if (!SR) { nativeDictate(); return; }
     if (recogRef.current) { try { recogRef.current.stop(); } catch {} return; }
-    const r = new SR();
+    let r;
+    try { r = new SR(); } catch { nativeDictate(); return; }
     r.lang = navigator.language || "en-US";
     r.interimResults = true;
     r.continuous = false;
+    r.maxAlternatives = 1;
     let lastTxt = "";
     r.onresult = (e) => { let txt = ""; for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript; lastTxt = txt.trim(); setVal(lastTxt); };
     r.onend = () => {
       setListening(false); recogRef.current = null;
       if (lastTxt) { onAdd(dateKey, lastTxt); setVal(""); }   // auto-add the moment speech stops
     };
-    r.onerror = () => { setListening(false); recogRef.current = null; };
+    r.onerror = () => { setListening(false); recogRef.current = null; nativeDictate(); };
     recogRef.current = r; setListening(true);
-    try { r.start(); } catch { setListening(false); recogRef.current = null; }
+    try { r.start(); } catch { setListening(false); recogRef.current = null; nativeDictate(); }
   };
 
   // Group open tasks into the four buckets.
@@ -4739,15 +4745,13 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
       {/* Add a task */}
       {editable && (
         <div style={{ display:"flex", alignItems:"center", gap:8, background:T.bg, borderRadius:12, padding:"5px 6px 5px 12px", marginTop:12 }}>
-          <input value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter") add(); if(e.key==="Escape") setVal(""); }}
+          <input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter") add(); if(e.key==="Escape") setVal(""); }}
             placeholder={listening ? "Listening…" : "Add a task…"} maxLength={80} aria-label="New task"
             style={{ flex:1, minWidth:0, border:"none", background:"transparent", fontSize:16, color:T.text, outline:"none", fontFamily:"inherit", padding:"6px 0" }} />
-          {SR && (
-            <button type="button" onClick={startVoice} aria-label={listening ? "Stop voice input" : "Add a task by voice"} aria-pressed={listening}
-              style={{ flexShrink:0, width:30, height:30, borderRadius:9, border:"none", background: listening ? T.red : T.surf2, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
-              <Ic name="mic" size={15} color={listening ? "#fff" : T.text2} />
-            </button>
-          )}
+          <button type="button" onClick={startVoice} aria-label={listening ? "Stop voice input" : "Add a task by voice"} aria-pressed={listening}
+            style={{ flexShrink:0, width:30, height:30, borderRadius:9, border:"none", background: listening ? T.red : T.surf2, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
+            <Ic name="mic" size={15} color={listening ? "#fff" : T.text2} />
+          </button>
           <button type="button" onClick={add} aria-label="Add task"
             style={{ flexShrink:0, width:30, height:30, borderRadius:9, border:"none", background: val.trim()?T.primary:T.border2, color:"#fff", fontSize:18, fontWeight:800, lineHeight:1, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
             <span aria-hidden="true">+</span>
