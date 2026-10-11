@@ -4633,7 +4633,7 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
   const [editingId, setEditingId] = useState(null);
   const [editVal, setEditVal] = useState("");
   const [menuFor, setMenuFor] = useState(null);     // task whose bucket picker is open
-  const [doneOpen, setDoneOpen] = useState(false);
+  const [doneOpen, setDoneOpen] = useState(true);   // Completed is expanded by default so it's never hidden
   useEffect(() => { setVal(""); setEditingId(null); setMenuFor(null); }, [dateKey]);
 
   const live = tasks.filter(t => !t.carried);
@@ -4686,12 +4686,6 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
             <div style={{ fontSize:13.5, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.text}</div>
             {t.carriedFrom && <div style={{ fontSize:10, fontWeight:700, color:T.accent, marginTop:1 }}>carried · from {fmtCarried(t)}</div>}
           </div>
-          {onDefer && editable && t.carriedFrom && (
-            <button onClick={()=>onDefer(dateKey, t.id)} aria-label={`Move ${t.text} to tomorrow`}
-              style={{ flexShrink:0, background:"transparent", border:"none", padding:2, lineHeight:0, cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
-              <Ic name="skip" size={15} color={T.muted} />
-            </button>
-          )}
           {editable && onSetBucket && (
             <button onClick={()=>setMenuFor(menuOpen?null:t.id)} aria-label={`Move "${t.text}" — currently ${cur.label}`} aria-expanded={menuOpen}
               style={{ flexShrink:0, display:"inline-flex", alignItems:"center", gap:4, fontSize:10.5, fontWeight:800, color:cur.color, background:cur.tint, border:"none", borderRadius:20, padding:"3px 9px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
