@@ -165,7 +165,7 @@ const card = extra => ({ background:T.surface, border:`1px solid ${T.border}`, b
 const fld = { width:"100%", background:T.surf2, border:`1px solid ${T.border}`, borderRadius:11, padding:12, color:T.text, fontFamily:"inherit", fontSize:15, outline:"none", boxSizing:"border-box" };
 const lab = { display:"block", fontSize:11.5, fontWeight:600, color:T.text2, marginBottom:5 };
 const chip = k => { const c=k==="bad"?T.bad:k==="warn"?T.warn:k==="done"?T.save:T.good, s=k==="bad"?T.badS:k==="warn"?T.warnS:k==="done"?T.saveS:T.goodS;
-  return { fontSize:10, fontWeight:800, padding:"2px 8px", borderRadius:20, background:s, color:c, whiteSpace:"nowrap" }; };
+  return { fontSize:11, fontWeight:800, padding:"2px 8px", borderRadius:20, background:s, color:c, whiteSpace:"nowrap" }; };
 const primaryBtn = { width:"100%", background:T.primary, color:"#fff", border:"none", borderRadius:13, padding:15, fontFamily:"inherit", fontWeight:800, fontSize:15, cursor:"pointer" };
 const ghostBtn = { background:T.surface, color:T.text2, border:`1px solid ${T.border}`, borderRadius:13, padding:15, fontFamily:"inherit", fontWeight:800, fontSize:15, cursor:"pointer" };
 // Crisp inline-SVG icons for UI chrome (nav/buttons/headers). User-chosen glyphs
@@ -230,8 +230,8 @@ function SpendSheet({ m, api, env, initial, curMonth, onClose, onChange }) {
       <div style={{ marginBottom:12 }}><label style={lab}>Transfer from</label>
         {donors.length ? <select style={fld} value={src} onChange={e=>setSrc(e.target.value)}><option value="">Choose an envelope…</option>
           {donors.map(c=><option key={c.id} value={c.id}>{iconOf(c)} {c.name} — {INR(c.avail)} available</option>)}</select>
-          : <div style={{ fontSize:12.5, color:T.muted }}>No other envelope has spare money.</div>}
-        {chosen && !can && <div style={{ fontSize:12, color:T.bad, marginTop:6 }}>{chosen.name} only has {INR(chosen.avail)}.</div>}</div>
+          : <div style={{ fontSize:13, color:T.muted }}>No other envelope has spare money.</div>}
+        {chosen && !can && <div style={{ fontSize:13, color:T.bad, marginTop:6 }}>{chosen.name} only has {INR(chosen.avail)}.</div>}</div>
       <button disabled={!can} onClick={()=>{ api.transfer(src, env.id, xfer.shortfall); record(); }} style={{ ...primaryBtn, background:can?T.primary:T.surf2, color:can?"#fff":T.muted, marginBottom:8 }}>Transfer {INR(xfer.shortfall)} & spend</button>
       <button onClick={()=>setXfer(null)} style={{ ...ghostBtn, width:"100%" }}>Back</button>
     </Sheet>;
@@ -254,7 +254,7 @@ function SpendSheet({ m, api, env, initial, curMonth, onClose, onChange }) {
     <div style={{ marginBottom:12 }}><label style={lab}>Description</label><input style={fld} value={desc} onChange={e=>setDesc(e.target.value)} placeholder={isInc?"e.g. Freelance payment":"e.g. Weekend dinner"} /></div>
     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14, fontSize:13, color:T.text2 }}><span>Date</span>
       <input type="date" value={date} min={dateMin} max={dateMax} onChange={e=>setDate(e.target.value)} style={{ background:T.surf2, border:`1px solid ${T.border}`, borderRadius:9, padding:"7px 9px", color:T.text, fontFamily:"inherit", fontSize:13 }} /></div>
-    {err && <div style={{ fontSize:12, color:T.bad, marginBottom:8 }}>{err}</div>}
+    {err && <div style={{ fontSize:13, color:T.bad, marginBottom:8 }}>{err}</div>}
     <div style={{ display:"flex", gap:10 }}>
       {initial ? <button onClick={()=>{ api.deleteTxn(initial.id); onClose(true); }} style={{ ...ghostBtn, color:T.bad, borderColor:T.bad+"55", flex:"0 0 auto" }}>Delete</button>
         : <button onClick={onChange} style={{ ...ghostBtn, flex:"0 0 auto" }}>Change</button>}
@@ -276,7 +276,7 @@ function PickerSheet({ m, onPick, onNew, onClose }) {
   </Sheet>;
 }
 const pkBtn = { background:T.surf2, border:`1px solid ${T.border}`, borderRadius:14, padding:"12px 4px", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:5, fontFamily:"inherit" };
-const pkName = { fontSize:10.5, fontWeight:600, color:T.text2, textAlign:"center", lineHeight:1.2 };
+const pkName = { fontSize:11, fontWeight:600, color:T.text2, textAlign:"center", lineHeight:1.2 };
 
 // Reusable "Import from CSV" button + result note. onImport(text) returns row count.
 function ImportCSVBtn({ onImport, hint }) {
@@ -286,7 +286,7 @@ function ImportCSVBtn({ onImport, hint }) {
       <Ic name="download" size={16} color={T.text2} style={{ transform:"rotate(180deg)" }} /> Import from CSV
       <input type="file" accept=".csv,text/csv,text/plain" style={{ display:"none" }} onChange={e=>{ const f=e.target.files&&e.target.files[0]; if(f){ const rd=new FileReader(); rd.onload=()=>{ const n=onImport(String(rd.result||"")); setImp(n>0?`Imported ${n} row${n===1?"":"s"}.`:"No valid rows found — check the columns."); }; rd.readAsText(f); } e.target.value=""; }} />
     </label>
-    {imp && <div style={{ fontSize:12, color:T.good, textAlign:"center", marginTop:8, fontWeight:600 }}>{imp}</div>}
+    {imp && <div style={{ fontSize:13, color:T.good, textAlign:"center", marginTop:8, fontWeight:600 }}>{imp}</div>}
     {hint && <div style={{ fontSize:11.5, color:T.muted, textAlign:"center", marginTop:8, lineHeight:1.5 }}>{hint}</div>}
   </>;
 }
@@ -322,26 +322,26 @@ function IncomeSheet({ m, api, onImport, onAdd, onEdit, onClose }) {
         return <div key={t.id} onClick={()=>onEdit(t)} style={{ display:"flex", alignItems:"center", gap:11, padding:"12px 0", borderBottom:`1px solid ${T.border}`, cursor:"pointer", opacity:kind==="borrow"?.75:1 }}>
           <div style={{ width:36, height:36, borderRadius:10, background:kind==="letout"?T.badS:T.incomeS, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17, flexShrink:0 }}>{km.icon}</div>
           <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontWeight:600, fontSize:14, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{t.desc||"Income"}{km.tag && <span style={{ fontSize:10, fontWeight:700, background:km.tagBg, color:km.tagC, border:`1px solid ${T.border}`, padding:"1px 7px", borderRadius:20, marginLeft:7 }}>{km.tag}</span>}</div>
+            <div style={{ fontWeight:600, fontSize:14, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{t.desc||"Income"}{km.tag && <span style={{ fontSize:11, fontWeight:700, background:km.tagBg, color:km.tagC, border:`1px solid ${T.border}`, padding:"1px 7px", borderRadius:20, marginLeft:7 }}>{km.tag}</span>}</div>
             <div style={{ fontSize:11.5, color:T.muted }}>{km.sub?`${fmtD(t.date)} · ${km.sub}`:fmtD(t.date)}</div></div>
           <div style={{ fontWeight:700, fontSize:14, color:km.col, fontVariantNumeric:"tabular-nums" }}>{km.sign}{INR(t.amount)}</div></div>; })
       : <div style={{ fontSize:13, color:T.muted, padding:"12px 2px" }}>No extra income entries yet.</div>}
     <div style={{ marginTop:14, paddingTop:12, borderTop:`2px solid ${T.border}` }}>
       {(borrow>0||letout>0) ? <>
-        <div style={{ display:"flex", justifyContent:"space-between", fontSize:12.5, color:T.text2, padding:"3px 0" }}><span>Income</span><span style={{ fontVariantNumeric:"tabular-nums" }}>{INR(grossIncome)}</span></div>
-        {letout>0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:12.5, color:T.bad, padding:"3px 0" }}><span>Let out (debited)</span><span style={{ fontVariantNumeric:"tabular-nums" }}>−{INR(letout)}</span></div>}
+        <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:T.text2, padding:"3px 0" }}><span>Income</span><span style={{ fontVariantNumeric:"tabular-nums" }}>{INR(grossIncome)}</span></div>
+        {letout>0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:T.bad, padding:"3px 0" }}><span>Let out (debited)</span><span style={{ fontVariantNumeric:"tabular-nums" }}>−{INR(letout)}</span></div>}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", paddingTop:8, marginTop:4, borderTop:`1px solid ${T.border}`, fontSize:15, fontWeight:800 }}><span>Total income</span><span style={{ color:T.good, fontVariantNumeric:"tabular-nums" }}>{INR(realIncome)}</span></div>
-        {borrow>0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:T.muted, padding:"8px 0 0" }}><span>Borrowed · not income, for budget only</span><span style={{ fontVariantNumeric:"tabular-nums" }}>{INR(borrow)}</span></div>}
-        <div style={{ display:"flex", justifyContent:"space-between", fontSize:12.5, color:T.text2, padding:"4px 0 0", fontWeight:700 }}><span>Budget to allocate</span><span style={{ fontVariantNumeric:"tabular-nums" }}>{INR(budget)}</span></div>
+        {borrow>0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:T.muted, padding:"8px 0 0" }}><span>Borrowed · not income, for budget only</span><span style={{ fontVariantNumeric:"tabular-nums" }}>{INR(borrow)}</span></div>}
+        <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:T.text2, padding:"4px 0 0", fontWeight:700 }}><span>Budget to allocate</span><span style={{ fontVariantNumeric:"tabular-nums" }}>{INR(budget)}</span></div>
       </> : <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", fontSize:15, fontWeight:800 }}><span>Total income</span><span style={{ color:T.good, fontVariantNumeric:"tabular-nums" }}>{INR(realIncome)}</span></div>}
     </div>
     <button onClick={onAdd} style={{ ...ghostBtn, width:"100%", background:T.incomeS, color:T.good, borderColor:T.good+"4d", marginTop:14 }}>＋ Add income entry</button>
     {entries.length>0 && (clr
       ? <div style={{ marginTop:12, background:T.badS, border:`1px solid ${T.bad}55`, borderRadius:11, padding:12, textAlign:"center" }}>
-          <div style={{ fontSize:12.5, color:T.bad, fontWeight:600, marginBottom:10 }}>Delete all {entries.length} income {entries.length===1?"entry":"entries"} for {m.label||mLabel(m.id)}? Salary & Other are kept. This can't be undone.</div>
+          <div style={{ fontSize:13, color:T.bad, fontWeight:600, marginBottom:10 }}>Delete all {entries.length} income {entries.length===1?"entry":"entries"} for {m.label||mLabel(m.id)}? Salary & Other are kept. This can't be undone.</div>
           <div style={{ display:"flex", gap:10 }}><button onClick={()=>setClr(false)} style={{ ...ghostBtn, flex:1, padding:11 }}>Cancel</button>
             <button onClick={()=>{ api.clearIncome(); setClr(false); }} style={{ flex:1, background:T.bad, color:"#fff", border:"none", borderRadius:13, padding:11, fontFamily:"inherit", fontWeight:800, fontSize:14, cursor:"pointer" }}>Delete all</button></div></div>
-      : <button onClick={()=>setClr(true)} style={{ display:"block", margin:"12px auto 0", background:"none", border:"none", color:T.bad, fontSize:12.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>Clear all income entries</button>)}
+      : <button onClick={()=>setClr(true)} style={{ display:"block", margin:"12px auto 0", background:"none", border:"none", color:T.bad, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>Clear all income entries</button>)}
     {onImport && <div style={{ marginTop:14 }}><ImportCSVBtn onImport={onImport} hint={<>Income row: <b>Month,income,,Salary,Income,&lt;amount&gt;</b> — one per month, for Salary and/or Other.</>} /></div>}
   </Sheet>;
 }
@@ -363,7 +363,7 @@ function CatSheet({ api, initial, onClose }) {
     <div style={{ marginBottom:12 }}><label style={lab}>Monthly budget (₹)</label><input style={fld} type="number" value={budget} onChange={e=>setBudget(e.target.value)} placeholder="0" /></div>
     <div style={{ marginBottom:12 }}><label style={lab}>Icon</label>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(8,1fr)", gap:6 }}>{EMO.map(e=><button key={e} onClick={()=>setIcon(e)} style={{ ...pkBtn, padding:"8px 0", borderColor:icon===e?BK[bucket].c:T.border, background:icon===e?BK[bucket].s:T.surf2 }}><span style={{ fontSize:20 }}>{e}</span></button>)}</div></div>
-    {err && <div style={{ fontSize:12, color:T.bad, marginBottom:8 }}>{err}</div>}
+    {err && <div style={{ fontSize:13, color:T.bad, marginBottom:8 }}>{err}</div>}
     <div style={{ display:"flex", gap:10 }}>
       {!isNew && <button onClick={()=>{ api.deleteCategory(initial.id); onClose(); }} style={{ ...ghostBtn, color:T.bad, borderColor:T.bad+"55", flex:"0 0 auto" }}>Delete</button>}
       <button onClick={()=>onClose()} style={{ ...ghostBtn, flex:"0 0 auto" }}>Cancel</button><button onClick={save} style={primaryBtn}>Save</button></div>
@@ -378,7 +378,7 @@ function MonthPicker({ budget, onPick, onCreate, onCreatePrev, onCreateMonth, on
     <div style={{ fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".04em", margin:"2px 2px 6px" }}>{ids.length} month{ids.length===1?"":"s"} created</div>
     {ids.map(id=>{ const mm=budget.months[id], active=id===budget.active;
       if (del===id) return <div key={id} style={{ background:T.badS, border:`1px solid ${T.bad}55`, borderRadius:12, padding:12, marginBottom:2 }}>
-        <div style={{ fontSize:12.5, color:T.bad, fontWeight:600, marginBottom:10 }}>Delete {mm.label||mLabel(id)}? Its budget and all its transactions are removed.</div>
+        <div style={{ fontSize:13, color:T.bad, fontWeight:600, marginBottom:10 }}>Delete {mm.label||mLabel(id)}? Its budget and all its transactions are removed.</div>
         <div style={{ display:"flex", gap:10 }}><button onClick={()=>setDel(null)} style={{ ...ghostBtn, flex:1, padding:11 }}>Cancel</button>
           <button onClick={()=>{ onDelete(id); setDel(null); }} style={{ flex:1, background:T.bad, color:"#fff", border:"none", borderRadius:13, padding:11, fontFamily:"inherit", fontWeight:800, fontSize:14, cursor:"pointer" }}>Delete</button></div></div>;
       return <div key={id} style={{ display:"flex", alignItems:"center", gap:9, padding:"11px 12px", borderRadius:12, border:`1px solid ${active?T.primary:"transparent"}`, background:active?T.primary+"14":"transparent", marginBottom:2 }}>
@@ -386,13 +386,13 @@ function MonthPicker({ budget, onPick, onCreate, onCreatePrev, onCreateMonth, on
           <div style={{ width:38, height:38, borderRadius:11, background:T.surf2, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>🗓️</div>
           <div style={{ flex:1, minWidth:0 }}><div style={{ fontWeight:700, fontSize:15 }}>{mm.label||mLabel(id)}</div><div style={{ fontSize:11.5, color:T.muted, fontVariantNumeric:"tabular-nums" }}>{INR(incomeOf(mm))} budget</div></div></div>
         {active ? <span style={{ color:T.primary, fontWeight:800 }}>✓</span>
-          : <span style={{ fontSize:10.5, fontWeight:800, padding:"2px 8px", borderRadius:20, background:mm.status==="committed"?T.goodS:T.warnS, color:mm.status==="committed"?T.good:T.warn }}>{mm.status==="committed"?"Committed":"Draft"}</span>}
+          : <span style={{ fontSize:11, fontWeight:800, padding:"2px 8px", borderRadius:20, background:mm.status==="committed"?T.goodS:T.warnS, color:mm.status==="committed"?T.good:T.warn }}>{mm.status==="committed"?"Committed":"Draft"}</span>}
         <button onClick={()=>onExportMonth(id)} aria-label={"Export "+(mm.label||mLabel(id))} title="Export this month" style={{ background:"none", border:"none", color:T.muted, cursor:"pointer", padding:"4px 3px", flexShrink:0, display:"flex", alignItems:"center" }}><Ic name="download" size={16} color={T.muted} /></button>
         {ids.length>1 && <button onClick={()=>setDel(id)} aria-label={"Delete "+(mm.label||mLabel(id))} style={{ background:"none", border:"none", color:T.muted, fontSize:15, cursor:"pointer", padding:"4px 2px", flexShrink:0 }}>🗑️</button>}
       </div>; })}
     <div style={{ display:"flex", gap:8, marginTop:12 }}>
-      <button onClick={onCreatePrev} style={{ flex:1, background:T.surf2, border:`1px dashed ${T.primary}72`, color:T.primary, borderRadius:13, padding:"14px 8px", fontFamily:"inherit", fontWeight:800, fontSize:13.5, cursor:"pointer" }}>＋ {mLabel(prevId)}<div style={{ fontSize:10.5, fontWeight:600, color:T.muted, marginTop:2 }}>earlier month</div></button>
-      <button onClick={onCreate} style={{ flex:1, background:T.surf2, border:`1px dashed ${T.primary}72`, color:T.primary, borderRadius:13, padding:"14px 8px", fontFamily:"inherit", fontWeight:800, fontSize:13.5, cursor:"pointer" }}>＋ {mLabel(nextId)}<div style={{ fontSize:10.5, fontWeight:600, color:T.muted, marginTop:2 }}>next month</div></button>
+      <button onClick={onCreatePrev} style={{ flex:1, background:T.surf2, border:`1px dashed ${T.primary}72`, color:T.primary, borderRadius:13, padding:"14px 8px", fontFamily:"inherit", fontWeight:800, fontSize:13.5, cursor:"pointer" }}>＋ {mLabel(prevId)}<div style={{ fontSize:11, fontWeight:600, color:T.muted, marginTop:2 }}>earlier month</div></button>
+      <button onClick={onCreate} style={{ flex:1, background:T.surf2, border:`1px dashed ${T.primary}72`, color:T.primary, borderRadius:13, padding:"14px 8px", fontFamily:"inherit", fontWeight:800, fontSize:13.5, cursor:"pointer" }}>＋ {mLabel(nextId)}<div style={{ fontSize:11, fontWeight:600, color:T.muted, marginTop:2 }}>next month</div></button>
     </div>
     <div style={{ display:"flex", gap:8, marginTop:8, alignItems:"stretch" }}>
       <input type="month" value={pick} onChange={e=>setPick(e.target.value)} aria-label="Pick a month to create"
@@ -419,7 +419,7 @@ function MonthPicker({ budget, onPick, onCreate, onCreatePrev, onCreateMonth, on
       </label>
       <button onClick={onExport} style={{ ...ghostBtn, flex:1, padding:12, fontSize:13.5, display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}><Ic name="download" size={16} color={T.text2} /> Export CSV</button>
     </div>
-    {msg && <div style={{ fontSize:12, color:T.good, textAlign:"center", marginTop:9, fontWeight:600 }}>{msg}</div>}
+    {msg && <div style={{ fontSize:13, color:T.good, textAlign:"center", marginTop:9, fontWeight:600 }}>{msg}</div>}
     <div style={{ fontSize:11.5, color:T.muted, textAlign:"center", marginTop:9, lineHeight:1.5 }}>Columns: Month, Type (income/budget/spend), Date, Envelope, Bucket, Amount, Note. Export then edit to see the format.</div>
   </Sheet>;
 }
@@ -431,7 +431,7 @@ function GoalSheet({ m, cat, onAdd, onEdit, onClose }) {
     <div style={{ display:"flex", alignItems:"center", gap:11, background:T.saveS, borderRadius:13, padding:12, marginBottom:6 }}>
       <div style={{ width:40, height:40, borderRadius:11, background:T.surface, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>{iconOf(cat)}</div>
       <div><div style={{ fontWeight:800, fontSize:16, fontVariantNumeric:"tabular-nums" }}>{INR(funded)} <span style={{ fontSize:13, color:T.muted, fontWeight:500 }}>/ {INR(budget)}</span></div>
-        <div style={{ fontSize:12, color:T.muted }}>{done?"Fully funded 🎉":INR(Math.max(0,rem))+" left to fund"}</div></div></div>
+        <div style={{ fontSize:13, color:T.muted }}>{done?"Fully funded 🎉":INR(Math.max(0,rem))+" left to fund"}</div></div></div>
     <div style={{ fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".04em", margin:"16px 2px 4px" }}>Contributions this month</div>
     {contribs.length ? contribs.map(t=><div key={t.id} onClick={()=>onEdit(t)} style={{ display:"flex", alignItems:"center", gap:11, padding:"11px 0", borderBottom:`1px solid ${T.border}`, cursor:"pointer" }}>
         <div style={{ width:34, height:34, borderRadius:10, background:T.saveS, display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, flexShrink:0 }}>💜</div>
@@ -451,12 +451,12 @@ function TransactionsSheet({ m, onAdd, onEdit, onClear, onDelete, onImport, onCl
   const items=all.filter(t=>(filter==="all"||t.bucket===filter)&&(envF==="all"||t.categoryId===envF));
   const spent=all.filter(t=>t.bucket!=="income").reduce((a,t)=>a+(+t.amount||0),0);
   const inc=all.filter(t=>t.bucket==="income").reduce((a,t)=>a+(+t.amount||0),0);
-  const fchip=(f,l)=><button key={f} onClick={()=>setFilter(f)} style={{ flex:1, padding:"8px 0", borderRadius:9, fontFamily:"inherit", fontSize:12.5, fontWeight:700, cursor:"pointer", border:`1px solid ${filter===f?T.primary:T.border}`, background:filter===f?T.primary:"transparent", color:filter===f?"#fff":T.text2 }}>{l}</button>;
+  const fchip=(f,l)=><button key={f} onClick={()=>setFilter(f)} style={{ flex:1, padding:"8px 0", borderRadius:9, fontFamily:"inherit", fontSize:13, fontWeight:700, cursor:"pointer", border:`1px solid ${filter===f?T.primary:T.border}`, background:filter===f?T.primary:"transparent", color:filter===f?"#fff":T.text2 }}>{l}</button>;
   let last=null;
   return <Sheet title={"All transactions · "+(m.label||mLabel(m.id))} onClose={onClose}>
     <button onClick={onAdd} style={{ ...primaryBtn, marginBottom:12 }}>＋ Add transaction</button>
     <div style={{ display:"flex", gap:6, marginBottom:8 }}>{fchip("all","All")}{fchip("need","Needs")}{fchip("want","Wants")}{fchip("save","Save")}{fchip("income","Income")}</div>
-    <select value={envF} onChange={e=>setEnvF(e.target.value)} style={{ width:"100%", marginBottom:6, background:T.surf2, border:`1px solid ${T.border}`, borderRadius:9, padding:"8px 9px", color:T.text, fontFamily:"inherit", fontSize:12.5, fontWeight:600 }}>
+    <select value={envF} onChange={e=>setEnvF(e.target.value)} style={{ width:"100%", marginBottom:6, background:T.surf2, border:`1px solid ${T.border}`, borderRadius:9, padding:"8px 9px", color:T.text, fontFamily:"inherit", fontSize:13, fontWeight:600 }}>
       <option value="all">All envelopes</option>
       {(m.categories||[]).map(c=><option key={c.id} value={c.id}>{iconOf(c)} {c.name}</option>)}</select>
     {items.length ? items.map(t=>{ const c=cat(t.categoryId), bk=BK[t.bucket]||BK.need, showDay=t.date!==last; last=t.date;
@@ -469,17 +469,17 @@ function TransactionsSheet({ m, onAdd, onEdit, onClear, onDelete, onImport, onCl
           <div style={{ fontWeight:700, fontSize:14, fontVariantNumeric:"tabular-nums", color:t.bucket==="income"?T.good:T.text }}>{t.bucket==="income"?"+":""}{INR(t.amount)}</div></div>
       </div>; })
       : <div style={{ fontSize:13, color:T.muted, textAlign:"center", padding:"20px 0" }}>No transactions.</div>}
-    <div style={{ fontSize:12, color:T.muted, textAlign:"center", marginTop:12 }}>{all.length} transactions · spent {INR(spent)} · income +{INR(inc)}</div>
+    <div style={{ fontSize:13, color:T.muted, textAlign:"center", marginTop:12 }}>{all.length} transactions · spent {INR(spent)} · income +{INR(inc)}</div>
     {(() => { const filtered = filter!=="all" || envF!=="all";
       const label = envF!=="all" ? (cat(envF)?.name||"") : filter!=="all" ? (filter==="income"?"income":(BK[filter]?.l||filter)) : "";
       const del = () => { if(onDelete) onDelete(items.map(t=>t.id)); else if(!filtered) onClear(); setClr(false); };
       if(!items.length) return null;
       return clr
       ? <div style={{ marginTop:12, background:T.badS, border:`1px solid ${T.bad}55`, borderRadius:11, padding:12, textAlign:"center" }}>
-          <div style={{ fontSize:12.5, color:T.bad, fontWeight:600, marginBottom:10 }}>Delete {items.length} {label} transaction{items.length===1?"":"s"} for {m.label||mLabel(m.id)}? This can't be undone.</div>
+          <div style={{ fontSize:13, color:T.bad, fontWeight:600, marginBottom:10 }}>Delete {items.length} {label} transaction{items.length===1?"":"s"} for {m.label||mLabel(m.id)}? This can't be undone.</div>
           <div style={{ display:"flex", gap:10 }}><button onClick={()=>setClr(false)} style={{ ...ghostBtn, flex:1, padding:11 }}>Cancel</button>
             <button onClick={del} style={{ flex:1, background:T.bad, color:"#fff", border:"none", borderRadius:13, padding:11, fontFamily:"inherit", fontWeight:800, fontSize:14, cursor:"pointer" }}>Delete {items.length}</button></div></div>
-      : <button onClick={()=>setClr(true)} style={{ display:"block", margin:"12px auto 0", background:"none", border:"none", color:T.bad, fontSize:12.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>{filtered?`Delete these ${items.length} ${label} transactions`:"Clear all transactions"}</button>;
+      : <button onClick={()=>setClr(true)} style={{ display:"block", margin:"12px auto 0", background:"none", border:"none", color:T.bad, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>{filtered?`Delete these ${items.length} ${label} transactions`:"Clear all transactions"}</button>;
     })()}
     {onImport && <div style={{ marginTop:16, paddingTop:14, borderTop:`1px solid ${T.border}` }}><ImportCSVBtn onImport={onImport} hint={<>Spend row: <b>Month,spend,Date,Envelope,Bucket,Amount,Note</b>. Imports spends (and budgets/income) for every month in the file.</>} /></div>}
   </Sheet>;
@@ -490,11 +490,11 @@ function EnvTxnSheet({ m, cat, onAdd, onEdit, onClose }) {
   const spent=items.reduce((a,t)=>a+(+t.amount||0),0);
   const alloc=+cat.budget||0, bal=alloc-spent, bk=BK[cat.bucket]||BK.need;
   const stat=(k,v,vc)=><div style={{ flex:1, background:T.surf2, borderRadius:12, padding:"9px 8px", textAlign:"center", minWidth:0 }}>
-    <div style={{ fontSize:10, fontWeight:700, color:T.muted, textTransform:"uppercase", letterSpacing:".03em" }}>{k}</div>
+    <div style={{ fontSize:11, fontWeight:700, color:T.muted, textTransform:"uppercase", letterSpacing:".03em" }}>{k}</div>
     <div style={{ fontSize:15, fontWeight:800, marginTop:2, fontVariantNumeric:"tabular-nums", color:vc||T.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{v}</div></div>;
   let last=null;
   return <Sheet title={iconOf(cat)+"  "+cat.name} onClose={onClose}>
-    <div style={{ fontSize:12, color:T.muted, margin:"-6px 0 12px" }}>{bk.l} · envelope</div>
+    <div style={{ fontSize:13, color:T.muted, margin:"-6px 0 12px" }}>{bk.l} · envelope</div>
     <div style={{ display:"flex", gap:8, marginBottom:14 }}>{stat("Allocated",INR(alloc))}{stat("Spent",INR(spent),bk.c)}{stat("Balance",INR(bal),bal<0?T.bad:T.good)}</div>
     <button onClick={onAdd} style={{ ...primaryBtn, marginBottom:4 }}>＋ Add spend to {cat.name}</button>
     {items.length ? items.map(t=>{ const showDay=t.date!==last; last=t.date;
@@ -507,7 +507,7 @@ function EnvTxnSheet({ m, cat, onAdd, onEdit, onClose }) {
           <div style={{ fontWeight:700, fontSize:14, fontVariantNumeric:"tabular-nums" }}>{INR(t.amount)}</div></div>
       </div>; })
       : <div style={{ fontSize:13, color:T.muted, textAlign:"center", padding:"22px 0" }}>No transactions in this envelope yet.</div>}
-    <div style={{ fontSize:12, color:T.muted, textAlign:"center", marginTop:12 }}>{items.length} transaction{items.length===1?"":"s"} · {INR(spent)}</div>
+    <div style={{ fontSize:13, color:T.muted, textAlign:"center", marginTop:12 }}>{items.length} transaction{items.length===1?"":"s"} · {INR(spent)}</div>
   </Sheet>;
 }
 
@@ -542,8 +542,8 @@ function ReportSheet({ m, onClose }) {
       <tr class="tot"><td>Total saved</td><td></td><td>₹${IN(d.sa)}</td><td></td><td></td><td>${pct(d.sa,d.income).toFixed(1)}%</td></tr></tbody></table>
       <div class="banner">Income ₹${IN(d.income)} · spent ₹${IN(d.es)} · saved ₹${IN(d.sa)} · ₹${IN(left)} left</div></body></html>`);
     w.document.close(); w.focus(); setTimeout(()=>{ try{ w.print(); }catch(e){} },350); };
-  const th={ textAlign:"right", padding:"7px 3px", fontSize:10, textTransform:"uppercase", color:T.muted, borderBottom:`1px solid ${T.border}` };
-  const td={ textAlign:"right", padding:"7px 3px", fontSize:12, borderBottom:`1px solid ${T.border}`, fontVariantNumeric:"tabular-nums" };
+  const th={ textAlign:"right", padding:"7px 3px", fontSize:11, textTransform:"uppercase", color:T.muted, borderBottom:`1px solid ${T.border}` };
+  const td={ textAlign:"right", padding:"7px 3px", fontSize:13, borderBottom:`1px solid ${T.border}`, fontVariantNumeric:"tabular-nums" };
   const catRow = (c,isSave) => { const v=d.sp[c.id]||0, bal=(+c.budget||0)-v; return <tr key={c.id}>
     <td style={{ ...td, textAlign:"left" }}>{iconOf(c)} {c.name}</td><td style={{ ...td, color:T.muted }}>{INR(c.budget)}</td><td style={{ ...td, fontWeight:600, color:isSave?T.save:T.text }}>{INR(v)}</td>
     <td style={{ ...td, color:isSave?T.muted:(bal<0?T.bad:T.text2) }}>{isSave?(bal>0?INR(bal)+" to go":"✓ funded"):INR(bal)}</td><td style={{ ...td, color:T.muted }}>{pct(v,d.income).toFixed(1)}</td></tr>; };
@@ -567,13 +567,13 @@ function ReportSheet({ m, onClose }) {
       {left<0 ? `Overspent by ${INR(-left)} this month` : d.sa>0 ? `🎉 You saved ${INR(d.sa)} this month` : `🎉 ${INR(left)} left unspent this month`}</div>
     <div style={{ display:"flex", gap:8, marginTop:10 }}>
       <div style={{ flex:1, background:T.surf2, borderRadius:12, padding:"10px 6px", textAlign:"center" }}>
-        <div style={{ fontSize:10, color:T.muted, textTransform:"uppercase", letterSpacing:".03em" }}>Spent</div>
+        <div style={{ fontSize:11, color:T.muted, textTransform:"uppercase", letterSpacing:".03em" }}>Spent</div>
         <div style={{ fontSize:15, fontWeight:800, marginTop:2, fontVariantNumeric:"tabular-nums" }}>{INR(d.es)}</div></div>
       <div style={{ flex:1, background:T.surf2, borderRadius:12, padding:"10px 6px", textAlign:"center" }}>
-        <div style={{ fontSize:10, color:T.muted, textTransform:"uppercase", letterSpacing:".03em" }}>Saved</div>
+        <div style={{ fontSize:11, color:T.muted, textTransform:"uppercase", letterSpacing:".03em" }}>Saved</div>
         <div style={{ fontSize:15, fontWeight:800, marginTop:2, fontVariantNumeric:"tabular-nums", color:T.save }}>{INR(d.sa)}</div></div>
       <div style={{ flex:1.25, background:left<0?T.badS:T.goodS, border:`1.5px solid ${left<0?T.bad:T.good}`, borderRadius:12, padding:"10px 6px", textAlign:"center" }}>
-        <div style={{ fontSize:10, color:left<0?T.bad:T.good, textTransform:"uppercase", letterSpacing:".03em", fontWeight:800 }}>Left this month</div>
+        <div style={{ fontSize:11, color:left<0?T.bad:T.good, textTransform:"uppercase", letterSpacing:".03em", fontWeight:800 }}>Left this month</div>
         <div style={{ fontSize:18, fontWeight:800, marginTop:2, fontVariantNumeric:"tabular-nums", color:left<0?T.bad:T.good }}>{INR(left)}</div></div>
     </div>
     <div style={{ fontSize:11.5, color:T.muted, textAlign:"center", marginTop:7 }}>Income {INR(d.income)}. Nothing carries to next month.</div>
@@ -592,11 +592,11 @@ function AllocationSheet({ m, d, onClose }) {
   const isOver=c=>c.bucket!=="save" && (d.sp[c.id]||0) > (+c.budget||0);
   const overCats=cats.filter(isOver);
   const overBy=overCats.reduce((a,c)=>a+((d.sp[c.id]||0)-(+c.budget||0)),0);
-  const thn={ textAlign:"right", fontSize:10.5, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".03em", padding:"0 0 7px" };
-  const num={ textAlign:"right", fontSize:12, fontVariantNumeric:"tabular-nums", padding:"8px 2px", color:T.text };
+  const thn={ textAlign:"right", fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".03em", padding:"0 0 7px" };
+  const num={ textAlign:"right", fontSize:13, fontVariantNumeric:"tabular-nums", padding:"8px 2px", color:T.text };
   const fmtBal=v=>v<0?"−"+INR(-v):INR(v);
   return <Sheet title={"Budget vs spent · "+(m.label||mLabel(m.id))} onClose={onClose}>
-    {overCats.length>0 && <div style={{ background:T.badS, border:`1px solid ${T.bad}44`, borderRadius:11, padding:"9px 12px", marginBottom:12, fontSize:12.5, fontWeight:700, color:T.bad }}>
+    {overCats.length>0 && <div style={{ background:T.badS, border:`1px solid ${T.bad}44`, borderRadius:11, padding:"9px 12px", marginBottom:12, fontSize:13, fontWeight:700, color:T.bad }}>
       ⚠ {overCats.length} envelope{overCats.length===1?"":"s"} overspent by {INR(overBy)}</div>}
     {cats.length ? <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
       <colgroup><col style={{ width:"34%" }}/><col style={{ width:"22%" }}/><col style={{ width:"22%" }}/><col style={{ width:"22%" }}/></colgroup>
@@ -607,7 +607,7 @@ function AllocationSheet({ m, d, onClose }) {
         {cats.map(c=>{ const bud=+c.budget||0, sp=d.sp[c.id]||0, bal=bud-sp, isSave=c.bucket==="save", over=isOver(c);
           const lc=isSave?BK.save.c:(bal<0?T.bad:bal>0?T.good:T.muted);
           return <tr key={c.id} style={{ borderBottom:`1px solid ${T.border}`, background:over?T.badS:undefined }}>
-            <td style={{ fontSize:12, padding:"8px 2px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", color:over?T.bad:T.text, fontWeight:over?700:400 }}>{iconOf(c)} {c.name}</td>
+            <td style={{ fontSize:13, padding:"8px 2px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", color:over?T.bad:T.text, fontWeight:over?700:400 }}>{iconOf(c)} {c.name}</td>
             <td style={num}>{INR(bud)}</td>
             <td style={{ ...num, color:over?T.bad:T.text, fontWeight:over?700:400 }}>{INR(sp)}</td>
             <td style={{ ...num, color:lc, fontWeight:over?800:400 }}>{fmtBal(bal)}</td>
@@ -763,7 +763,7 @@ export default function BudgetView({ budget, setBudget }) {
       </div>
     </div>; };
 
-  const pill = on => ({ display:"inline-flex", alignItems:"center", gap:5, fontFamily:"inherit", fontSize:12.5, fontWeight:700, padding:"6px 12px", borderRadius:20, cursor:"pointer", border:`1px solid ${on?T.primary:T.border}`, background:on?T.primary+"14":T.surf2, color:on?T.primary:T.text2 });
+  const pill = on => ({ display:"inline-flex", alignItems:"center", gap:5, fontFamily:"inherit", fontSize:13, fontWeight:700, padding:"6px 12px", borderRadius:20, cursor:"pointer", border:`1px solid ${on?T.primary:T.border}`, background:on?T.primary+"14":T.surf2, color:on?T.primary:T.text2 });
   return <div style={{ display:"flex", flexDirection:"column", padding:"12px 14px 0" }}>
     {/* own header — month selection lives inside the Monthly budget card */}
     <div style={{ background:`linear-gradient(135deg, ${T.primary}, #075E8C)`, color:"#fff", borderRadius:16, padding:16, boxShadow:T.shadow }}>
@@ -780,7 +780,7 @@ export default function BudgetView({ budget, setBudget }) {
               {[["Income",d.grossIncome,""],["Borrowed",d.borrow,"+"],["Lent out",d.letout,"−"]]
                 .filter(c=>c[0]==="Income"||c[1]>0)
                 .map(([lbl,val,sign])=><div key={lbl} style={{ flex:1, background:"#ffffff24", borderRadius:10, padding:"7px 9px" }}>
-                  <div style={{ fontSize:10, opacity:.85 }}>{lbl}</div>
+                  <div style={{ fontSize:11, opacity:.85 }}>{lbl}</div>
                   <div style={{ fontSize:13, fontWeight:700, marginTop:2, fontVariantNumeric:"tabular-nums" }}>{sign}{INR(val)}</div>
                 </div>)}
             </div>
@@ -789,24 +789,24 @@ export default function BudgetView({ budget, setBudget }) {
             </div>
           </>
         : <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", gap:8, marginTop:4 }}>
-            <div style={{ fontSize:12, opacity:.9 }}>Salary {INR(m.salaryIncome)}{(+m.otherIncome>0)?` · Other ${INR(m.otherIncome)}`:""}{(() => { const n=(m.txns||[]).filter(t=>t.bucket==="income").length; return n?` · ${n} entr${n===1?"y":"ies"}`:""; })()}</div>
+            <div style={{ fontSize:13, opacity:.9 }}>Salary {INR(m.salaryIncome)}{(+m.otherIncome>0)?` · Other ${INR(m.otherIncome)}`:""}{(() => { const n=(m.txns||[]).filter(t=>t.bucket==="income").length; return n?` · ${n} entr${n===1?"y":"ies"}`:""; })()}</div>
             <button onClick={()=>setModal({type:"income"})} style={{ background:"#ffffff2e", border:"none", color:"#fff", borderRadius:8, padding:"5px 13px", fontSize:11.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}>Income ›</button>
           </div>}
     </div>
     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:9, marginTop:12 }}>
       {["need","want","save"].map(k=><div key={k} style={card({ padding:"12px 11px" })}>
-        <div style={{ fontSize:20 }}>{BK[k].i}</div><div style={{ fontSize:12, fontWeight:700, marginTop:5, color:BK[k].c }}>{BK[k].l}</div>
+        <div style={{ fontSize:20 }}>{BK[k].i}</div><div style={{ fontSize:13, fontWeight:700, marginTop:5, color:BK[k].c }}>{BK[k].l}</div>
         <div style={{ fontSize:16, fontWeight:800, marginTop:1, fontVariantNumeric:"tabular-nums" }}>{INR(k==="save"?d.sa:d.bk[k])}</div>
         <div style={{ fontSize:11, color:T.muted, marginTop:1 }}>{pct(k==="save"?d.sa:d.bk[k],d.income).toFixed(0)}% · of {INR(d.bbud[k])}</div></div>)}
     </div>
-    {(() => { const scard=(icon,lbl,val,tip)=><div title={tip||undefined} style={{ ...card({ padding:"10px 12px" }), flex:1, display:"flex", alignItems:"center", gap:9, cursor:tip?"help":"default" }}><Ic name={icon} size={19} color={T.muted} /><div style={{ minWidth:0 }}><div style={{ fontSize:11, color:T.muted, fontWeight:600, display:"flex", alignItems:"center", gap:3 }}>{lbl}{tip && <span style={{ fontSize:10, opacity:.6 }}>ⓘ</span>}</div><div style={{ fontSize:15, fontWeight:800, fontVariantNumeric:"tabular-nums", color:lbl==="Spent"?T.text:(val<0?T.bad:T.good) }}>{INR(val)}</div></div></div>;
+    {(() => { const scard=(icon,lbl,val,tip)=><div title={tip||undefined} style={{ ...card({ padding:"10px 12px" }), flex:1, display:"flex", alignItems:"center", gap:9, cursor:tip?"help":"default" }}><Ic name={icon} size={19} color={T.muted} /><div style={{ minWidth:0 }}><div style={{ fontSize:11, color:T.muted, fontWeight:600, display:"flex", alignItems:"center", gap:3 }}>{lbl}{tip && <span style={{ fontSize:11, opacity:.6 }}>ⓘ</span>}</div><div style={{ fontSize:15, fontWeight:800, fontVariantNumeric:"tabular-nums", color:lbl==="Spent"?T.text:(val<0?T.bad:T.good) }}>{INR(val)}</div></div></div>;
       const tip = carryOn ? `Carried forward ${INR(carryIn)} + this month ${INR(d.balance)} = ${INR(runBal)}` : undefined;
       return <div style={{ display:"flex", gap:9, marginTop:9 }}>{scard("spend","Spent",d.es)}{scard("wallet", carryOn?"Total balance":"Balance", carryOn?runBal:d.balance, tip)}</div>;
     })()}
     <div onClick={()=>setModal({type:"alloc"})} style={{ ...card({ padding:"12px 13px", marginTop:9 }), cursor:"pointer" }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:8 }}>
-        <span style={{ fontSize:12.5, fontWeight:700, display:"inline-flex", alignItems:"center", gap:4 }}>Allocation <span style={{ color:T.muted, fontWeight:600 }}>›</span></span>
-        <span style={{ fontSize:12, color:T.text2, fontVariantNumeric:"tabular-nums" }}>{INR(d.allocated)} of {INR(d.income)} income</span></div>
+        <span style={{ fontSize:13, fontWeight:700, display:"inline-flex", alignItems:"center", gap:4 }}>Allocation <span style={{ color:T.muted, fontWeight:600 }}>›</span></span>
+        <span style={{ fontSize:13, color:T.text2, fontVariantNumeric:"tabular-nums" }}>{INR(d.allocated)} of {INR(d.income)} income</span></div>
       <div style={{ height:9, borderRadius:6, background:T.surf2, overflow:"hidden" }}>
         <div style={{ height:"100%", width:Math.min(100,pct(d.allocated,d.income))+"%", background:d.unalloc<0?T.bad:T.primary, borderRadius:6 }} /></div>
       <div style={{ fontSize:11.5, marginTop:7, fontWeight:700, color:d.unalloc<0?T.bad:d.unalloc>0?T.warn:T.good }}>
@@ -814,7 +814,7 @@ export default function BudgetView({ budget, setBudget }) {
 
     {!committed && <div style={{ marginTop:12, background:T.warnS, border:`1px solid ${T.warn}55`, borderRadius:13, padding:13 }}>
       <div style={{ fontWeight:700, color:T.warn }}>You're still planning this month</div>
-      <div style={{ margin:"5px 0 10px", fontSize:12.5, color:T.text2, lineHeight:1.5 }}>Income {INR(d.income)} · allocated {INR(d.allocated)}. You start fresh — nothing carries over. Commit when you're ready to track spending.</div>
+      <div style={{ margin:"5px 0 10px", fontSize:13, color:T.text2, lineHeight:1.5 }}>Income {INR(d.income)} · allocated {INR(d.allocated)}. You start fresh — nothing carries over. Commit when you're ready to track spending.</div>
       <button onClick={api.commit} style={{ background:T.primary, color:"#fff", border:"none", borderRadius:10, padding:"10px 15px", fontWeight:700, fontSize:13.5, cursor:"pointer", fontFamily:"inherit" }}>Commit {m.label||mLabel(active)}</button></div>}
 
     {/* envelopes */}
@@ -826,8 +826,8 @@ export default function BudgetView({ budget, setBudget }) {
         <button onClick={()=>setModal({type:"report"})} style={pill(false)}><Ic name="chart" size={14} color={T.text2} /> Report</button>
         <button onClick={()=>setEditMode(v=>!v)} style={pill(editMode)}><Ic name={editMode?"check":"pencil"} size={14} color={editMode?T.primary:T.text2} /> {editMode?"Done":"Edit"}</button></div>
     </div>
-    {impNote && <div style={{ fontSize:12, color:T.good, fontWeight:700, textAlign:"right", margin:"-2px 2px 8px" }}>{impNote}</div>}
-    {editMode && <div style={{ fontSize:12, color:T.muted, margin:"0 2px 8px" }}>Tap an envelope to edit its budget & icon, or add a new one below.</div>}
+    {impNote && <div style={{ fontSize:13, color:T.good, fontWeight:700, textAlign:"right", margin:"-2px 2px 8px" }}>{impNote}</div>}
+    {editMode && <div style={{ fontSize:13, color:T.muted, margin:"0 2px 8px" }}>Tap an envelope to edit its budget & icon, or add a new one below.</div>}
     {bucketSec("need")}
     {bucketSec("want")}
     {bucketSec("save")}
@@ -871,4 +871,4 @@ export default function BudgetView({ budget, setBudget }) {
     {modal?.type==="alloc"  && <AllocationSheet m={m} d={d} onClose={()=>setModal(null)} />}
   </div>;
 }
-const lnk = { fontSize:12, fontWeight:700, color:T.primary, background:"none", border:"none", cursor:"pointer", fontFamily:"inherit" };
+const lnk = { fontSize:13, fontWeight:700, color:T.primary, background:"none", border:"none", cursor:"pointer", fontFamily:"inherit" };
