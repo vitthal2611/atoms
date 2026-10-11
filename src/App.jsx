@@ -4647,7 +4647,7 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
   const add = () => { const t = val.trim(); if (!t) return; onAdd(dateKey, t); setVal(""); };
   const saveEdit = () => { const t = editVal.trim(); if (t) onEdit(dateKey, editingId, t); setEditingId(null); };
 
-  // Voice capture — speak a task; the transcript fills the input to review, then add.
+  // Voice capture — speak a task; the words show live, then auto-add when you stop.
   const SR = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
   const startVoice = () => {
     if (!SR) return;
@@ -4656,8 +4656,12 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
     r.lang = navigator.language || "en-US";
     r.interimResults = true;
     r.continuous = false;
-    r.onresult = (e) => { let txt = ""; for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript; setVal(txt); };
-    r.onend = () => { setListening(false); recogRef.current = null; };
+    let lastTxt = "";
+    r.onresult = (e) => { let txt = ""; for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript; lastTxt = txt.trim(); setVal(lastTxt); };
+    r.onend = () => {
+      setListening(false); recogRef.current = null;
+      if (lastTxt) { onAdd(dateKey, lastTxt); setVal(""); }   // auto-add the moment speech stops
+    };
     r.onerror = () => { setListening(false); recogRef.current = null; };
     recogRef.current = r; setListening(true);
     try { r.start(); } catch { setListening(false); recogRef.current = null; }
