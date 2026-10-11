@@ -4709,7 +4709,7 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
           <span aria-label={`${done.length} of ${live.length} tasks done`} style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:800, color:T.primary, fontVariantNumeric:"tabular-nums" }}>{done.length}/{live.length}</span>
         </div>
         <div style={{ minWidth:0 }}>
-          <div style={{ fontSize:15, fontWeight:800, color:T.text, letterSpacing:"-0.01em" }}>Today's tasks</div>
+          <div style={{ fontSize:15, fontWeight:800, color:T.text, letterSpacing:"-0.01em" }}>Get it done</div>
           <div style={{ fontSize:12, color:T.text2, marginTop:1 }}>Do now · later · delegate · leave it</div>
         </div>
       </div>
