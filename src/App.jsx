@@ -235,6 +235,9 @@ function dateToKey(d) {
     String(d.getDate()).padStart(2, "0");
 }
 function getTodayKey() { return dateToKey(new Date()); }
+// Cheap structural equality for skipping redundant re-renders when a Firestore
+// snapshot echoes back data identical to what we already hold (our own save).
+const sameJSON = (a, b) => { try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; } };
 // Normalize a "7:30 am"-style time to 24h "07:30" for display; passes through if already 24h.
 function to24h(timeStr) {
   if (!timeStr) return timeStr;
@@ -1487,10 +1490,13 @@ export default function App() {
       );
 
       docUnsubsRef.current = [
-        sub(identitiesRef(u.uid), "id", snap => { if (snap.exists()) { isFirstId.current = true; setIdentities(snap.data().data); } }),
-        sub(checkInsRef(u.uid),   "ci", snap => { if (snap.exists()) { isFirstCi.current = true; setData(prune(snap.data().data)); } }),
-        sub(dailyTasksRef(u.uid), "dt", snap => { if (snap.exists()) { isFirstDt.current = true; setDailyTasks(prune(snap.data().data)); } }),
-        sub(habitNotesRef(u.uid), "hn", snap => { if (snap.exists()) { isFirstHn.current = true; setHabitNotes(prune(snap.data().data)); } }),
+        // Skip the setState entirely when the incoming snapshot is byte-identical to
+        // what we already hold (our own just-saved write echoing back) — this avoids a
+        // re-render storm on every save, so interactions stay smooth.
+        sub(identitiesRef(u.uid), "id", snap => { if (!snap.exists()) return; const next = snap.data().data;          if (sameJSON(latestRef.current.identities, next)) return; isFirstId.current = true; setIdentities(next); }),
+        sub(checkInsRef(u.uid),   "ci", snap => { if (!snap.exists()) return; const next = prune(snap.data().data);   if (sameJSON(latestRef.current.data, next)) return;       isFirstCi.current = true; setData(next); }),
+        sub(dailyTasksRef(u.uid), "dt", snap => { if (!snap.exists()) return; const next = prune(snap.data().data);   if (sameJSON(latestRef.current.dailyTasks, next)) return;  isFirstDt.current = true; setDailyTasks(next); }),
+        sub(habitNotesRef(u.uid), "hn", snap => { if (!snap.exists()) return; const next = prune(snap.data().data);   if (sameJSON(latestRef.current.habitNotes, next)) return;  isFirstHn.current = true; setHabitNotes(next); }),
         sub(settingsRef(u.uid),   "st", snap => {
           if (snap.exists()) {
             const raw = snap.data().data || {};
