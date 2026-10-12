@@ -2126,21 +2126,34 @@ export default function App() {
     });
   }, []);
 
-  // Fire rollover at midnight (12 AM) every day; also runs on login/load in case it's overdue.
+  // Tasks are day-independent: one persistent list under the "all" key. Fold any
+  // legacy per-day tasks into it once (dropping the hidden carried sources) so a
+  // task — and its completed state — stays visible no matter the day.
+  const consolidateTasks = useCallback(() => {
+    setDailyTasks(prev => {
+      const dateKeys = Object.keys(prev).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k));
+      if (dateKeys.length === 0) return prev;              // already consolidated
+      const all = [...(prev.all || [])];
+      const seen = new Set(all.map(t => t.id));
+      for (const k of dateKeys.sort()) {
+        for (const t of (prev[k] || [])) {
+          if (t.carried) continue;                         // hidden source of a carried task
+          if (seen.has(t.id)) continue;
+          seen.add(t.id);
+          const { carried, carriedFrom, since, focus, focusAt, star, _srcKey, ...rest } = t;
+          all.push({ ...rest, bucket: rest.bucket || (focus ? "now" : "later") });
+        }
+      }
+      return { all };                                      // drop every date-keyed entry
+    });
+  }, []);
+
+  // On load, run the one-time legacy migrations and consolidate into the single list.
   useEffect(() => {
     if (!user || dataLoading) return;
-    const msToMidnight = () => {
-      const now = new Date();
-      return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) - now;
-    };
-    migrateStars();    // no-op once every task carries a `star` field
-    performRollover(); // safe on every mount — carriedFrom dedup prevents duplicates
-    let t = setTimeout(function tick() {
-      performRollover();
-      t = setTimeout(tick, msToMidnight());
-    }, msToMidnight());
-    return () => clearTimeout(t);
-  }, [user, dataLoading, performRollover, migrateStars]);
+    migrateStars();       // no-op once every task carries a `star` field
+    consolidateTasks();   // idempotent — does nothing once only the "all" key remains
+  }, [user, dataLoading, consolidateTasks, migrateStars]);
 
   // ── Online / offline detection ──
   useEffect(() => {
@@ -2685,7 +2698,7 @@ export default function App() {
           />
         )}
 
-        {view==="tasks"   && <TasksView dailyTasks={dailyTasks} todayKey={todayKey} addTask={addTask} toggleTask={toggleTask} editTask={editTask} deleteTask={deleteTask} setTaskBucket={setTaskBucket} deferTask={deferTask}/>}
+        {view==="tasks"   && <TasksView dailyTasks={dailyTasks} addTask={addTask} toggleTask={toggleTask} editTask={editTask} deleteTask={deleteTask} setTaskBucket={setTaskBucket}/>}
         {view==="week"    && <WeekView data={data} todayKey={todayKey} identities={liveIdentities} onToggleDay={toggleForDate}/>}
         {view==="streaks" && <StreaksView data={data} getStreak={getStreakForHabit} identities={liveIdentities}/>}
         {view==="budget"  && <BudgetView budget={budget} setBudget={setBudget}/>}
@@ -4774,20 +4787,20 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
 
 // ─── TASKS VIEW — the dedicated to-do screen (its own bottom-nav tab) ──────────
 // Today's tasks only: Big 3 + Carried over (rolled from earlier days) + Backlog.
-const TasksView = memo(function TasksView({ dailyTasks, todayKey, addTask, toggleTask, editTask, deleteTask, setTaskBucket, deferTask }) {
+const TASKS_KEY = "all";   // tasks are day-independent — one persistent list
+const TasksView = memo(function TasksView({ dailyTasks, addTask, toggleTask, editTask, deleteTask, setTaskBucket }) {
   return (
     <div style={S.content}>
       <div style={{ ...S.card, padding:"14px 14px" }}>
         <SimpleFocus
-          tasks={dailyTasks[todayKey] || []}
-          dateKey={todayKey}
+          tasks={dailyTasks[TASKS_KEY] || []}
+          dateKey={TASKS_KEY}
           editable={true}
           onAdd={addTask}
           onToggle={toggleTask}
           onEdit={editTask}
           onDelete={deleteTask}
           onSetBucket={setTaskBucket}
-          onDefer={deferTask}
         />
       </div>
     </div>
