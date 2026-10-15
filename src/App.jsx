@@ -1294,9 +1294,11 @@ export default function App() {
   useEffect(() => { if (["today","tasks","budget","manage"].includes(view)) { try { localStorage.setItem("atoms.view", view); } catch {} } }, [view]);
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
   const [justChecked,  setJustChecked]  = useState(null);
-  // Habit-card density — "compact" (action + ring, detail on tap) or "full". Per device.
-  const [cardDensity,  setCardDensity]  = useState(() => { try { return localStorage.getItem("atoms.cardDensity") === "compact" ? "compact" : "full"; } catch { return "full"; } });
-  const toggleDensity = () => setCardDensity(d => { const n = d === "compact" ? "full" : "compact"; try { localStorage.setItem("atoms.cardDensity", n); } catch {} return n; });
+  // Habit-card density — "compact" (action + ring, detail on tap), "full" (detail on
+  // tap per card), or "detailed" (every detail section always open). Per device.
+  const [cardDensity,  setCardDensity]  = useState(() => { try { const v = localStorage.getItem("atoms.cardDensity"); return (v === "compact" || v === "detailed") ? v : "full"; } catch { return "full"; } });
+  const DENSITY_CYCLE = { compact: "full", full: "detailed", detailed: "compact" };
+  const toggleDensity = () => setCardDensity(d => { const n = DENSITY_CYCLE[d] || "full"; try { localStorage.setItem("atoms.cardDensity", n); } catch {} return n; });
   const [syncing,      setSyncing]     = useState(false);
   // Debounce the "Saving…" indicator so fast saves (the common case) never flash it.
   const [savingVisible, setSavingVisible] = useState(false);
@@ -2702,14 +2704,19 @@ export default function App() {
                    : `${totalDone} vote${totalDone!==1?"s":""} · ${totalTotal-totalDone} to go`)}
             </div>
           </div>
-          {view === "today" && (
+          {view === "today" && (() => {
+            const label = cardDensity === "compact" ? "Compact" : cardDensity === "detailed" ? "Detailed" : "Full";
+            const icon  = cardDensity === "compact" ? "rows" : cardDensity === "detailed" ? "checklist" : "card";
+            const next  = cardDensity === "compact" ? "full" : cardDensity === "detailed" ? "compact" : "detailed";
+            return (
             <button type="button" onClick={toggleDensity}
-              aria-label={`Card view: ${cardDensity === "compact" ? "compact" : "full"}. Switch to ${cardDensity === "compact" ? "full" : "compact"}.`}
+              aria-label={`Card view: ${label}. Switch to ${next}.`}
               style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11, fontWeight:700, color:T.text2, background:T.surf2, border:`1px solid ${T.border}`, borderRadius:20, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>
-              <Ic name={cardDensity === "compact" ? "rows" : "card"} size={13} color={T.text2} />
-              {cardDensity === "compact" ? "Compact" : "Full"}
+              <Ic name={icon} size={13} color={T.text2} />
+              {label}
             </button>
-          )}
+            );
+          })()}
         </div>
        </div>
        {/* Fixed quote + day navigator — live in the sticky header so they stay
@@ -3880,11 +3887,16 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
   // Full view collapses the detail section (Craving/Response/Reward, milestone, week
   // strip) by default so the card is a fast check-in; tap "Show details" to expand.
   const [expanded, setExpanded] = useState(false);
-  // Two card versions, switched by the header toggle:
-  //  compact → only the action, ring, and a time · trigger line (fastest check-in)
-  //  full    → everything (identity, cue, time/place, Craving/Response/Reward)
+  // Three card versions, switched by the header toggle:
+  //  compact  → only the action, ring, and a time · trigger line (fastest check-in)
+  //  full     → identity, cue, time/place + a tappable "Show details" section
+  //  detailed → full, but every detail section expanded, no collapse
   const compact = density === "compact";
+  const detailed = density === "detailed";
   const showDetail = !compact;
+  // In detailed mode the Craving/Response/Reward + milestone + week panel is always
+  // open; otherwise it follows the per-card "Show details" toggle.
+  const effExpanded = expanded || detailed;
   // Quantity habits: a target amount (e.g. 8 glasses) counted up per day.
   const target = habit.target > 1 ? Math.round(habit.target) : 0;
   const isQty = target > 0;
@@ -4083,7 +4095,7 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
         )}
 
         {/* Momentum dots — glanceable week progress (collapsed view). */}
-        {showDetail && !checked && !missed && !expanded && (
+        {showDetail && !checked && !missed && !effExpanded && (
           <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:11, marginLeft: isQty ? 55 : 0 }}
             aria-label={`This week, ${weekDays.filter(d => d.st === "done").length} days kept${streak > 0 ? `, ${streak} day streak` : ""}`}>
             <div style={{ display:"flex", gap:5 }} aria-hidden="true">
@@ -4226,8 +4238,9 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
           );
         })()}
 
-        {/* Expand / collapse the detail section (Craving/Response/Reward + milestone + week). */}
-        {showDetail && !checked && !missed && (
+        {/* Expand / collapse the detail section (Craving/Response/Reward + milestone + week).
+            Hidden in detailed mode, where the section is always open. */}
+        {showDetail && !detailed && !checked && !missed && (
           <button type="button" onClick={() => setExpanded(v => !v)} aria-expanded={expanded}
             style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:5, width:"100%", marginTop:10, padding:"5px", background:"none", border:"none", color:T.muted, fontSize:11.5, fontWeight:700, fontFamily:"inherit", cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
             {expanded ? "Hide details" : "Show details"}
@@ -4238,7 +4251,7 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
       </div>
 
       {/* ── Coaching panel — Craving/Response/Reward + milestone + week (expanded only) ── */}
-      {!checked && !missed && showDetail && expanded && (() => {
+      {!checked && !missed && showDetail && effExpanded && (() => {
         const total = Math.max(voteTotal, votes);          // never show "53 of 50"
         const pct   = total > 0 ? Math.min(100, Math.round((votes / total) * 100)) : 0;
         // Only surface the two-minute starter when it actually differs from the action
