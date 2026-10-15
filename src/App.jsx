@@ -3257,7 +3257,7 @@ function SettingsGroup({ open, onToggle, emoji, color, title, sub, children }) {
 }
 
 const ManageView = memo(function ManageView({ identities, allData, onAddHabit, onEditHabit, onDeleteHabit, onAddIdentity, onEditIdentity, onDeleteIdentity, userName, userEmail, onSignOut, notifStatus, notifBusy, onEnableReminders, cueSettings, onChangeCueSettings, onOpenImport, onDeleteAll }) {
-  const [openGroup, setOpenGroup] = useState("notifications");
+  const [openGroup, setOpenGroup] = useState(null);
   const grpToggle = id => () => setOpenGroup(o => o === id ? null : id);
   return (
     <div style={S.content}>
@@ -3272,33 +3272,33 @@ const ManageView = memo(function ManageView({ identities, allData, onAddHabit, o
 
       {identities.map(identity=>(
         <div key={identity.id} style={S.card}>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-            <span style={{fontSize:24}} aria-hidden="true">{identity.icon}</span>
-            <div style={{flex:1}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+            <span style={{width:10,height:10,borderRadius:"50%",background:identity.color,flexShrink:0}} aria-hidden="true" />
+            <div style={{flex:1,minWidth:0}}>
               <div style={{...S.cardLabel,color:identity.color}}>{identity.label}</div>
               <div style={{fontSize:13,color:T.muted,marginTop:2,fontWeight:500}}>{identity.habits.length} habit{identity.habits.length!==1?"s":""}</div>
             </div>
             <button onClick={()=>onEditIdentity(identity)} style={S.crudBtn} aria-label={`Edit identity: ${identity.label}`}>
-              <span aria-hidden="true">✎</span>
+              <Ic name="pencil" size={16} color={T.muted} />
             </button>
-            <button onClick={()=>onDeleteIdentity(identity)} style={{...S.crudBtn,color:T.red}} aria-label={`Delete identity: ${identity.label}`}>
-              <span aria-hidden="true">🗑</span>
+            <button onClick={()=>onDeleteIdentity(identity)} style={S.crudBtn} aria-label={`Delete identity: ${identity.label}`}>
+              <Ic name="trash" size={16} color={T.muted} />
             </button>
           </div>
 
           {identity.habits.length>0 && (
-            <div style={{borderTop:`1px solid ${T.border}`,paddingTop:10,marginBottom:10}}>
-              {[...identity.habits].sort(byHabitTime).map(habit=>(
-                <div key={habit.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:`1px solid ${T.surf2}`}}>
-                  <div style={{flex:1}}>
+            <div style={{borderTop:`1px solid ${T.border}`,paddingTop:2}}>
+              {[...identity.habits].sort(byHabitTime).map((habit,hi)=>(
+                <div key={habit.id} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 0",borderTop:hi===0?"none":`1px solid ${T.surf2}`}}>
+                  <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:14,color:T.text,fontWeight:600}}>{habit.label}</div>
-                    {habit.trigger&&<div style={{fontSize:13,color:T.muted,marginTop:2}}><span aria-hidden="true">⚡</span> {habit.trigger}</div>}
+                    {habit.trigger&&<div style={{fontSize:13,color:T.muted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{capFirst(habit.trigger)}</div>}
                   </div>
                   <button onClick={()=>onEditHabit(identity.id,habit)} style={S.crudBtn} aria-label={`Edit habit: ${habit.label}`}>
-                    <span aria-hidden="true">✎</span>
+                    <Ic name="pencil" size={15} color={T.muted} />
                   </button>
-                  <button onClick={()=>onDeleteHabit(identity.id,habit)} style={{...S.crudBtn,color:T.red}} aria-label={`Delete habit: ${habit.label}`}>
-                    <span aria-hidden="true">🗑</span>
+                  <button onClick={()=>onDeleteHabit(identity.id,habit)} style={S.crudBtn} aria-label={`Delete habit: ${habit.label}`}>
+                    <Ic name="trash" size={15} color={T.muted} />
                   </button>
                 </div>
               ))}
@@ -3309,19 +3309,21 @@ const ManageView = memo(function ManageView({ identities, allData, onAddHabit, o
             <div style={{fontSize:13,color:T.muted,marginBottom:12,textAlign:"center",padding:"8px 0"}}>No habits yet — add one below</div>
           )}
 
-          <button onClick={()=>onAddHabit(identity.id)} style={{...S.addHabitBtn,borderColor:identity.color+"55"}}>
+          <button onClick={()=>onAddHabit(identity.id)} style={{...S.addHabitBtn,borderColor:identity.color+"44",marginTop:10}}>
             <span style={{fontSize:16,color:identity.color,fontWeight:700}} aria-hidden="true">+</span>
-            <span style={{fontSize:14,color:T.text2}}>Add habit to {shortLabel(identity.label)}</span>
+            <span style={{fontSize:14,color:T.text2}}>Add habit</span>
           </button>
         </div>
       ))}
 
       <button onClick={onAddIdentity} style={S.addIdentityBtn}>+ Add New Identity</button>
 
-      {/* ── Settings — grouped & collapsible so the page stays scannable ── */}
-      <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.08em", textTransform:"uppercase", color:T.muted, margin:"22px 2px 10px" }}>Settings</div>
+      {/* ── Settings — one collapsible entry so Manage stays about identities ── */}
+      <div style={{ height:12 }} />
 
-      <SettingsGroup open={openGroup==="appearance"} onToggle={grpToggle("appearance")} emoji="🎨" color="#7C5CFF" title="Appearance" sub="Theme — System, Light, Dark">
+      <SettingsGroup open={openGroup==="settings"} onToggle={grpToggle("settings")} emoji="⚙️" color={T.primary} title="Settings" sub="Appearance · notifications · data">
+
+        <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.muted, margin:"2px 2px 10px" }}>Appearance</div>
 
         {/* Appearance — Light / Dark / System. Writes localStorage("atoms.theme")
             and reloads, since the theme is chosen once at module load. */}
@@ -3346,9 +3348,7 @@ const ManageView = memo(function ManageView({ identities, allData, onAddHabit, o
           );
         })()}
 
-      </SettingsGroup>
-
-      <SettingsGroup open={openGroup==="notifications"} onToggle={grpToggle("notifications")} emoji="🔔" color="#2E9BFF" title="Notifications" sub="Reminders · bedtime wind-down">
+        <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.muted, margin:"4px 2px 10px" }}>Notifications</div>
 
         {/* Habit reminders — always shown. On devices where web push isn't available
             in a browser tab (notably iPhone), guide the user to install the app first. */}
@@ -3409,13 +3409,7 @@ const ManageView = memo(function ManageView({ identities, allData, onAddHabit, o
           );
         })()}
 
-      </SettingsGroup>
-
-      <SettingsGroup open={openGroup==="reports"} onToggle={grpToggle("reports")} emoji="📊" color="#BA7517" title="Reports" sub="Monthly integrity summary">
-        <MonthReport bare identities={identities} allData={allData} />
-      </SettingsGroup>
-
-      <SettingsGroup open={openGroup==="data"} onToggle={grpToggle("data")} emoji="🗄️" color="#888780" title="Data &amp; account" sub="Import · export · sign out">
+        <div style={{ fontSize:11, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:T.muted, margin:"4px 2px 10px" }}>Data &amp; account</div>
 
         {/* Import habits from JSON — bulk-add habits from a file or pasted blob. */}
         <div style={{ display:"flex", alignItems:"center", gap:10, paddingBottom:12, marginBottom:12, borderBottom:`1px solid ${T.surf2}` }}>
