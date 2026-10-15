@@ -4707,8 +4707,6 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
   const live = tasks.filter(t => !t.carried);
   const open = live.filter(t => !t.done);
   const done = live.filter(t => t.done);
-  const pct  = live.length ? done.length / live.length : 0;
-  const RC   = 2 * Math.PI * 18;          // ring circumference (r = 18)
   const add = () => { const t = val.trim(); if (!t) return; onAdd(dateKey, t); setVal(""); };
   const saveEdit = () => { const t = editVal.trim(); if (t) onEdit(dateKey, editingId, t); setEditingId(null); };
 
@@ -4763,22 +4761,10 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
 
   return (
     <div>
-      {/* Header — progress ring + count */}
-      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:4 }}>
-        <div style={{ position:"relative", width:44, height:44, flexShrink:0 }}>
-          <svg width={44} height={44} viewBox="0 0 44 44" aria-hidden="true">
-            <circle cx={22} cy={22} r={18} fill="none" stroke={T.surf2} strokeWidth={4} />
-            {done.length > 0 && (
-              <circle cx={22} cy={22} r={18} fill="none" stroke={T.primary} strokeWidth={4}
-                strokeDasharray={`${pct * RC} ${RC}`} strokeLinecap="round" transform="rotate(-90 22 22)" style={{ transition:"stroke-dasharray 0.4s ease" }} />
-            )}
-          </svg>
-          <span aria-label={`${done.length} of ${live.length} tasks done, ${Math.round(pct*100)} percent`} style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:800, color:T.primary, fontVariantNumeric:"tabular-nums" }}>{Math.round(pct*100)}%</span>
-        </div>
-        <div style={{ minWidth:0 }}>
-          <div style={{ fontSize:15, fontWeight:800, color:T.text, letterSpacing:"-0.01em" }}>Get it done</div>
-          <div style={{ fontSize:13, color:T.text2, marginTop:1 }}>Do now · later · delegate · leave it</div>
-        </div>
+      {/* Header — the header ring already shows task progress, so no ring here. */}
+      <div style={{ marginBottom:4 }}>
+        <div style={{ fontSize:15, fontWeight:800, color:T.text, letterSpacing:"-0.01em" }}>Get it done</div>
+        <div style={{ fontSize:13, color:T.text2, marginTop:1 }}>Do now · later · delegate · leave it</div>
       </div>
 
       {/* Add a task */}
