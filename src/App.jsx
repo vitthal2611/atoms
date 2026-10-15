@@ -1393,6 +1393,16 @@ export default function App() {
     const total = scheduledToday.length;
     return { totalDone: done, totalTotal: total, pct: total > 0 ? Math.round((done/total)*100) : 0 };
   }, [scheduledToday, selectedData]);
+  // The Tasks tab drives the header ring from the task list, not habit votes —
+  // "vote" is habit language and doesn't belong on the to-do dashboard.
+  const taskStats = useMemo(() => {
+    const list = (dailyTasks["all"] || []).filter(t => !t.carried);
+    return { done: list.filter(t => t.done).length, total: list.length };
+  }, [dailyTasks]);
+  const isTasksView = view === "tasks";
+  const ringDone  = isTasksView ? taskStats.done  : totalDone;
+  const ringTotal = isTasksView ? taskStats.total : totalTotal;
+  const ringPct   = ringTotal > 0 ? Math.round((ringDone / ringTotal) * 100) : 0;
 
   // ── Debounced Firestore saves ──
   const idTimer   = useRef(null);
@@ -2610,29 +2620,35 @@ export default function App() {
               const ringTitleId = "ring-title-" + view;
               return (
                 <svg width="68" height="68" viewBox="0 0 68 68" role="img" aria-labelledby={ringTitleId}
-                  className={pct===100 ? "pop" : ""}>
+                  className={ringPct===100 ? "pop" : ""}>
                   <title id={ringTitleId}>
-                    {totalTotal === 0
-                      ? "No habits scheduled"
-                      : `${pct}% complete ${selectedDate === todayKey ? "today" : "on " + formatNavDate(selectedDate)}`}
+                    {ringTotal === 0
+                      ? (isTasksView ? "No tasks yet" : "No habits scheduled")
+                      : isTasksView
+                        ? `${ringPct}% of tasks done`
+                        : `${ringPct}% complete ${selectedDate === todayKey ? "today" : "on " + formatNavDate(selectedDate)}`}
                   </title>
                   <circle cx="34" cy="34" r="28" fill="none" stroke={T.border} strokeWidth="5"/>
                   <circle cx="34" cy="34" r="28" fill="none"
-                    stroke={pct===100?T.gold:T.primary} strokeWidth="5"
-                    strokeDasharray={`${(pct/100)*176} 176`} strokeLinecap="round"
+                    stroke={ringPct===100?T.gold:T.primary} strokeWidth="5"
+                    strokeDasharray={`${(ringPct/100)*176} 176`} strokeLinecap="round"
                     transform="rotate(-90 34 34)" style={{transition:"stroke-dasharray 0.6s ease"}}/>
-                  {/* Lead with votes cast, not a percentage — a partial day is progress, not a grade. */}
-                  <text x="34" y="39" textAnchor="middle" fill={pct===100?T.gold:T.text} fontSize="20" fontWeight="800" fontFamily={FONT_DISPLAY} style={{fontVariantNumeric:"tabular-nums"}} aria-hidden="true">
-                    {totalTotal === 0 ? "—" : totalDone}
+                  {/* Tasks tab shows the % done; Today leads with votes cast (progress, not a grade). */}
+                  <text x="34" y="39" textAnchor="middle" fill={ringPct===100?T.gold:T.text} fontSize={isTasksView?"16":"20"} fontWeight="800" fontFamily={FONT_DISPLAY} style={{fontVariantNumeric:"tabular-nums"}} aria-hidden="true">
+                    {ringTotal === 0 ? "—" : isTasksView ? `${ringPct}%` : totalDone}
                   </text>
                 </svg>
               );
             })()}
             <div style={{...S.ringLabel, fontVariantNumeric:"tabular-nums"}} aria-hidden="true">
-              {totalTotal === 0 ? "none today"
-                : totalDone === 0 ? `0 of ${totalTotal}`
-                : totalDone >= totalTotal ? `all ${totalTotal} done 🎉`
-                : `${totalDone} vote${totalDone!==1?"s":""} · ${totalTotal-totalDone} to go`}
+              {isTasksView
+                ? (ringTotal === 0 ? "no tasks"
+                   : ringDone >= ringTotal ? `all ${ringTotal} done 🎉`
+                   : `${ringDone} of ${ringTotal} done · ${ringTotal-ringDone} to go`)
+                : (totalTotal === 0 ? "none today"
+                   : totalDone === 0 ? `0 of ${totalTotal}`
+                   : totalDone >= totalTotal ? `all ${totalTotal} done 🎉`
+                   : `${totalDone} vote${totalDone!==1?"s":""} · ${totalTotal-totalDone} to go`)}
             </div>
           </div>
           {view === "today" && (
@@ -3355,12 +3371,6 @@ const ManageView = memo(function ManageView({ identities, allData, onAddHabit, o
 
       </SettingsGroup>
 
-      <SettingsGroup open={openGroup==="community"} onToggle={grpToggle("community")} emoji="👥" color="#1D9E75" title="Coaching &amp; community" sub="Tribe · scorecard · cue ideas">
-        <TribeSettings bare enabled={!!(cueSettings && cueSettings.tribe)} onToggle={() => onChangeCueSettings && onChangeCueSettings(prev => ({ ...(prev || {}), tribe: !(prev && prev.tribe) }))} identities={identities} />
-        <div style={{ borderTop:`1px solid ${T.surf2}`, marginTop:12, paddingTop:12 }}><ScorecardSettings bare settings={cueSettings} onChange={onChangeCueSettings} /></div>
-        <div style={{ borderTop:`1px solid ${T.surf2}`, marginTop:12, paddingTop:12 }}><CueSettings bare settings={cueSettings} onChange={onChangeCueSettings} /></div>
-      </SettingsGroup>
-
       <SettingsGroup open={openGroup==="reports"} onToggle={grpToggle("reports")} emoji="📊" color="#BA7517" title="Reports" sub="Monthly integrity summary">
         <MonthReport bare identities={identities} allData={allData} />
       </SettingsGroup>
@@ -3921,14 +3931,14 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
 
   return (
     <div className="habit-card" style={{
-      background: checked ? C + "1f" : missed ? T.red + "10" : "transparent",
-      borderTop: first ? "none" : `1px solid ${C}22`,
+      background: checked ? C + "12" : missed ? T.red + "0c" : "transparent",
+      borderTop: first ? "none" : `1px solid ${C}18`,
       transition: "background 0.2s ease",
     }}>
 
       {/* ── Identity header — shown in full view; in compact it's one tap away. ── */}
       {showDetail && (
-      <div style={{ padding:"10px 14px", background: C + "14", borderBottom:`1px solid ${C}2a` }}>
+      <div style={{ padding:"10px 14px", background: C + "0a", borderBottom:`1px solid ${C}1c` }}>
         <div style={{ display:"flex", alignItems:"center", gap:7 }}>
           <span style={{ flexShrink:0, fontSize:11, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C, fontFamily:FONT_DISPLAY }}>{breaking ? "Breaking" : "I am"}</span>
           <span style={{ flex:1, minWidth:0, fontSize:14, fontWeight:800, color:Cd, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontFamily:FONT_DISPLAY }}>{idDisplay}</span>
@@ -4729,7 +4739,7 @@ function SimpleFocus({ tasks, dateKey, editable, onAdd, onToggle, onEdit, onDele
                 strokeDasharray={`${pct * RC} ${RC}`} strokeLinecap="round" transform="rotate(-90 22 22)" style={{ transition:"stroke-dasharray 0.4s ease" }} />
             )}
           </svg>
-          <span aria-label={`${done.length} of ${live.length} tasks done`} style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:800, color:T.primary, fontVariantNumeric:"tabular-nums" }}>{done.length}/{live.length}</span>
+          <span aria-label={`${done.length} of ${live.length} tasks done, ${Math.round(pct*100)} percent`} style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:800, color:T.primary, fontVariantNumeric:"tabular-nums" }}>{Math.round(pct*100)}%</span>
         </div>
         <div style={{ minWidth:0 }}>
           <div style={{ fontSize:15, fontWeight:800, color:T.text, letterSpacing:"-0.01em" }}>Get it done</div>
