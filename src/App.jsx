@@ -1076,28 +1076,7 @@ function HabitForm({ initial={}, identities, cueSettings={ custom: [], dismissed
       )}
       <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>Pick a common cue, or “Type my own”.</div>
 
-      {/* Cue icon — auto-picked from the trigger words; tap any to override */}
-      <label style={S.fieldLabel}>Cue icon</label>
-      <div style={{ display:"flex", flexWrap:"wrap", gap:7 }} role="group" aria-label="Choose the cue icon">
-        <button type="button" onClick={()=>set("icon","")} aria-pressed={!form.icon}
-          title="Match the icon to your cue words automatically"
-          style={{ display:"inline-flex", alignItems:"center", gap:5, height:38, padding:"0 11px", borderRadius:10, cursor:"pointer",
-            border:`2px solid ${!form.icon ? T.gold : T.border}`, background:!form.icon ? T.surf2 : "transparent",
-            fontSize:13, fontWeight:800, color:T.text, WebkitTapHighlightColor:"transparent" }}>
-          <span aria-hidden="true" style={{ fontSize:16 }}>{cueEmoji(form.trigger) || "⚡"}</span> Auto
-        </button>
-        {CUE_ICONS.map(ic=>(
-          <button key={ic} type="button" onClick={()=>set("icon",ic)} aria-pressed={form.icon===ic} aria-label={`${ic} cue icon`}
-            style={{ width:38, height:38, borderRadius:10, cursor:"pointer", fontSize:18,
-              display:"flex", alignItems:"center", justifyContent:"center", WebkitTapHighlightColor:"transparent",
-              border:`2px solid ${form.icon===ic ? T.gold : T.border}`, background:form.icon===ic ? T.surf2 : "transparent" }}>
-            <span aria-hidden="true">{ic}</span>
-          </button>
-        ))}
-      </div>
-      <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>{form.icon ? "Custom icon set." : "Auto-matched from your cue — tap an icon to override."}</div>
-
-      <div style={{ display:"flex", gap:10, marginTop:10 }}>
+      <div style={{ display:"flex", gap:10, marginTop:14 }}>
         <div style={{ flex:1, minWidth:0 }}>
           <label htmlFor={ids.time} style={S.fieldLabel}>Time</label>
           <input id={ids.time} style={S.input} type="time" value={form.time} onChange={e=>set("time",e.target.value)} />
