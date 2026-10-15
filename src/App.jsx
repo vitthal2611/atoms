@@ -1,10 +1,14 @@
-import { useState, useEffect, useCallback, useRef, useMemo, useId, memo, Fragment } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, useId, memo, Fragment, Profiler } from "react";
 import { createPortal } from "react-dom";
 import BudgetView, { seedBudget } from "./Budget.jsx";
 import { initializeApp, getApps } from "firebase/app";
 import { getFirestore, initializeFirestore, doc, onSnapshot, setDoc, collection, query, where, getCountFromServer, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "firebase/auth";
 import { getMessaging, getToken, isSupported } from "firebase/messaging";
+
+// Perf HUD — add ?perf=1 to the URL to show an on-screen render-time meter.
+// Off by default (zero cost in normal use).
+const PERF = (() => { try { return new URLSearchParams(location.search).get("perf") === "1"; } catch { return false; } })();
 
 // ─── FIREBASE ────────────────────────────────────────────────────────────────
 // Config is read from .env (VITE_ prefix exposes vars to the browser bundle).
@@ -1425,6 +1429,20 @@ export default function App() {
   // ── Streak cache — avoids 400-iteration loop per habit on every render ──
   const streakCacheRef      = useRef({});
   const streakDataRef       = useRef(null);   // tracks the data ref the cache was built against
+  // ── Perf HUD (only when ?perf=1): record each commit's render time, refresh
+  // the overlay on an interval so measuring never triggers more renders. ──
+  const perfRef             = useRef({ last: 0, max: 0, n: 0, sum: 0 });
+  const [, forcePerf]       = useState(0);
+  const onRenderProfiler    = useCallback((id, phase, actualDuration) => {
+    if (!PERF) return;
+    const p = perfRef.current; p.last = actualDuration; p.sum += actualDuration; p.n++;
+    if (actualDuration > p.max) p.max = actualDuration;
+  }, []);
+  useEffect(() => {
+    if (!PERF) return;
+    const t = setInterval(() => forcePerf(x => x + 1), 500);
+    return () => clearInterval(t);
+  }, []);
   // ── Timers stored in refs so they can be cleared on re-fire or unmount ──
   const justCheckedTimerRef = useRef(null);
   const milestoneTimerRef   = useRef(null);
@@ -2522,6 +2540,15 @@ export default function App() {
     <div style={S.root}>
       <style>{css}</style>
 
+      {/* ── Perf HUD (?perf=1) — last/avg/max content-render time, in ms. ── */}
+      {PERF && (() => { const p = perfRef.current; return (
+        <div style={{ position:"fixed", bottom:72, left:8, zIndex:9999, pointerEvents:"none",
+          background:"rgba(0,0,0,0.82)", color:"#49f08a", font:"600 11px ui-monospace,Menlo,monospace",
+          padding:"5px 9px", borderRadius:7, lineHeight:1.45, whiteSpace:"pre" }}>
+          {`render ${p.last.toFixed(1)}ms\nmax ${p.max.toFixed(1)} · avg ${(p.n?p.sum/p.n:0).toFixed(1)} · n${p.n}`}
+        </div>
+      ); })()}
+
       {/* ── Save Error Banner ── */}
       {saveError && (
         <div role="alert" style={{
@@ -2706,6 +2733,7 @@ export default function App() {
 
       {/* ── Scrollable Content ── */}
       <main style={S.scrollArea} ref={scrollRef}>
+        <Profiler id="content" onRender={onRenderProfiler}>
         {view==="today" && (
           <TodayView
             identities={liveIdentities}
@@ -2772,6 +2800,7 @@ export default function App() {
             onDeleteAll={()=>setModal("confirmDeleteAll")}
           />
         )}
+        </Profiler>
       </main>
 
       {/* ── Streak-milestone toast — the rare, earned celebration ── */}
