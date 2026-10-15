@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, useId, memo, Fragmen
 import { createPortal } from "react-dom";
 import BudgetView, { seedBudget } from "./Budget.jsx";
 import { initializeApp, getApps } from "firebase/app";
-import { getFirestore, initializeFirestore, doc, onSnapshot, setDoc, collection, query, where, getCountFromServer, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
+import { getFirestore, initializeFirestore, doc, onSnapshot, setDoc, updateDoc, FieldPath, deleteField, collection, query, where, getCountFromServer, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "firebase/auth";
 import { getMessaging, getToken, isSupported } from "firebase/messaging";
 
@@ -1451,6 +1451,10 @@ export default function App() {
   // (keeps `toggle` stable so memo'd rows don't re-render on every check-in).
   const dataRef             = useRef({});
   dataRef.current           = data;
+  // The check-in data we last persisted — lets the saver write ONLY the day(s)
+  // that changed (a few hundred bytes) instead of re-serialising the whole
+  // history on every tap. Tracks server truth via the live-sync apply below.
+  const lastSavedCiRef      = useRef(null);
   const dtTimer             = useRef(null);
   const isFirstDt           = useRef(true);
   const hnTimer             = useRef(null);
@@ -1522,7 +1526,7 @@ export default function App() {
         // what we already hold (our own just-saved write echoing back) — this avoids a
         // re-render storm on every save, so interactions stay smooth.
         sub(identitiesRef(u.uid), "id", snap => { if (!snap.exists()) return; const next = snap.data().data;          if (sameJSON(latestRef.current.identities, next)) return; isFirstId.current = true; setIdentities(next); }),
-        sub(checkInsRef(u.uid),   "ci", snap => { if (!snap.exists()) return; const next = prune(snap.data().data);   if (sameJSON(latestRef.current.data, next)) return;       isFirstCi.current = true; setData(next); }),
+        sub(checkInsRef(u.uid),   "ci", snap => { if (!snap.exists()) return; const next = prune(snap.data().data);   lastSavedCiRef.current = next; if (sameJSON(latestRef.current.data, next)) return; isFirstCi.current = true; setData(next); }),
         sub(dailyTasksRef(u.uid), "dt", snap => { if (!snap.exists()) return; const next = prune(snap.data().data);   if (sameJSON(latestRef.current.dailyTasks, next)) return;  isFirstDt.current = true; setDailyTasks(next); }),
         sub(habitNotesRef(u.uid), "hn", snap => { if (!snap.exists()) return; const next = prune(snap.data().data);   if (sameJSON(latestRef.current.habitNotes, next)) return;  isFirstHn.current = true; setHabitNotes(next); }),
         sub(settingsRef(u.uid),   "st", snap => {
@@ -1544,6 +1548,42 @@ export default function App() {
       docUnsubsRef.current.forEach(fn => { try { fn(); } catch {} });
       docUnsubsRef.current = [];
     };
+  }, []);
+
+  // Persist check-ins by writing ONLY the day(s) that changed since the last
+  // save — a nested field-path update per day — instead of re-serialising and
+  // re-uploading the whole history on every tap. Writing one day is a few
+  // hundred bytes; the old whole-doc write grew with every day of history and
+  // was the "Saving…" stutter. Per-day writes are also safer for multi-device:
+  // a change to today can't clobber another device's edit to a different day.
+  // Falls back to a whole-doc write if the doc doesn't exist yet, or to be safe
+  // when too many days changed at once (e.g. an import or prune).
+  const saveCheckIns = useCallback(async (uid, cur) => {
+    const prev = lastSavedCiRef.current;
+    const ref = checkInsRef(uid);
+    if (!prev) {                                   // no baseline yet → write it all once
+      await setDoc(ref, { data: cur });
+      lastSavedCiRef.current = cur;
+      return;
+    }
+    const keys = new Set([...Object.keys(prev), ...Object.keys(cur)]);
+    const changed = [];
+    for (const k of keys) if (prev[k] !== cur[k]) changed.push(k);   // ref compare — cheap
+    if (changed.length === 0) { lastSavedCiRef.current = cur; return; }
+    if (changed.length > 40) {                     // bulk change → one whole-doc write
+      await setDoc(ref, { data: cur });
+      lastSavedCiRef.current = cur;
+      return;
+    }
+    const args = [];
+    for (const k of changed) args.push(new FieldPath("data", k), cur[k] === undefined ? deleteField() : cur[k]);
+    try {
+      await updateDoc(ref, ...args);
+    } catch (err) {
+      if (err && err.code === "not-found") await setDoc(ref, { data: cur });   // first write
+      else throw err;
+    }
+    lastSavedCiRef.current = cur;
   }, []);
 
   useEffect(() => {
@@ -1569,7 +1609,7 @@ export default function App() {
     ciTimer.current = setTimeout(() => {
       setSyncing(true);
       setSaveError(false);
-      setDoc(checkInsRef(user.uid), { data })
+      saveCheckIns(user.uid, data)
         .then(() => { ciDirty.current = false; })
         .catch(err => { console.error("Check-in save failed:", err); setSaveError(true); })
         .finally(() => setSyncing(false));
@@ -1803,20 +1843,7 @@ export default function App() {
     // nearly every check-in for chained routines; the in-card banner remains.)
   }, [selectedDate]);
 
-  // ── Streak-milestone toast — fires only when a check-in lands exactly on a
-  // milestone day (3/7/14/21/30/66/100), never on an ordinary check-in. ──
-  useEffect(() => {
-    if (!justChecked || selectedDate !== todayKey) return;
-    const h = allHabits.find(x => x.id === justChecked);
-    if (!h || h.kind === "bad") return;
-    if (dataRef.current[selectedDate]?.[h.id] !== true) return;   // a check, not an uncheck
-    const s = getStreakForHabit(h.id, h.frequency);
-    const hit = MILESTONES.find(m => m.days === s);
-    if (!hit) return;
-    clearTimeout(milestoneTimerRef.current);
-    setMilestone({ label: h.label, m: hit });
-    milestoneTimerRef.current = setTimeout(() => setMilestone(null), 4200);
-  }, [justChecked, selectedDate, todayKey, allHabits, getStreakForHabit]);
+  // ── Streak-milestone toast — disabled per request (no milestone banner). ──
 
   // ── Quantity habits — bump the day's count toward the target. Storing `true`
   // once the target is reached keeps every done-check (streak/votes/%/calendar)
@@ -2802,17 +2829,6 @@ export default function App() {
         )}
         </Profiler>
       </main>
-
-      {/* ── Streak-milestone toast — the rare, earned celebration ── */}
-      {milestone && (
-        <div role="status" aria-live="polite" className="toast-in" onClick={()=>setMilestone(null)} style={{ ...S.toast, cursor:"pointer" }}>
-          <span aria-hidden="true" style={{ fontSize:26, animation:"pop 0.5s ease" }}>{milestone.m.emoji}</span>
-          <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontWeight:800, fontSize:15, color:T.text }}>{milestone.m.label} unlocked!</div>
-            <div style={{ fontSize:13, color:T.text2, marginTop:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{milestone.m.days}-day streak · {milestone.label}</div>
-          </div>
-        </div>
-      )}
 
       {/* ── Undo Delete Toast ── */}
       {undoDelete && (
