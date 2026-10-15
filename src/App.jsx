@@ -1122,7 +1122,7 @@ function HabitForm({ initial={}, identities, cueSettings={ custom: [], dismissed
 
       {/* Law 3 · easy (build) / difficult (break) — the response, incl. the 2-minute version */}
       <div style={lawHead}><span aria-hidden="true" style={lawNum("#0F6E56")}>3</span><span style={lawTxt("#0F6E56")}>{breaking ? "Make it difficult · Response *" : "Make it easy · Response *"}</span></div>
-      <div style={lawHint}>{breaking ? "Add friction so it’s harder than giving in." : "Shrink it to a two-minute start, and prep your environment."}</div>
+      <div style={lawHint}>{breaking ? "Add friction so it’s harder than giving in." : "Shrink it to a two-minute start."}</div>
       {breaking ? (
         <div style={{ marginTop:10, background:"#FAECE7", border:"1px solid #F5C4B3", borderRadius:10, padding:"10px 12px" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
@@ -1146,36 +1146,13 @@ function HabitForm({ initial={}, identities, cueSettings={ custom: [], dismissed
           <div style={{ fontSize:13, color:"#0F6E56", fontStyle:"italic", marginTop:6, lineHeight:1.45 }}>Your no-excuses minimum. On hard days, only this counts — and it still keeps the streak.</div>
         </div>
       )}
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginTop:10 }}>
-        <label htmlFor={ids.easy} style={S.fieldLabel}>{breaking ? "Add friction" : "Prep your environment"}</label>
-        {suggestBtn("easy")}
-      </div>
-      <input id={ids.easy} aria-label={breaking ? "Make it difficult — add friction" : "Make it easy — set up the environment"} style={{ ...S.input, marginTop:0 }} value={form.easy} onChange={e=>set("easy",e.target.value)} placeholder={breaking ? "e.g. Unplug the TV, hide the remote" : "Prep tonight… e.g. shoes by door"} maxLength={140} />
 
       {/* Law 4 · satisfying (build) / unsatisfying — accountability (break) */}
       <div style={lawHead}><span aria-hidden="true" style={lawNum("#854F0B")}>4</span><span style={lawTxt("#854F0B")}>{breaking ? "Make it unsatisfying · Reward *" : "Make it satisfying · Reward *"}</span><span style={{ marginLeft:"auto" }}>{suggestBtn("satisfying")}</span></div>
       <div style={lawHint}>{breaking ? "Attach an immediate cost to slipping so it stings." : "Give yourself an immediate reward so the habit sticks."}</div>
       <input id={ids.satisfying} aria-label={breaking ? "Accountability or a cost for slipping" : "Immediate reward after the habit"} style={{ ...S.input, marginTop:10 }} value={form.satisfying} onChange={e=>set("satisfying",e.target.value)} placeholder={breaking ? "A cost for slipping… e.g. tell a friend" : "Reward right after… e.g. a square of chocolate"} maxLength={140} />
 
-      {/* Commitment device — a self-set stake, shown when you slip (make skipping unsatisfying). */}
-      {!breaking && (
-        <>
-          <label htmlFor={ids.stakes} style={{ ...S.fieldLabel, marginTop:16 }}>If I skip <span style={{ fontWeight:600, color:T.muted }}>(optional stake)</span></label>
-          <input id={ids.stakes} style={{ ...S.input, marginTop:0 }} value={form.stakes} onChange={e=>set("stakes",e.target.value)} placeholder="e.g. I owe ₹200 to charity · I tell Sarah" maxLength={100} />
-          <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>A stake you set for yourself — shown the moment you miss, to make skipping cost something.</div>
-
-          {/* Accountability partner — a witness. One-tap email (from your own mail
-              app) when you slip or hit a milestone; nothing is sent automatically. */}
-          <label htmlFor={ids.partnerName} style={{ ...S.fieldLabel, marginTop:16 }}>Accountability partner <span style={{ fontWeight:600, color:T.muted }}>(optional)</span></label>
-          <div style={{ display:"flex", gap:8 }}>
-            <input id={ids.partnerName} style={{ ...S.input, marginTop:0, width:120, flexShrink:0 }} value={form.partnerName} onChange={e=>set("partnerName", e.target.value)} placeholder="Name" maxLength={40} aria-label="Partner name" />
-            <input id={ids.partnerEmail} style={{ ...S.input, marginTop:0, flex:1, minWidth:0 }} type="email" inputMode="email" value={form.partnerEmail} onChange={e=>set("partnerEmail", e.target.value.trim())} placeholder="their@email.com" maxLength={120} aria-label="Partner email" />
-          </div>
-          <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>Someone watching makes it stick. You get a one-tap email to them when you slip or hit a milestone — your mail app opens; nothing sends on its own.</div>
-        </>
-      )}
-
-      <div style={{ display:"flex", alignItems:"center", gap:9, marginTop:12, background:T.bg, borderRadius:10, padding:"9px 11px" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:9, marginTop:16, background:T.bg, borderRadius:10, padding:"9px 11px" }}>
         <Ic name="check" size={15} color="#0F6E56" />
         <span style={{ flex:1, fontSize:13, color:T.text2, lineHeight:1.4 }}><span style={{ fontWeight:800, color:T.text }}>Never miss twice</span> — {breaking ? "one slip is a mistake; two starts the habit again." : "miss once and we nudge you the next day."}</span>
       </div>
@@ -4308,26 +4285,6 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
               </div>
             ))}
           </div>
-
-          {/* Milestone bar — streak progress toward the next reward (gold). */}
-          {(() => {
-            const earnedM = getMilestone(streak), nextM = getNextMilestone(streak);
-            if (!nextM) return null;
-            const prevD = earnedM ? earnedM.days : 0;
-            const fracM = Math.max(0, Math.min(1, (streak - prevD) / (nextM.days - prevD)));
-            const remainM = nextM.days - streak;
-            return (
-              <div style={{ marginTop:13, background:T.surf2, borderRadius:11, padding:"9px 11px" }}>
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", fontSize:11, fontWeight:800, marginBottom:6 }}>
-                  <span style={{ color:"#B07B1E" }}><span aria-hidden="true">{nextM.emoji}</span> {nextM.label}</span>
-                  <span style={{ color:T.muted, whiteSpace:"nowrap" }}>{remainM} day{remainM === 1 ? "" : "s"} to go</span>
-                </div>
-                <div style={{ height:5, background:"#EBE0C6", borderRadius:20, overflow:"hidden" }}>
-                  <div style={{ width:`${Math.round(fracM * 100)}%`, height:"100%", background:"#F59E0B", borderRadius:20 }} />
-                </div>
-              </div>
-            );
-          })()}
 
           {/* Weekly consistency strip — this calendar week, Mon→Sun. */}
           {(() => {
