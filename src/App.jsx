@@ -1736,7 +1736,33 @@ export default function App() {
   // changes, so a just-made check is reflected in the SAME render — not one
   // render later. (The old post-commit useEffect left the streak stale until
   // the next re-render, e.g. when checking a 2nd habit on the same day.)
-  if (streakDataRef.current !== data) { streakDataRef.current = data; streakCacheRef.current = {}; }
+  // Only drop the cache for habits whose day-values actually changed — a single
+  // check-in used to wipe EVERY habit's cached streak, forcing a ~400-day
+  // recompute for all ~20 cards on each tap (the check-in lag). Diffing the
+  // previous vs. current data touches only the changed day(s).
+  if (streakDataRef.current !== data) {
+    const prev = streakDataRef.current;
+    streakDataRef.current = data;
+    if (!prev) {
+      streakCacheRef.current = {};
+    } else {
+      const changed = new Set();
+      const keys = new Set([...Object.keys(prev), ...Object.keys(data)]);
+      for (const k of keys) {
+        const a = prev[k], b = data[k];
+        if (a === b) continue;                 // same day object → nothing changed
+        const ao = a || {}, bo = b || {};
+        for (const id in ao) if (ao[id] !== bo[id]) changed.add(id);
+        for (const id in bo) if (ao[id] !== bo[id]) changed.add(id);
+      }
+      if (changed.size) {
+        for (const ck in streakCacheRef.current) {
+          const id = ck.slice(0, ck.indexOf("|"));
+          if (changed.has(id)) delete streakCacheRef.current[ck];
+        }
+      }
+    }
+  }
 
   // ── Toggle — must be before early returns ──
   const toggle = useCallback((habitId, frequency, identity) => {
@@ -5335,6 +5361,40 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
       ))
     ), [identities]);
 
+  // ── Per-card stats, computed once (not per card) so a check-in stays snappy. ──
+  // id → habit, for the single-pass vote tally below.
+  const habitById = useMemo(() => {
+    const m = new Map(); allHabits.forEach(h => m.set(h.id, h)); return m;
+  }, [allHabits]);
+  // Vote COUNT (numerator): one pass over history instead of a full scan per card.
+  // Changes on every check-in, so it tracks allData — but it's O(days) now, not
+  // O(days × habits).
+  const votesByHabit = useMemo(() => {
+    const m = {};
+    for (const k in allData) {
+      const day = allData[k]; if (!day) continue;
+      for (const id in day) {
+        if (day[id] !== true) continue;
+        const h = habitById.get(id);
+        if (h && isScheduledOn(h.frequency, k)) m[id] = (m[id] || 0) + 1;
+      }
+    }
+    return m;
+  }, [allData, habitById]);
+  // Vote TOTAL (denominator) = scheduled opportunities since the habit started.
+  // This depends only on each habit's start date, frequency and today — NOT on
+  // today's check-ins — so it is stable across check-ins. Memoising it on
+  // [identities, todayKey] keeps the ~400-day scan per habit from re-running on
+  // every single tap, which was the main source of check-in lag.
+  const voteTotalByHabit = useMemo(() => {
+    const m = {};
+    for (const { habit } of enrichedHabits) {
+      m[habit.id] = scheduledDaysSince(habit.frequency, habitStartKey(habit, allData), todayKey);
+    }
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enrichedHabits, todayKey]);
+
   const [scheduledHabits, notTodayHabits] = useMemo(() => {
     // A habit only exists from its start date on — never show it on earlier days.
     const existing = enrichedHabits.filter(({habit}) => {
@@ -5506,8 +5566,8 @@ const TodayView = memo(function TodayView({ identities, allHabits, todayData, al
                       return { status: v === true ? "done" : v === "miss" ? "miss" : "none", letter: "SMTWTFS"[d.getDay()], today: k === todayKey, pre, off };
                     });
                   })()}
-                  votes={Object.entries(allData).reduce((n, [k, day]) => n + (day && day[habit.id] === true && isScheduledOn(habit.frequency, k) ? 1 : 0), 0)}
-                  voteTotal={scheduledDaysSince(habit.frequency, habitStartKey(habit, allData), todayKey)}
+                  votes={votesByHabit[habit.id] || 0}
+                  voteTotal={voteTotalByHabit[habit.id] || 0}
                   note={(habitNotes[selectedDate] || {})[habit.id] || ""}
                   allData={allData}
                   habitNotes={habitNotes}
