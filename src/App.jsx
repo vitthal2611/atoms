@@ -880,9 +880,6 @@ function HabitForm({ initial={}, identities, cueSettings={ custom: [], dismissed
   // First-run (no identities yet): open the inline identity creator straight away,
   // so naming the habit and its identity happen together in one flow.
   const [addingIdentity, setAddingIdentity] = useState(() => (identities?.length || 0) === 0 && !!onCreateIdentity);
-  // Optional "Design it with the 4 Laws" section (Make it attractive + the reward).
-  // Open it automatically when editing a habit that already has those filled in.
-  const [lawsOpen, setLawsOpen] = useState(() => !!(initial.attractive || initial.satisfying));
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const breaking = form.kind === "bad";
   // A habit must be designed with all four of James Clear's laws: a cue (obvious),
@@ -1041,20 +1038,13 @@ function HabitForm({ initial={}, identities, cueSettings={ custom: [], dismissed
       )}
 
       {/* The habit + the minimum-effort lever */}
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginTop:18 }}>
-        <label htmlFor={ids.label} style={S.fieldLabel}>{breaking ? "The habit to break *" : "The habit *"}</label>
-        {suggestBtn("label")}
-      </div>
+      <label htmlFor={ids.label} style={{ ...S.fieldLabel, marginTop:18 }}>{breaking ? "The habit to break *" : "The habit *"}</label>
       <input id={ids.label} style={S.input} value={form.label} onChange={e=>set("label",e.target.value)} placeholder={breaking ? "e.g. Scroll my phone in bed" : "e.g. Meditate 10 minutes"} autoFocus maxLength={80} />
-      <div style={{ fontSize:11, color:T.muted, marginTop:5 }}>Type a name, or tap <Ic name="spark" size={10} color={T.primary} /> to have James Clear suggest one from your identity.</div>
 
       {/* ── Law 1 · the cue (required) — a clear trigger so you can't miss it ── */}
       <div style={lawHead}><span aria-hidden="true" style={lawNum(T.primary)}>1</span><span style={lawTxt(T.primary)}>{breaking ? "Make it invisible · Cue" : "Make it obvious · Cue"}</span></div>
       <div style={lawHint}>{breaking ? "Hide the cue — keep the trigger out of sight." : "Give it a clear cue — a time or an “after” anchor — so you can’t miss it."}</div>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
-        <label htmlFor={ids.trigger + "-select"} style={S.fieldLabel}>{breaking ? "When are you tempted? (cue) *" : "After what? (cue) *"}</label>
-        {suggestBtn("trigger")}
-      </div>
+      <label htmlFor={ids.trigger + "-select"} style={S.fieldLabel}>{breaking ? "When are you tempted? (cue) *" : "After what? (cue) *"}</label>
       {/* Dropdown of common cues; "Type my own…" reveals a free-text field. */}
       <select id={ids.trigger + "-select"}
         value={showTrigInput ? "__custom__" : (form.trigger || "")}
@@ -1105,58 +1095,39 @@ function HabitForm({ initial={}, identities, cueSettings={ custom: [], dismissed
         );
       })()}
 
-      <label style={{ ...S.fieldLabel, marginTop:16 }}>Frequency</label>
-      <FrequencyPicker value={form.frequency} onChange={v=>set("frequency",v)} />
+      {/* ── Law 2 · make it attractive (optional) — the craving ── */}
+      <div style={lawHead}><span aria-hidden="true" style={lawNum("#534AB7")}>2</span><span style={lawTxt("#534AB7")}>{breaking ? "Make it unattractive · Craving" : "Make it attractive · Craving"}</span></div>
+      <div style={lawHint}>{breaking ? "Spell out the real cost so it loses its pull." : "Pair it with something you enjoy so you want to start (temptation bundling)."}</div>
+      <input id={ids.attractive} aria-label={breaking ? "Make it unattractive — highlight the cost" : "Make it attractive — bundle it with something you enjoy"} style={{ ...S.input, marginTop:10 }} value={form.attractive} onChange={e=>set("attractive",e.target.value)} placeholder={breaking ? "The real cost…" : "Only while I… (e.g. my podcast)"} maxLength={140} />
 
       {/* ── Law 3 · the two-minute start (required) — the no-excuses minimum ── */}
       <div style={lawHead}><span aria-hidden="true" style={lawNum("#0F6E56")}>3</span><span style={lawTxt("#0F6E56")}>{breaking ? "Make it difficult · Response *" : "Make it easy · Response *"}</span></div>
       <div style={lawHint}>{breaking ? "Add friction so it’s harder than giving in." : "Shrink it to a two-minute start."}</div>
       {breaking ? (
         <div style={{ marginTop:10, background:"#FAECE7", border:"1px solid #F5C4B3", borderRadius:10, padding:"10px 12px" }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
-            <label htmlFor={ids.starter} style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, fontWeight:800, color:"#712B13" }}>
-              <Ic name="warn" size={13} color="#712B13" /> If tempted (make it hard)
-            </label>
-            {suggestBtn("starter")}
-          </div>
+          <label htmlFor={ids.starter} style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, fontWeight:800, color:"#712B13", marginBottom:6 }}>
+            <Ic name="warn" size={13} color="#712B13" /> If tempted (make it hard)
+          </label>
           <input id={ids.starter} style={{ ...S.input, marginTop:0, background:"#fff" }} value={form.starter} onChange={e=>set("starter",e.target.value)} placeholder="e.g. Phone charges in the kitchen" maxLength={100} />
           <div style={{ fontSize:13, color:"#993C1D", fontStyle:"italic", marginTop:6, lineHeight:1.45 }}>Add friction so the bad habit is harder than resisting it.</div>
         </div>
       ) : (
         <div style={{ marginTop:10, background:"#E1F5EE", border:"1px solid #9FE1CB", borderRadius:10, padding:"10px 12px" }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
-            <label htmlFor={ids.starter} style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, fontWeight:800, color:"#085041" }}>
-              <Ic name="clock" size={13} color="#085041" /> Two-minute version
-            </label>
-            {suggestBtn("starter")}
-          </div>
+          <label htmlFor={ids.starter} style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, fontWeight:800, color:"#085041", marginBottom:6 }}>
+            <Ic name="clock" size={13} color="#085041" /> Two-minute version
+          </label>
           <input id={ids.starter} style={{ ...S.input, marginTop:0, background:"#fff" }} value={form.starter} onChange={e=>set("starter",e.target.value)} placeholder="e.g. Meditate for one minute" maxLength={100} />
           <div style={{ fontSize:13, color:"#0F6E56", fontStyle:"italic", marginTop:6, lineHeight:1.45 }}>Your no-excuses minimum. On hard days, only this counts — and it still keeps the streak.</div>
         </div>
       )}
 
-      {/* ── Optional: the other two laws — attractive (2) + reward (4) ── */}
-      <button type="button" onClick={()=>setLawsOpen(o=>!o)} aria-expanded={lawsOpen}
-        style={{ display:"flex", alignItems:"center", gap:10, width:"100%", marginTop:18, padding:"12px 13px", background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, cursor:"pointer", fontFamily:"inherit", textAlign:"left", WebkitTapHighlightColor:"transparent" }}>
-        <span style={{ flex:1, minWidth:0 }}>
-          <span style={{ display:"block", fontSize:14, fontWeight:700, color:T.text }}>Design it deeper <span style={{ color:T.muted, fontWeight:600 }}>(optional)</span></span>
-          <span style={{ display:"block", fontSize:12.5, color:T.muted, marginTop:1 }}>{breaking ? "Make it unattractive, add a cost for slipping" : "Make it attractive, add a reward"}</span>
-        </span>
-        <span aria-hidden="true" style={{ color:T.muted, fontSize:13, flexShrink:0, display:"inline-block", transform: lawsOpen ? "rotate(180deg)" : "none", transition:"transform .2s" }}>▾</span>
-      </button>
-      {lawsOpen && (
-        <div>
-          {/* Law 2 · attractive (build) / unattractive (break) — the craving */}
-          <div style={lawHead}><span aria-hidden="true" style={lawNum("#534AB7")}>2</span><span style={lawTxt("#534AB7")}>{breaking ? "Make it unattractive · Craving" : "Make it attractive · Craving"}</span><span style={{ marginLeft:"auto" }}>{suggestBtn("attractive")}</span></div>
-          <div style={lawHint}>{breaking ? "Spell out the real cost so it loses its pull." : "Pair it with something you enjoy so you want to start (temptation bundling)."}</div>
-          <input id={ids.attractive} aria-label={breaking ? "Make it unattractive — highlight the cost" : "Make it attractive — bundle it with something you enjoy"} style={{ ...S.input, marginTop:10 }} value={form.attractive} onChange={e=>set("attractive",e.target.value)} placeholder={breaking ? "The real cost…" : "Only while I… (e.g. my podcast)"} maxLength={140} />
+      {/* ── Law 4 · make it satisfying (optional) — the reward ── */}
+      <div style={lawHead}><span aria-hidden="true" style={lawNum("#854F0B")}>4</span><span style={lawTxt("#854F0B")}>{breaking ? "Make it unsatisfying · Reward" : "Make it satisfying · Reward"}</span></div>
+      <div style={lawHint}>{breaking ? "Attach an immediate cost to slipping so it stings." : "Give yourself an immediate reward so the habit sticks."}</div>
+      <input id={ids.satisfying} aria-label={breaking ? "Accountability or a cost for slipping" : "Immediate reward after the habit"} style={{ ...S.input, marginTop:10 }} value={form.satisfying} onChange={e=>set("satisfying",e.target.value)} placeholder={breaking ? "A cost for slipping… e.g. tell a friend" : "Reward right after… e.g. a square of chocolate"} maxLength={140} />
 
-          {/* Law 4 · satisfying (build) / unsatisfying (break) — the reward */}
-          <div style={lawHead}><span aria-hidden="true" style={lawNum("#854F0B")}>4</span><span style={lawTxt("#854F0B")}>{breaking ? "Make it unsatisfying · Reward" : "Make it satisfying · Reward"}</span><span style={{ marginLeft:"auto" }}>{suggestBtn("satisfying")}</span></div>
-          <div style={lawHint}>{breaking ? "Attach an immediate cost to slipping so it stings." : "Give yourself an immediate reward so the habit sticks."}</div>
-          <input id={ids.satisfying} aria-label={breaking ? "Accountability or a cost for slipping" : "Immediate reward after the habit"} style={{ ...S.input, marginTop:10 }} value={form.satisfying} onChange={e=>set("satisfying",e.target.value)} placeholder={breaking ? "A cost for slipping… e.g. tell a friend" : "Reward right after… e.g. a square of chocolate"} maxLength={140} />
-        </div>
-      )}
+      <label style={{ ...S.fieldLabel, marginTop:16 }}>Frequency</label>
+      <FrequencyPicker value={form.frequency} onChange={v=>set("frequency",v)} />
 
       <div style={{ display:"flex", alignItems:"center", gap:9, marginTop:16, background:T.bg, borderRadius:10, padding:"9px 11px" }}>
         <Ic name="check" size={15} color="#0F6E56" />
