@@ -3934,12 +3934,12 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
       transition: "background 0.2s ease",
     }}>
 
-      {/* ── Identity header — shown in full view; in compact it's one tap away. ── */}
+      {/* ── Identity eyebrow — one light line, no tinted band (space-efficient). ── */}
       {showDetail && (
-      <div style={{ padding:"10px 14px", background: C + "0a", borderBottom:`1px solid ${C}1c` }}>
-        <div style={{ display:"flex", alignItems:"center", gap:7 }}>
-          <span style={{ flexShrink:0, fontSize:11, fontWeight:900, letterSpacing:"0.06em", textTransform:"uppercase", color: C, fontFamily:FONT_DISPLAY }}>{breaking ? "Breaking" : "I am"}</span>
-          <span style={{ flex:1, minWidth:0, fontSize:14, fontWeight:800, color:Cd, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontFamily:FONT_DISPLAY }}>{idDisplay}</span>
+      <div style={{ padding:"9px 14px 0" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+          <span style={{ flexShrink:0, fontSize:11, fontWeight:900, letterSpacing:"0.04em", textTransform:"uppercase", color: C, fontFamily:FONT_DISPLAY }}>{breaking ? "Breaking" : "I am"}</span>
+          <span style={{ flex:1, minWidth:0, fontSize:12.5, fontWeight:700, color:Cd, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontFamily:FONT_DISPLAY }}>{idDisplay}</span>
           {streakBadge}
           {!compact && menu}
         </div>
@@ -3950,8 +3950,8 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
       <div style={{ padding: compact ? "14px 15px" : "8px 14px 12px" }}>
         {/* ── The check-in ring + the implementation intention (the hero) ── */}
         <div style={{ display:"flex", alignItems:"center", gap: compact ? 13 : 11 }}>
-          {/* Ring: compact/quantity/checked/missed. In full+unchecked the Complete button below is the check-in. */}
-          {(compact || isQty || checked || missed) && (
+          {/* The ring on the left IS the check-in in every view now (the old
+              full-width Complete button is gone). */}
           <span style={{ flexShrink:0, width:44, display:"flex", alignItems:"center", justifyContent:"center" }}>
             {isQty && !checked && !missed ? (
               <CounterRing count={count} target={target} color={C} size={44}
@@ -3972,7 +3972,6 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
               />
             )}
           </span>
-          )}
           {/* Action is the hero; the cue sits tight beneath it as one unit so
               there's no floating gap between the action and its cue. */}
           <div style={{ flex:1, minWidth:0 }}>
@@ -4046,30 +4045,19 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
           </div>
         )}
 
-        {/* Momentum dots — glanceable week progress (this week, Mon→Sun). A tiny
-            row shown just above Complete so you see momentum without a full strip. */}
+        {/* Momentum dots — glanceable week progress (this week, Mon→Sun). A thin
+            row of plain dots; the ring on the left is the check-in. */}
         {showDetail && !checked && !missed && (
-          <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:11, marginLeft: isQty ? 55 : 0 }}
-            aria-label={`This week, ${weekDays.filter(d => d.st === "done").length} days kept${streak > 0 ? `, ${streak} day streak` : ""}`}>
-            <div style={{ display:"flex", gap:5 }} aria-hidden="true">
-              {weekDays.map((d, i) => {
-                const done = d.st === "done", isToday = d.st === "today", miss = d.st === "miss" || d.st === "undone";
-                return <span key={i} style={{ width:10, height:10, borderRadius:"50%", boxSizing:"border-box",
-                  background: done ? C : T.surf2,
-                  border: done ? "none" : isToday ? `1.5px solid ${C}` : miss ? `1.5px solid ${T.red}55` : `1px solid ${T.border}` }} />;
-              })}
-            </div>
-            {streak > 0 && <span style={{ fontSize:11, fontWeight:700, color:T.muted }} aria-hidden="true">{streak}d</span>}
+          <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:10, marginLeft: isQty ? 55 : 0 }}
+            aria-label={`This week, ${weekDays.filter(d => d.st === "done").length} days kept${streak > 0 ? `, ${streak} day streak` : ""}`}
+            aria-hidden="true">
+            {weekDays.map((d, i) => {
+              const done = d.st === "done", isToday = d.st === "today", miss = d.st === "miss" || d.st === "undone";
+              return <span key={i} style={{ width:9, height:9, borderRadius:"50%", boxSizing:"border-box",
+                background: done ? C : T.surf2,
+                border: done ? "none" : isToday ? `1.5px solid ${C}` : miss ? `1.5px solid ${T.red}55` : `1px solid ${T.border}` }} />;
+            })}
           </div>
-        )}
-
-        {/* Complete habit — the explicit one-tap check-in CTA (full view, simple habits). */}
-        {showDetail && !checked && !missed && !isQty && !readOnly && (
-          <button type="button" onClick={activate}
-            aria-label={breaking ? `Mark clean: ${habit.label}` : `Complete: ${habit.label}`}
-            style={{ width:"100%", marginTop:13, background:C, color:"#fff", border:"none", borderRadius:13, padding:"12px", fontSize:14.5, fontWeight:800, fontFamily:"inherit", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8, boxShadow:`0 2px 8px ${C}40`, WebkitTapHighlightColor:"transparent" }}>
-            <Ic name="check" size={18} color="#fff" /> {breaking ? "Mark clean" : "Complete"}
-          </button>
         )}
 
         {/* Never-miss-twice nudge — this habit was missed yesterday (compact auto-expands) */}
