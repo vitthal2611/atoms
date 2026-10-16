@@ -3982,7 +3982,8 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
               onKeyDown={e => { if (e.key === "Enter") activate(); }}
               aria-label={isQty && !checked ? `Add one for ${habit.label}` : checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
               style={{ display:"block", cursor: readOnly ? "default" : "pointer",
-                wordBreak:"break-word", fontSize: compact ? 18 : 23, fontWeight: 600, letterSpacing:"-0.01em", lineHeight: compact ? 1.2 : 1.2,
+                overflowWrap:"anywhere", wordBreak:"break-word", hyphens:"auto",
+                fontSize: compact ? 18 : "clamp(19px, 6.2vw, 23px)", fontWeight: 600, letterSpacing:"-0.01em", lineHeight: compact ? 1.2 : 1.2,
                 fontFamily: FONT_ACTION,
                 color: checked ? T.text2 : missed ? T.muted : T.text,
                 textDecoration: checked ? "line-through" : "none", textDecorationColor: C + "88" }}
@@ -4214,7 +4215,7 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
           aria-label={`${votes} of ${total} ${breaking ? "days clean" : "days kept"} toward ${shortLabel(identity.label)}, ${pct} percent${streak > 0 ? `, ${streak} ${breaking ? "days clean streak" : "day streak"}` : ""}`}>
 
           {/* Four Laws — Craving / Response / Reward as three compact columns. */}
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:7 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(3, minmax(0, 1fr))", gap:8 }}>
             {[
               { icon:"heart", name:"Craving", color:"#534AB7",
                 content: habit.attractive
@@ -4246,7 +4247,7 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
                 <div style={{ fontSize:10, fontWeight:800, letterSpacing:"0.03em", textTransform:"uppercase", color:l.color }}>
                   {l.name}
                 </div>
-                <div style={{ marginTop:2, fontSize:11.5, fontWeight:500, lineHeight:1.3, color:T.text2, wordBreak:"break-word" }}>{l.content}</div>
+                <div style={{ marginTop:2, fontSize:11.5, fontWeight:500, lineHeight:1.3, color:T.text2, overflowWrap:"anywhere", wordBreak:"break-word", hyphens:"auto" }}>{l.content}</div>
               </div>
             ))}
           </div>
