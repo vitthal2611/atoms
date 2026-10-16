@@ -3982,7 +3982,7 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
               onKeyDown={e => { if (e.key === "Enter") activate(); }}
               aria-label={isQty && !checked ? `Add one for ${habit.label}` : checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
               style={{ display:"block", cursor: readOnly ? "default" : "pointer",
-                wordBreak:"break-word", fontSize:18, fontWeight: 600, letterSpacing:"0", lineHeight: compact ? 1.2 : 1.3,
+                wordBreak:"break-word", fontSize: compact ? 18 : 21, fontWeight: 600, letterSpacing:"-0.01em", lineHeight: compact ? 1.2 : 1.2,
                 fontFamily: FONT_ACTION,
                 color: checked ? T.text2 : missed ? T.muted : T.text,
                 textDecoration: checked ? "line-through" : "none", textDecorationColor: C + "88" }}
@@ -4233,7 +4233,7 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
                         </span>
                       : <AddHint label="Add friction" />)
                   : (showStarter
-                      ? <span style={{ color:T.text }}>2-min: {habit.starter}</span>
+                      ? <span style={{ color:T.text }}>{habit.starter}</span>
                       : habit.easy
                       ? <span style={{ color:T.text }}>{habit.easy}</span>
                       : <AddHint label="Add an easy start" />) },
@@ -4242,11 +4242,11 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
                   ? <span style={{ color:T.text }}>{breaking ? "If you slip: " : ""}{habit.satisfying}</span>
                   : <AddHint label={breaking ? "Add an accountability cost" : "Add a reward"} /> },
             ].map(l => (
-              <div key={l.name} style={{ background:T.surf2, borderRadius:10, padding:"8px 9px", minWidth:0 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, fontWeight:900, letterSpacing:"0.03em", textTransform:"uppercase", color:l.color }}>
-                  <Ic name={l.icon} size={12} color={l.color} /> {l.name}
+              <div key={l.name} style={{ minWidth:0 }}>
+                <div style={{ fontSize:10, fontWeight:800, letterSpacing:"0.03em", textTransform:"uppercase", color:l.color }}>
+                  {l.name}
                 </div>
-                <div style={{ marginTop:3, fontSize:11.5, fontWeight:600, lineHeight:1.3, color:T.text2, wordBreak:"break-word" }}>{l.content}</div>
+                <div style={{ marginTop:2, fontSize:11.5, fontWeight:500, lineHeight:1.3, color:T.text2, wordBreak:"break-word" }}>{l.content}</div>
               </div>
             ))}
           </div>
