@@ -3983,7 +3983,7 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
               aria-label={isQty && !checked ? `Add one for ${habit.label}` : checked ? `Uncheck: ${habit.label}` : `Check: ${habit.label}`}
               style={{ display:"block", cursor: readOnly ? "default" : "pointer",
                 overflowWrap:"anywhere", wordBreak:"break-word", hyphens:"auto",
-                fontSize: compact ? 18 : "clamp(19px, 6.2vw, 23px)", fontWeight: 600, letterSpacing:"-0.01em", lineHeight: compact ? 1.2 : 1.2,
+                fontSize: compact ? 17 : "clamp(17px, 5.2vw, 20px)", fontWeight: 600, letterSpacing:"-0.01em", lineHeight: compact ? 1.2 : 1.25,
                 fontFamily: FONT_ACTION,
                 color: checked ? T.text2 : missed ? T.muted : T.text,
                 textDecoration: checked ? "line-through" : "none", textDecorationColor: C + "88" }}
