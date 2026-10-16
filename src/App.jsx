@@ -4046,18 +4046,20 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
           </div>
         )}
 
-        {/* Momentum dots — glanceable week progress (collapsed view). */}
-        {showDetail && !checked && !missed && !effExpanded && (
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:11, marginLeft: isQty ? 55 : 0 }}
+        {/* Momentum dots — glanceable week progress (this week, Mon→Sun). A tiny
+            row shown just above Complete so you see momentum without a full strip. */}
+        {showDetail && !checked && !missed && (
+          <div style={{ display:"flex", alignItems:"center", gap:7, marginTop:11, marginLeft: isQty ? 55 : 0 }}
             aria-label={`This week, ${weekDays.filter(d => d.st === "done").length} days kept${streak > 0 ? `, ${streak} day streak` : ""}`}>
             <div style={{ display:"flex", gap:5 }} aria-hidden="true">
               {weekDays.map((d, i) => {
                 const done = d.st === "done", isToday = d.st === "today", miss = d.st === "miss" || d.st === "undone";
-                return <span key={i} style={{ width:9, height:9, borderRadius:"50%", boxSizing:"border-box",
+                return <span key={i} style={{ width:10, height:10, borderRadius:"50%", boxSizing:"border-box",
                   background: done ? C : T.surf2,
                   border: done ? "none" : isToday ? `1.5px solid ${C}` : miss ? `1.5px solid ${T.red}55` : `1px solid ${T.border}` }} />;
               })}
             </div>
+            {streak > 0 && <span style={{ fontSize:11, fontWeight:700, color:T.muted }} aria-hidden="true">{streak}d</span>}
           </div>
         )}
 
@@ -4260,42 +4262,6 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
               </div>
             ))}
           </div>
-
-          {/* Weekly consistency strip — this calendar week, Mon→Sun. */}
-          {(() => {
-            const days = weekDays;
-            let wK = 0, wD = 0;
-            days.forEach(d => { if (d.st === "done") { wK++; wD++; } else if (d.st === "miss" || d.st === "undone") wD++; });
-            const allKept = wD > 0 && wK === wD;
-            return (
-              <div style={{ marginTop:13, paddingTop:12, borderTop:`1px solid ${T.surf2}` }}>
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:9 }}>
-                  <span style={{ fontSize:11, fontWeight:700, color:T.text2 }}>This week</span>
-                  <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:11, fontWeight:800, color: allKept ? "#0F9D74" : T.muted, whiteSpace:"nowrap" }}>
-                    {allKept && <Ic name="check" size={11} color="#0F9D74" />}{allKept ? "all kept" : `${wK} of ${wD} kept`}
-                  </span>
-                </div>
-                <div style={{ display:"flex", justifyContent:"space-between" }}>
-                  {days.map((d, i) => {
-                    const done = d.st === "done", isToday = d.st === "today", miss = d.st === "miss" || d.st === "undone";
-                    return (
-                      <div key={i} style={{ textAlign:"center" }}>
-                        <div style={{ width:28, height:28, borderRadius:"50%", margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"center",
-                          background: done ? C : isToday ? C + "14" : "transparent",
-                          border: done ? "none" : isToday ? `2px solid ${C}` : miss ? `1.5px solid ${T.red}66` : `1.5px solid ${T.border}` }}>
-                          {done ? <Ic name="check" size={14} color="#fff" />
-                            : isToday ? <span style={{ width:6, height:6, borderRadius:"50%", background:C }} />
-                            : miss ? <span style={{ width:5, height:5, borderRadius:"50%", background:T.red + "88" }} />
-                            : null}
-                        </div>
-                        <div style={{ fontSize:11, fontWeight: isToday ? 800 : 500, color: isToday ? Cd : T.muted, marginTop:4 }}>{d.lb}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
 
         </div>
         );
