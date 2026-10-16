@@ -4297,37 +4297,6 @@ const HabitRow = memo(function HabitRow({ habit, identity, checked, missed, warn
             );
           })()}
 
-          {/* 2-minute rule scaling — once it's automatic, nudge to grow it (once). */}
-          {(() => {
-            const g1 = (habit.starter || "").trim().toLowerCase().replace(/[.!]+$/, "");
-            const g2 = (habit.label || "").trim().toLowerCase().replace(/[.!]+$/, "");
-            // Goldilocks: nudge to grow once it's genuinely automatic — a long streak,
-            // OR a high 30-day consistency rate (which rewards showing up over an unbroken run).
-            // Goldilocks Rule: raise difficulty once it's automatic — a long streak,
-            // OR ≥85% over the last 30 scheduled days (rewards showing up, not a perfect run).
-            const byStreak = streak >= 21;
-            const byRate   = rate >= 85 && rs.due >= 14;
-            const grow = !breaking && habit.starter && g1 && g1 !== g2 && (byStreak || byRate) && !habit.growAckAt && onEdit;
-            if (!grow) return null;
-            const ack = () => habitOps && habitOps.ackGrow && habitOps.ackGrow(identity.id, habit.id);
-            const growHead = byStreak ? `${streak} days in — it's automatic now` : `${rate}% consistent — it's automatic now`;
-            // A concrete next step: grow the 2-minute starter toward the full action.
-            const growStep = `Grow "${habit.starter}" → "${habit.label}", or add a little more.`;
-            return (
-              <div style={{ display:"flex", alignItems:"center", gap:9, marginTop:10, background:"#EAF3DE", border:"1px solid #C0DD97", borderRadius:11, padding:"9px 11px" }}>
-                <span aria-hidden="true" style={{ fontSize:16, flexShrink:0 }}>🌱</span>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:13, fontWeight:800, color:"#3B6D11" }}>{growHead}</div>
-                  <div style={{ fontSize:11.5, color:T.text2, marginTop:1, lineHeight:1.4 }}>{growStep}</div>
-                </div>
-                <div style={{ display:"flex", flexDirection:"column", gap:5, flexShrink:0 }}>
-                  <button type="button" onClick={() => { ack(); onEdit(); }} style={{ fontSize:13, fontWeight:800, color:"#fff", background:"#639922", border:"none", borderRadius:8, padding:"6px 12px", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>Grow it</button>
-                  <button type="button" onClick={ack} style={{ fontSize:11, fontWeight:700, color:T.muted, background:"transparent", border:"none", cursor:"pointer", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}>Not yet</button>
-                </div>
-              </div>
-            );
-          })()}
-
         </div>
         );
       })()}
