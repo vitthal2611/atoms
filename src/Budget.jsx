@@ -82,17 +82,37 @@ export function seedBudget() {
 }
 
 function calc(m) {
-  const sp={}, bk={need:0,want:0,save:0}; let inxIncome=0, borrow=0, letout=0;
-  (m.txns||[]).forEach(t=>{ if(t.bucket==="income"){ const a=+t.amount||0; if(t.kind==="borrow") borrow+=a; else if(t.kind==="letout") letout+=a; else inxIncome+=a; return; } if(t.categoryId) sp[t.categoryId]=(sp[t.categoryId]||0)+(+t.amount||0); bk[t.bucket]=(bk[t.bucket]||0)+(+t.amount||0); });
+  const sp={}, bk={need:0,want:0,save:0}; let inxIncome=0, borrow=0, lent=0, received=0, reimbursement=0;
+  (m.txns||[]).forEach(t=>{ if(t.kind==="lend"||t.kind==="letout"){ const a=+t.amount||0; bk.save+=a; lent+=a; return; } if(t.bucket==="income"){ const a=+t.amount||0; if(t.kind==="borrow") borrow+=a; else if(t.kind==="received") received+=a; else if(t.kind==="reimbursement"||/reimburs|claim|refund/i.test(t.desc||"")) reimbursement+=a; else inxIncome+=a; return; } if(t.categoryId) sp[t.categoryId]=(sp[t.categoryId]||0)+(+t.amount||0); bk[t.bucket]=(bk[t.bucket]||0)+(+t.amount||0); });
   const grossIncome=(+m.salaryIncome||0)+(+m.otherIncome||0)+inxIncome;  // salary + other + plain income entries
-  const realIncome=grossIncome-letout;                                   // what's truly yours (feeds net worth)
-  const income=grossIncome+borrow-letout;                                // budget: allocatable cash (borrow counts, lent out doesn't)
+  const realIncome=grossIncome;                                         // lending is an asset, not an income reduction
+  const income=grossIncome+reimbursement+borrow+received;              // returned principal and reimbursements add cash, not income
   const cats=m.categories||[]; let sb=0,eb=0;
   const bbud={need:0,want:0,save:0};
   cats.forEach(c=>{ if(c.bucket==="save"){ sb+=(+c.budget||0); bbud.save+=(+c.budget||0); } else { eb+=(+c.budget||0); bbud[c.bucket]+=(+c.budget||0); } });
   const sa=bk.save;   // savings actual = sum of Save transactions (contributions)
   const es=bk.need+bk.want, allocated=sb+eb;
-  return { m, sp, bk, bbud, income, grossIncome, realIncome, borrow, letout, sb, sa, es, allocated, balance:income-es-sa, unalloc:income-allocated };
+  return { m, sp, bk, bbud, income, grossIncome, realIncome, borrow, lent, received, reimbursement, sb, sa, es, allocated, balance:income-es-sa, unalloc:income-allocated };
+}
+function aggregateBudgetYear(budget, year) {
+  const months=Object.entries(budget?.months||{}).filter(([id])=>id.startsWith(year+"-")).sort(([a],[b])=>a.localeCompare(b));
+  const categories=new Map(), txns=[]; let salaryIncome=0, otherIncome=0;
+  const categoryKey=c=>`${c.bucket||"need"}:${(c.name||c.id||"Envelope").trim().toLowerCase()}`;
+  months.forEach(([monthId,month])=>{
+    salaryIncome+=+month.salaryIncome||0; otherIncome+=+month.otherIncome||0;
+    const monthCategoryIds=new Map();
+    (month.categories||[]).forEach(c=>{
+      const key=categoryKey(c); monthCategoryIds.set(c.id,key);
+      const existing=categories.get(key);
+      if(existing) existing.budget+=(+c.budget||0);
+      else categories.set(key,{ id:"year:"+key, name:c.name||"Envelope", bucket:c.bucket||"need", budget:+c.budget||0, icon:c.icon });
+    });
+    (month.txns||[]).forEach(t=>{
+      const key=monthCategoryIds.get(t.categoryId);
+      txns.push({ ...t, categoryId:key?"year:"+key:(t.categoryId||"") });
+    });
+  });
+  return { id:year+"-aggregate", label:year+" aggregate", status:"committed", salaryIncome, otherIncome, categories:[...categories.values()], savingsActual:{}, txns };
 }
 const stOf = (s,b) => { const u=pct(s,b); return u>100?"bad":u>=80?"warn":"good"; };
 
@@ -142,7 +162,9 @@ const importBudgetRows = (budget, rows) => { const months={ ...(budget?.months||
     const ensure=(name,bucket)=>{ let c=mm.categories.find(x=>(x.name||"").toLowerCase()===(name||"").toLowerCase()); if(!c){ c={ id:"c"+uid(), name:name||"Envelope", bucket:bucket||"need", budget:0 }; mm.categories.push(c); } return c; };
     if(type==="income"){ const label=(r.envelope||"").trim();
       if(isSalary) mm.salaryIncome=r.amount;                           // e.g. "Salary", "TIAA Salary" → fixed Salary
+      else if(bk==="save") mm.txns.push({ id:"t"+uid(), date:r.date||id+"-01", desc:label||"Lent money", amount:r.amount, categoryId:"", bucket:"save", kind:"lend" });
       else mm.txns.push({ id:"t"+uid(), date:r.date||id+"-01", desc:label||"Other income", amount:r.amount, categoryId:"", bucket:"income" }); }  // everything else → an income entry (Other income is not a fixed value)
+    else if(type==="received"){ mm.txns.push({ id:"t"+uid(), date:r.date||id+"-01", desc:r.note||r.envelope||"Received back", amount:r.amount, categoryId:"", bucket:"income", kind:"received" }); }
     else if(type==="budget"){ const c=ensure(r.envelope, bk==="income"?"need":bk); c.budget=r.amount; if(bk!=="income") c.bucket=bk; }
     else { if(bk==="income"){ mm.txns.push({ id:"t"+uid(), date:r.date||id+"-01", desc:r.note||"Income", amount:r.amount, categoryId:"", bucket:"income" }); }
       else { const c=ensure(r.envelope, bk); mm.txns.push({ id:"t"+uid(), date:r.date||id+"-01", desc:r.note||"", amount:r.amount, categoryId:c.id, bucket:c.bucket }); } }
@@ -156,7 +178,9 @@ const budgetToCSV = budget => { const esc=s=>{ s=String(s==null?"":s); return /[
     if(+mm.salaryIncome>0) lines.push([id,"income","","Salary","Income",Math.round(mm.salaryIncome),""]);
     if(+mm.otherIncome>0) lines.push([id,"income","","Other","Income",Math.round(mm.otherIncome),""]);
     (mm.categories||[]).forEach(c=>lines.push([id,"budget","",c.name,BL[c.bucket]||"Need",Math.round(+c.budget||0),""]));
-    (mm.txns||[]).forEach(t=>{ if(t.bucket==="income"){ lines.push([id,"income",t.date||"",t.desc||"Income","Income",Math.round(+t.amount||0),""]); return; }
+    (mm.txns||[]).forEach(t=>{ if(t.kind==="lend"||t.kind==="letout"){ lines.push([id,"income",t.date||"",t.desc||"Lent money","Save",Math.round(+t.amount||0),""]); return; }
+      if(t.kind==="received"){ lines.push([id,"received",t.date||"", "Received back", "Income",Math.round(+t.amount||0),t.desc||""]); return; }
+      if(t.bucket==="income"){ lines.push([id,"income",t.date||"",t.desc||"Income","Income",Math.round(+t.amount||0),""]); return; }
       const c=(mm.categories||[]).find(x=>x.id===t.categoryId); lines.push([id,"spend",t.date||"",c?c.name:"",BL[t.bucket]||"Need",Math.round(+t.amount||0),t.desc||""]); }); });
   return lines.map(r=>r.map(esc).join(",")).join("\r\n"); };
 
@@ -202,12 +226,12 @@ function SpendSheet({ m, api, env, initial, curMonth, onClose, onChange }) {
   // Back-date freely: any date up to today is allowed (no lower limit); no future dates.
   let dateMin="2000-01-01", dateMax=t;
   if(initial?.date){ if(initial.date<dateMin) dateMin=initial.date; if(initial.date>dateMax) dateMax=initial.date; }
-  const [date,setDate]=useState(initial?.date || (t.slice(0,7)===m.id ? t : m.id+"-01"));
-  const [kind,setKind]=useState(initial?.kind||"income");   // income entries only: income | borrow | letout
+  const [date,setDate]=useState(initial?.date || t);
+  const [kind,setKind]=useState(initial?.kind||"income");   // income entries: income | borrow | lend | received
   const [err,setErr]=useState(""); const [xfer,setXfer]=useState(null); const [src,setSrc]=useState("");
   const spentOf = id => (m.txns||[]).filter(t=>t.categoryId===id && (!initial||t.id!==initial.id)).reduce((a,t)=>a+(+t.amount||0),0);
   const record = () => {
-    const v={ date, desc:desc.trim(), amount:+amt, bucket:env.bucket, categoryId:isInc?"":env.id };
+    const v={ date, desc:desc.trim(), amount:+amt, bucket:isInc&&kind==="lend"?"save":env.bucket, categoryId:isInc?"":env.id };
     if(isInc) v.kind=kind;
     const envInfo = isInc ? null : { name:env.name, bucket:env.bucket, budget:env.budget, icon:env.icon };
     if(initial) api.editTxn(initial.id, v, envInfo); else api.addTxn({ id:"t"+Date.now(), ...v }, envInfo);
@@ -239,13 +263,13 @@ function SpendSheet({ m, api, env, initial, curMonth, onClose, onChange }) {
   return <Sheet title={(initial?"Edit ":"Add ")+(isInc?"income":"spend")} onClose={()=>onClose()}>
     <div style={{ display:"flex", alignItems:"center", gap:11, background:T.surf2, borderRadius:13, padding:"11px 12px", marginBottom:14 }}>
       <div style={{ width:40, height:40, borderRadius:11, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, background:BK[env.bucket].s }}>{iconOf(env)}</div>
-      <div><div style={{ fontWeight:700, fontSize:15, color:T.text }}>{env.name}</div><div style={{ fontSize:11.5, color:T.muted }}>{isInc?(kind==="borrow"?"Borrow money":kind==="letout"?"Let out money":"Income"):BK[env.bucket].l+" · envelope"}</div></div></div>
+      <div><div style={{ fontWeight:700, fontSize:15, color:T.text }}>{env.name}</div><div style={{ fontSize:11.5, color:T.muted }}>{isInc?(kind==="borrow"?"Borrow money":kind==="received"?"Received back":(kind==="letout"||kind==="lend")?"Lend money":"Income"):BK[env.bucket].l+" · envelope"}</div></div></div>
     {isInc && <>
-      <div style={{ display:"flex", gap:6, marginBottom:8 }}>
-        {[["income","Income"],["borrow","Borrow money"],["letout","Let out money"]].map(([k,lbl])=>{ const on=kind===k; const c=k==="letout"?T.bad:k==="borrow"?T.text2:T.good;
-          return <button key={k} onClick={()=>setKind(k)} style={{ flex:1, padding:"8px 4px", borderRadius:10, border:`1px solid ${on?c:T.border}`, background:on?(k==="letout"?T.badS:k==="borrow"?T.surf2:T.incomeS):T.surf2, color:on?c:T.text2, fontWeight:on?800:600, fontSize:11.5, cursor:"pointer", fontFamily:"inherit" }}>{lbl}</button>; })}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:8 }}>
+        {[["income","Income"],["borrow","Borrow"],["letout","Lend · Save"],["received","Received back"]].map(([k,lbl])=>{ const on=kind===k; const c=k==="borrow"?T.text2:(k==="letout"||k==="lend")?T.save:T.good;
+          return <button key={k} onClick={()=>setKind(k)} style={{ flex:1, padding:"8px 4px", borderRadius:10, border:`1px solid ${on?c:T.border}`, background:on?(k==="borrow"?T.surf2:k==="letout"||k==="lend"?T.saveS:T.incomeS):T.surf2, color:on?c:T.text2, fontWeight:on?800:600, fontSize:11.5, cursor:"pointer", fontFamily:"inherit" }}>{lbl}</button>; })}
       </div>
-      <div style={{ fontSize:11.5, color:T.muted, margin:"0 2px 14px", lineHeight:1.4 }}>{kind==="borrow"?"Borrowed cash — added to budget, but not counted as income.":kind==="letout"?"Money you lent out — debited from income and budget.":"Money that's truly yours."}</div>
+      <div style={{ fontSize:11.5, color:T.muted, margin:"0 2px 14px", lineHeight:1.4 }}>{kind==="borrow"?"Borrowed cash — added to budget, but not counted as income.":kind==="letout"||kind==="lend"?"Money lent out stays yours: counted as Save, not income or spending.":kind==="received"?"Repayment of money you lent — returned cash, not income.":"Money that's truly yours."}</div>
     </>}
     <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:2, margin:"6px 0 18px", maxWidth:"100%" }}>
       <span style={{ fontSize:36, fontWeight:800, color:amt?T.text:T.muted, flexShrink:0 }}>₹</span>
@@ -293,12 +317,18 @@ function ImportCSVBtn({ onImport, hint }) {
 
 function IncomeSheet({ m, api, onImport, onAdd, onEdit, onClose }) {
   const [editing,setEditing]=useState(null); const [tmp,setTmp]=useState(""); const [clr,setClr]=useState(false);
-  const entries=[...(m.txns||[])].filter(t=>t.bucket==="income").sort((a,b)=>b.date.localeCompare(a.date));
+  const entries=[...(m.txns||[])].filter(t=>t.bucket==="income"||t.kind==="lend"||t.kind==="letout").sort((a,b)=>b.date.localeCompare(a.date));
   const sumKind=k=>entries.filter(t=>(t.kind||"income")===k).reduce((a,t)=>a+(+t.amount||0),0);
-  const borrow=sumKind("borrow"), letout=sumKind("letout");
-  const grossIncome=(+m.salaryIncome||0)+(+m.otherIncome||0)+sumKind("income");  // salary + other + plain income
-  const realIncome=grossIncome-letout;    // what's truly yours
-  const budget=realIncome+borrow;         // allocatable (borrowed cash counts for budgeting)
+  const borrow=sumKind("borrow");
+  const reimbursement=entries.filter(t=>(t.kind||"income")==="income"&&/reimburs|claim|refund/i.test(t.desc||"")).reduce((a,t)=>a+(+t.amount||0),0);
+  const grossIncome=(+m.salaryIncome||0)+(+m.otherIncome||0)+sumKind("income")-reimbursement;  // excludes reimbursements
+  const lent=sumKind("lend")+sumKind("letout");
+  const incomeBySource=new Map();
+  entries.filter(t=>(t.kind||"income")==="income"&&!/reimburs|claim|refund/i.test(t.desc||"")).forEach(t=>{ const source=(t.desc||"Other income").trim()||"Other income"; incomeBySource.set(source,(incomeBySource.get(source)||0)+(+t.amount||0)); });
+  const incomeSources=[...(+(m.salaryIncome||0)>0?[["Salary",+m.salaryIncome||0]]:[]), ...(+(m.otherIncome||0)>0?[["Other income",+m.otherIncome||0]]:[]), ...incomeBySource.entries()];
+  const realIncome=grossIncome;    // lent principal is not income
+  const received=sumKind("received");
+  const budget=realIncome+reimbursement+borrow+received;         // repayments, reimbursements and borrowing add available cash
   const start=k=>{ setEditing(k); setTmp(String(k==="salary"?(m.salaryIncome||0):(m.otherIncome||0))); };
   const save=()=>{ const v=Math.max(0,+tmp||0); if(editing==="salary") api.setIncome(v, +m.otherIncome||0); else api.setIncome(+m.salaryIncome||0, v); setEditing(null); };
   const seclab=t=><div style={{ fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".04em", margin:"2px 2px 0" }}>{t}</div>;
@@ -317,28 +347,35 @@ function IncomeSheet({ m, api, onImport, onAdd, onEdit, onClose }) {
     <div style={{ margin:"16px 0 0" }}>{seclab("Income entries this month")}</div>
     {entries.length ? entries.map(t=>{ const kind=t.kind||"income";
         const km = kind==="borrow" ? { icon:"🏦", tag:"Borrow", tagBg:T.surf2, tagC:T.text2, sub:"not counted as income", col:T.muted, sign:"" }
-          : kind==="letout" ? { icon:"💸", tag:"Let out", tagBg:T.badS, tagC:T.bad, sub:"debited from income", col:T.bad, sign:"−" }
+          : kind==="received" ? { icon:"↩️", tag:"Received", tagBg:T.incomeS, tagC:T.income, sub:"lent principal returned · not income", col:T.good, sign:"+" }
+          : (kind==="letout"||kind==="lend") ? { icon:"🤝", tag:"Saved", tagBg:T.saveS, tagC:T.save, sub:"lent out · counted as Save", col:T.save, sign:"" }
+          : kind==="reimbursement"||/reimburs|claim|refund/i.test(t.desc||"") ? { icon:"↩️", tag:"Refund", tagBg:T.incomeS, tagC:T.income, sub:"reimbursement · shown separately", col:T.good, sign:"+" }
           : { icon:"💵", tag:null, sub:null, col:T.good, sign:"+" };
         return <div key={t.id} onClick={()=>onEdit(t)} style={{ display:"flex", alignItems:"center", gap:11, padding:"12px 0", borderBottom:`1px solid ${T.border}`, cursor:"pointer", opacity:kind==="borrow"?.75:1 }}>
-          <div style={{ width:36, height:36, borderRadius:10, background:kind==="letout"?T.badS:T.incomeS, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17, flexShrink:0 }}>{km.icon}</div>
+          <div style={{ width:36, height:36, borderRadius:10, background:(kind==="letout"||kind==="lend")?T.saveS:T.incomeS, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17, flexShrink:0 }}>{km.icon}</div>
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ fontWeight:600, fontSize:14, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{t.desc||"Income"}{km.tag && <span style={{ fontSize:11, fontWeight:700, background:km.tagBg, color:km.tagC, border:`1px solid ${T.border}`, padding:"1px 7px", borderRadius:20, marginLeft:7 }}>{km.tag}</span>}</div>
             <div style={{ fontSize:11.5, color:T.muted }}>{km.sub?`${fmtD(t.date)} · ${km.sub}`:fmtD(t.date)}</div></div>
           <div style={{ fontWeight:700, fontSize:14, color:km.col, fontVariantNumeric:"tabular-nums" }}>{km.sign}{INR(t.amount)}</div></div>; })
       : <div style={{ fontSize:13, color:T.muted, padding:"12px 2px" }}>No extra income entries yet.</div>}
     <div style={{ marginTop:14, paddingTop:12, borderTop:`2px solid ${T.border}` }}>
-      {(borrow>0||letout>0) ? <>
+      <div style={{ fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".04em", marginBottom:5 }}>Income totals by category</div>
+      {incomeSources.map(([source,total])=><div key={source} style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:T.text2, padding:"3px 0" }}><span>{source}</span><span style={{ fontVariantNumeric:"tabular-nums" }}>{INR(total)}</span></div>)}
+      <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, fontWeight:700, color:T.good, padding:"5px 0", borderTop:`1px solid ${T.border}`, marginTop:4 }}><span>All income categories</span><span style={{ fontVariantNumeric:"tabular-nums" }}>{INR(grossIncome)}</span></div>
+      {(borrow>0||lent>0||received>0||reimbursement>0) ? <>
         <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:T.text2, padding:"3px 0" }}><span>Income</span><span style={{ fontVariantNumeric:"tabular-nums" }}>{INR(grossIncome)}</span></div>
-        {letout>0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:T.bad, padding:"3px 0" }}><span>Let out (debited)</span><span style={{ fontVariantNumeric:"tabular-nums" }}>−{INR(letout)}</span></div>}
+        {reimbursement>0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:T.text2, padding:"3px 0" }}><span>Reimbursement · separate</span><span style={{ fontVariantNumeric:"tabular-nums" }}>{INR(reimbursement)}</span></div>}
+        {received>0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:T.good, padding:"3px 0" }}><span>Received back · not income</span><span style={{ fontVariantNumeric:"tabular-nums" }}>{INR(received)}</span></div>}
+        {lent>0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:T.save, padding:"3px 0" }}><span>Lent · counted as Save</span><span style={{ fontVariantNumeric:"tabular-nums" }}>{INR(lent)}</span></div>}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", paddingTop:8, marginTop:4, borderTop:`1px solid ${T.border}`, fontSize:15, fontWeight:800 }}><span>Total income</span><span style={{ color:T.good, fontVariantNumeric:"tabular-nums" }}>{INR(realIncome)}</span></div>
         {borrow>0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:T.muted, padding:"8px 0 0" }}><span>Borrowed · not income, for budget only</span><span style={{ fontVariantNumeric:"tabular-nums" }}>{INR(borrow)}</span></div>}
         <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:T.text2, padding:"4px 0 0", fontWeight:700 }}><span>Budget to allocate</span><span style={{ fontVariantNumeric:"tabular-nums" }}>{INR(budget)}</span></div>
       </> : <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", fontSize:15, fontWeight:800 }}><span>Total income</span><span style={{ color:T.good, fontVariantNumeric:"tabular-nums" }}>{INR(realIncome)}</span></div>}
     </div>
-    <button onClick={onAdd} style={{ ...ghostBtn, width:"100%", background:T.incomeS, color:T.good, borderColor:T.good+"4d", marginTop:14 }}>＋ Add income entry</button>
+    <button onClick={onAdd} style={{ ...ghostBtn, width:"100%", background:T.incomeS, color:T.good, borderColor:T.good+"4d", marginTop:14 }}>＋ Add income / lend</button>
     {entries.length>0 && (clr
       ? <div style={{ marginTop:12, background:T.badS, border:`1px solid ${T.bad}55`, borderRadius:11, padding:12, textAlign:"center" }}>
-          <div style={{ fontSize:13, color:T.bad, fontWeight:600, marginBottom:10 }}>Delete all {entries.length} income {entries.length===1?"entry":"entries"} for {m.label||mLabel(m.id)}? Salary & Other are kept. This can't be undone.</div>
+          <div style={{ fontSize:13, color:T.bad, fontWeight:600, marginBottom:10 }}>Delete all {entries.length} income / lend {entries.length===1?"entry":"entries"} for {m.label||mLabel(m.id)}? Salary & Other are kept. This can't be undone.</div>
           <div style={{ display:"flex", gap:10 }}><button onClick={()=>setClr(false)} style={{ ...ghostBtn, flex:1, padding:11 }}>Cancel</button>
             <button onClick={()=>{ api.clearIncome(); setClr(false); }} style={{ flex:1, background:T.bad, color:"#fff", border:"none", borderRadius:13, padding:11, fontFamily:"inherit", fontWeight:800, fontSize:14, cursor:"pointer" }}>Delete all</button></div></div>
       : <button onClick={()=>setClr(true)} style={{ display:"block", margin:"12px auto 0", background:"none", border:"none", color:T.bad, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>Clear all income entries</button>)}
@@ -373,7 +410,7 @@ function CatSheet({ api, initial, onClose }) {
 function MonthPicker({ budget, onPick, onCreate, onCreatePrev, onCreateMonth, onDelete, onImport, onExport, onExportMonth, carryOver, onToggleCarry, onClose }) {
   const [del,setDel]=useState(null); const [msg,setMsg]=useState(""); const [pick,setPick]=useState("");
   const ids=Object.keys(budget.months).sort(); const nextId=mShift(ids[ids.length-1],1); const prevId=mShift(ids[0],-1);
-  const incomeOf=mm=>(+mm.salaryIncome||0)+(+mm.otherIncome||0)+((mm.txns||[]).filter(t=>t.bucket==="income").reduce((a,t)=>{ const amt=+t.amount||0; return a+(t.kind==="letout"?-amt:amt); },0));
+  const incomeOf=mm=>(+mm.salaryIncome||0)+(+mm.otherIncome||0)+((mm.txns||[]).filter(t=>t.bucket==="income"&&t.kind!=="letout"&&t.kind!=="lend").reduce((a,t)=>a+(+t.amount||0),0));
   return <Sheet title="Your budgets" onClose={onClose}>
     <div style={{ fontSize:11, fontWeight:800, color:T.muted, textTransform:"uppercase", letterSpacing:".04em", margin:"2px 2px 6px" }}>{ids.length} month{ids.length===1?"":"s"} created</div>
     {ids.map(id=>{ const mm=budget.months[id], active=id===budget.active;
@@ -628,8 +665,10 @@ function AllocationSheet({ m, d, onClose }) {
 export default function BudgetView({ budget, setBudget }) {
   const [modal, setModal] = useState(null);   // {type, ...}
   const [editMode, setEditMode] = useState(false);
+  const [aggregateYear, setAggregateYear] = useState(null);
   const [impNote, setImpNote] = useState("");
-  const active = budget?.active; const m = budget?.months?.[active];
+  const active = budget?.active;
+  const m = aggregateYear === "2026" ? aggregateBudgetYear(budget, aggregateYear) : budget?.months?.[active];
   const curMonth = today().slice(0,7);
   const updateMonth = fn => setBudget(b => ({ ...b, months:{ ...b.months, [b.active]:fn(b.months[b.active]) } }));
   // Place a transaction into the month matching its date (creating that month, and
@@ -670,9 +709,15 @@ export default function BudgetView({ budget, setBudget }) {
     addTxn:(t,env)=>setBudget(b=>placeTxn(b, t, env)),
     editTxn:(id,p,env)=>setBudget(b=>{ let ex=null; for(const k of Object.keys(b.months||{})){ const f=(b.months[k].txns||[]).find(t=>t.id===id); if(f){ ex=f; break; } } if(!ex) return b; return placeTxn(stripTxn(b, id), { ...ex, ...p }, env); }),
     deleteTxn:id=>updateMonth(mm=>({ ...mm, txns:mm.txns.filter(t=>t.id!==id) })),
-    clearTxns:()=>updateMonth(mm=>({ ...mm, txns:[] })),
-    deleteTxns:(ids)=>{ const s=new Set(ids); updateMonth(mm=>({ ...mm, txns:(mm.txns||[]).filter(t=>!s.has(t.id)) })); },
-    clearIncome:()=>updateMonth(mm=>({ ...mm, otherIncome:0, txns:(mm.txns||[]).filter(t=>t.bucket!=="income") })),
+    clearTxns:()=>aggregateYear==="2026"
+      ? setBudget(b=>({ ...b, months:Object.fromEntries(Object.entries(b.months||{}).map(([id,mm])=>[id,id.startsWith("2026-")?{ ...mm, txns:[] }:mm])) }))
+      : updateMonth(mm=>({ ...mm, txns:[] })),
+    deleteTxns:(ids)=>{ const s=new Set(ids); aggregateYear==="2026"
+      ? setBudget(b=>({ ...b, months:Object.fromEntries(Object.entries(b.months||{}).map(([id,mm])=>[id,id.startsWith("2026-")?{ ...mm, txns:(mm.txns||[]).filter(t=>!s.has(t.id)) }:mm])) }))
+      : updateMonth(mm=>({ ...mm, txns:(mm.txns||[]).filter(t=>!s.has(t.id)) })); },
+    clearIncome:()=>aggregateYear==="2026"
+      ? setBudget(b=>({ ...b, months:Object.fromEntries(Object.entries(b.months||{}).map(([id,mm])=>[id,id.startsWith("2026-")?{ ...mm, otherIncome:0, txns:(mm.txns||[]).filter(t=>t.bucket!=="income"&&t.kind!=="lend"&&t.kind!=="letout") }:mm])) }))
+      : updateMonth(mm=>({ ...mm, otherIncome:0, txns:(mm.txns||[]).filter(t=>t.bucket!=="income"&&t.kind!=="lend"&&t.kind!=="letout") })),
     importRows:rows=>setBudget(b=>importBudgetRows(b, rows)),
     setCarry:v=>setBudget(b=>({ ...b, carryOver:!!v })),
   };
@@ -714,10 +759,10 @@ export default function BudgetView({ budget, setBudget }) {
       <button onClick={()=>{ setBudget(ids.length ? b=>({ ...b, active: ids[ids.length-1] }) : seedBudget()); }} style={{ ...primaryBtn, maxWidth:280 }}>{ids.length ? "Open my budget" : "Create my budget"}</button>
     </div>;
   }
-  const d = calc(m); const committed = m.status==="committed";
+  const d = calc(m); const committed = aggregateYear === "2026" || m.status==="committed";
   // Optional carry-over: this month opens with the sum of every earlier month's
   // leftover (income − spent − saved), so Balance runs cumulatively.
-  const carryOn = !!budget?.carryOver;
+  const carryOn = aggregateYear !== "2026" && !!budget?.carryOver;
   const carryIn = carryOn ? Object.keys(budget.months||{}).sort().filter(id=>id<active).reduce((a,id)=>a+calc(budget.months[id]).balance,0) : 0;
   const runBal = d.balance + carryIn;
   // All envelopes are grouped by bucket (Need / Want / Save), sorted A→Z within each.
@@ -763,26 +808,37 @@ export default function BudgetView({ budget, setBudget }) {
       </div>
     </div>; };
 
+  const monthTotals=[
+    { label:"Income", value:d.grossIncome, color:"#B8F3CE" },
+    { label:"Refund / reimbursement", value:d.reimbursement, color:"#FFE0A8" },
+    { label:"Received back", value:d.received, color:"#B8E6FF" },
+    { label:"Lent · Save", value:d.lent, color:"#E2D2FF" },
+    ...(d.borrow>0?[{ label:"Borrowed", value:d.borrow, color:"#FFFFFF" }]:[]),
+  ];
   const pill = on => ({ display:"inline-flex", alignItems:"center", gap:5, fontFamily:"inherit", fontSize:13, fontWeight:700, padding:"6px 12px", borderRadius:20, cursor:"pointer", border:`1px solid ${on?T.primary:T.border}`, background:on?T.primary+"14":T.surf2, color:on?T.primary:T.text2 });
   return <div style={{ display:"flex", flexDirection:"column", padding:"12px 14px 0" }}>
     {/* own header — month selection lives inside the Monthly budget card */}
     <div style={{ background:`linear-gradient(135deg, ${T.primary}, #075E8C)`, color:"#fff", borderRadius:16, padding:16, boxShadow:T.shadow }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
-        <button onClick={()=>setModal({type:"months"})} style={{ background:"#ffffff2e", border:"none", color:"#fff", fontFamily:"inherit", fontWeight:800, fontSize:15, padding:"6px 12px", borderRadius:10, cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>{m.label||mLabel(active)} <span style={{ fontSize:11, opacity:.85 }}>▾</span></button>
+        <div style={{ display:"flex", alignItems:"center", gap:6, flex:1, minWidth:0, marginRight:8 }}>
+          <select value={aggregateYear==="2026"?"aggregate-2026":active} onChange={e=>{ const id=e.target.value; if(id==="aggregate-2026") setAggregateYear("2026"); else { setAggregateYear(null); api.setActive(id); } }} aria-label="Select budget month or year" style={{ flex:1, minWidth:100, maxWidth:230, height:36, background:"#ffffff2e", border:"1px solid #ffffff3d", borderRadius:9, color:"#fff", padding:"0 8px", fontFamily:"inherit", fontSize:14, fontWeight:800 }}>
+            {Object.keys(budget.months||{}).sort().map(id=><option key={id} value={id} style={{ color:T.text }}>{budget.months[id].label||mLabel(id)}</option>)}
+            <option value="aggregate-2026" style={{ color:T.text }}>2026 aggregate</option>
+          </select>
+          <button onClick={()=>setModal({type:"months"})} aria-label="Month options" title="Month options" style={{ background:"#ffffff2e", border:"none", color:"#fff", borderRadius:9, width:30, height:30, fontSize:15, cursor:"pointer", flexShrink:0 }}>⋯</button>
+        </div>
         <span style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:20, background:"#ffffff2e", color:"#fff" }}>{committed?"Committed":"Draft"}</span>
       </div>
-      <div style={{ fontSize:11.5, fontWeight:600, textTransform:"uppercase", letterSpacing:".05em", opacity:.85 }}>Monthly budget</div>
-      <div style={{ fontSize:30, fontWeight:800, letterSpacing:"-.02em", marginTop:2, fontVariantNumeric:"tabular-nums" }}>{INR(d.income)}</div>
-      {(d.borrow>0 || d.letout>0)
+      <div style={{ fontSize:11.5, fontWeight:600, textTransform:"uppercase", letterSpacing:".05em", opacity:.85 }}>{aggregateYear==="2026"?"Year summary":"Month summary"}</div>
+      <div style={{ fontSize:30, fontWeight:800, letterSpacing:"-.02em", marginTop:2, fontVariantNumeric:"tabular-nums" }}>{INR(d.income+d.lent)}</div>
+      {(d.borrow>0||d.lent>0||d.reimbursement>0||d.grossIncome>=0)
         ? <>
-            <div style={{ fontSize:11, opacity:.8, marginTop:1 }}>available to allocate</div>
-            <div style={{ display:"flex", gap:7, marginTop:11 }}>
-              {[["Income",d.grossIncome,""],["Borrowed",d.borrow,"+"],["Lent out",d.letout,"−"]]
-                .filter(c=>c[0]==="Income"||c[1]>0)
-                .map(([lbl,val,sign])=><div key={lbl} style={{ flex:1, background:"#ffffff24", borderRadius:10, padding:"7px 9px" }}>
-                  <div style={{ fontSize:11, opacity:.85 }}>{lbl}</div>
-                  <div style={{ fontSize:13, fontWeight:700, marginTop:2, fontVariantNumeric:"tabular-nums" }}>{sign}{INR(val)}</div>
-                </div>)}
+            <div style={{ fontSize:11, opacity:.8, marginTop:1 }}>Income, lent, refunds and repayments</div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:7, marginTop:11 }}>
+              {monthTotals.map(item=><div key={item.label} style={{ minWidth:0, background:"#ffffff24", borderRadius:10, padding:"8px 9px" }}>
+                <div style={{ fontSize:11, opacity:.88 }}>{item.label}</div>
+                <div style={{ fontSize:14, fontWeight:700, marginTop:2, color:item.color, fontVariantNumeric:"tabular-nums", overflowWrap:"anywhere" }}>{INR(item.value)}</div>
+              </div>)}
             </div>
             <div style={{ display:"flex", justifyContent:"flex-end", marginTop:10 }}>
               <button onClick={()=>setModal({type:"income"})} style={{ background:"#ffffff2e", border:"none", color:"#fff", borderRadius:8, padding:"5px 13px", fontSize:11.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>Income ›</button>
@@ -839,12 +895,16 @@ export default function BudgetView({ budget, setBudget }) {
       <span style={{ fontSize:13, fontWeight:800 }}>🧾 Recent transactions</span>
       <button onClick={()=>setModal({type:"txns"})} style={lnk}>See all ({(m.txns||[]).length}) ›</button></div>
     {[...(m.txns||[])].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6).map(t=>{ const c=(m.categories||[]).find(x=>x.id===t.categoryId); const bk=BK[t.bucket]||BK.need;
+      const isLend=t.kind==="lend"||t.kind==="letout", isReceived=t.kind==="received", isRefund=t.kind==="reimbursement"||/reimburs|claim|refund/i.test(t.desc||"");
+      const typeLabel=isLend?"Lent · Save":isReceived?"Received back":isRefund?"Refund / reimbursement":t.kind==="borrow"?"Borrowed":t.bucket==="income"?"Income":(c?c.name:BK[t.bucket].l);
+      const txnColor=isLend?T.save:isRefund?T.warn:isReceived||t.bucket==="income"?T.good:T.text;
+      const txnIcon=isLend?"🤝":isReceived||isRefund?"↩️":t.bucket==="income"?"💵":(c?iconOf(c):"₹");
       return <div key={t.id} onClick={()=>setModal({type:"spend", env:c||{id:"",name:"Income",bucket:t.bucket}, initial:t})}
         style={{ ...card({ padding:"10px 12px", marginBottom:8 }), display:"flex", alignItems:"center", gap:11, cursor:"pointer" }}>
-        <div style={{ width:36, height:36, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17, background:bk.s, color:bk.c, flexShrink:0 }}>{t.bucket==="income"?"💵":(c?iconOf(c):"₹")}</div>
+        <div style={{ width:36, height:36, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17, background:bk.s, color:bk.c, flexShrink:0 }}>{txnIcon}</div>
         <div style={{ flex:1, minWidth:0 }}><div style={{ fontWeight:600, fontSize:13.5, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{t.desc||(c?c.name:"General")}</div>
-          <div style={{ fontSize:11.5, color:T.muted }}>{fmtD(t.date)} · {t.bucket==="income"?"Income":(c?c.name:"General")} · {BK[t.bucket].l}</div></div>
-        <div style={{ fontWeight:700, fontSize:14, fontVariantNumeric:"tabular-nums", color:t.bucket==="income"?T.good:T.text }}>{t.bucket==="income"?"+":""}{INR(t.amount)}</div></div>; })}
+          <div style={{ fontSize:11.5, color:T.muted }}>{fmtD(t.date)} · {typeLabel}</div></div>
+        <div style={{ fontWeight:700, fontSize:14, fontVariantNumeric:"tabular-nums", color:txnColor }}>{t.bucket==="income"&&!isLend?"+":""}{INR(t.amount)}</div></div>; })}
 
     {/* modals — `back` is a full modal descriptor so sheets return where they came from */}
     {modal?.type==="spend"  && <SpendSheet m={m} api={api} env={modal.env} initial={modal.initial} curMonth={curMonth} onClose={()=>setModal(modal.back||null)} onChange={()=>setModal({type:"picker"})} />}

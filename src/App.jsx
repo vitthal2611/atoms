@@ -1393,6 +1393,7 @@ export default function App() {
   const isFirstDt           = useRef(true);
   const hnTimer             = useRef(null);
   const isFirstHn           = useRef(true);
+  const didApplyBudgetMonthDefault = useRef(false);
   const hasLoadedRef        = useRef(false); // saves stay blocked until the initial fetch succeeds — otherwise a failed load + local edit could overwrite cloud data with empty state
   const didBackfillRef      = useRef(false); // one-time createdAt backfill for habits saved before we tracked it
 
@@ -1416,6 +1417,7 @@ export default function App() {
       isFirstHn.current = true;
       isFirstSt.current = true;
       isFirstBg.current = true;
+      didApplyBudgetMonthDefault.current = false;
       hasLoadedRef.current = false;
       didBackfillRef.current = false;
       streakCacheRef.current = {};
@@ -1474,7 +1476,19 @@ export default function App() {
             if (lsCustom.length || lsDismissed.length) { isFirstSt.current = false; setCueSettings({ custom: lsCustom, dismissed: lsDismissed }); }
           }
         }),
-        sub(budgetRef(u.uid),     "bg", snap => { if (snap.exists() && snap.data().data) { isFirstBg.current = true; setBudget(snap.data().data); } }),
+        sub(budgetRef(u.uid),     "bg", snap => { if (snap.exists() && snap.data().data) {
+          isFirstBg.current = true;
+          const savedBudget = snap.data().data;
+          let nextBudget = savedBudget;
+          // Apply the current-month default once from the initial server snapshot.
+          // Later snapshots must preserve the month the user selected in this session.
+          if (!didApplyBudgetMonthDefault.current && !snap.metadata.fromCache) {
+            didApplyBudgetMonthDefault.current = true;
+            const currentMonth = getTodayKey().slice(0, 7);
+            if (savedBudget.months?.[currentMonth]) nextBudget = { ...savedBudget, active: currentMonth };
+          }
+          setBudget(nextBudget);
+        } }),
       ];
     });
     return () => {
